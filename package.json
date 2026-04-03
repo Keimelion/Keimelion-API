@@ -1,6 +1,6 @@
 {
   "name": "keimelion-api",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "description": "Keimelion collaborative wishlist API",
   "type": "module",
   "scripts": {
