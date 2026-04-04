@@ -28,7 +28,6 @@ Fetch the following pages yourself using your Notion MCP tools and store their f
 5. Conventions: `336355b4-4d03-81a2-97e6-f9fc18df0d87` — for Lead Dev and Dev only
 
 **Dependency check**: if the ticket has entries in "Blocked By", fetch each of those tickets and check their status. If any dependency is not `Validated`:
-- Update the current ticket status to `Blocked`
 - Leave a comment listing which dependencies are not yet validated and their current status
 - **Stop the refinement** and inform the user — a ticket cannot be refined if its dependencies are not yet implemented
 

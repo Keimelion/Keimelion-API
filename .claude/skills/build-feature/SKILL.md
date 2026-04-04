@@ -11,7 +11,7 @@ argument-hint: <Notion ticket URL or ID>
 Implement and validate the ticket: **$ARGUMENTS**
 
 **Valid Notion statuses** (exact values, case-sensitive):
-`Todo` | `Blocked` | `In Progress` | `In Review` | `Done` | `Validated`
+`Todo` | `In Progress` | `In Review` | `Done` | `Validated`
 
 **Status flow**: `Todo` → `In Progress` → `In Review` → `Validated`
 
@@ -24,7 +24,6 @@ All review stages (Lead Dev, DevOps) leave the ticket at `In Review` and signal 
 Fetch the ticket **$ARGUMENTS** yourself using your Notion MCP tools and store its full content (description, acceptance criteria, technical notes, status, all comments).
 
 **Dependency check**: if the ticket has entries in "Blocked By", fetch each of those tickets and check their status. If any dependency is not `Validated`:
-- Update the current ticket status to `Blocked`
 - Leave a comment listing which dependencies are not yet validated and their current status
 - **Stop the pipeline** and inform the user — do not proceed with implementation
 
@@ -37,7 +36,7 @@ You will pass this content inline to each agent — **no agent should call notio
 Delegate to the Dev agent. Include in the delegation prompt:
 - The full ticket content (from Step 0)
 - **Instruction: do NOT call any Notion MCP tools to read the ticket — the full content is already provided above. Only use Notion MCP to update the ticket status and leave comments.**
-- **Valid Notion statuses**: `Todo`, `Blocked`, `In Progress`, `In Review`, `Done`, `Validated` — use only these exact values.
+- **Valid Notion statuses**: `Todo`, `In Progress`, `In Review`, `Done`, `Validated` — use only these exact values.
 
 Dev agent tasks:
 - Create a branch following the naming convention, from `dev`
@@ -58,7 +57,7 @@ Delegate to the Lead Dev agent. Include in the delegation prompt:
 - The full ticket content (from Step 0)
 - **Dev implementation summary** (full output from Step 1: branch name, files modified, any notes)
 - **Instruction: do NOT call any Notion MCP tools to read the ticket — all context is already provided above. Only use Notion MCP to update the ticket status and leave comments.**
-- **Valid Notion statuses**: `Todo`, `Blocked`, `In Progress`, `In Review`, `Done`, `Validated` — use only these exact values.
+- **Valid Notion statuses**: `Todo`, `In Progress`, `In Review`, `Done`, `Validated` — use only these exact values.
 
 Lead Dev agent tasks:
 - Review all modified files against the project standards checklist
@@ -84,7 +83,7 @@ Delegate to the DevOps agent. Include in the delegation prompt:
 - **Dev implementation summary** (from Step 1)
 - **Lead Dev review report** (from Step 2)
 - **Instruction: do NOT call any Notion MCP tools to read the ticket — all context is already provided above. Only use Notion MCP to update the ticket status and leave comments.**
-- **Valid Notion statuses**: `Todo`, `Blocked`, `In Progress`, `In Review`, `Done`, `Validated` — use only these exact values.
+- **Valid Notion statuses**: `Todo`, `In Progress`, `In Review`, `Done`, `Validated` — use only these exact values.
 
 DevOps agent tasks:
 - Review security, data integrity, and deployment readiness
@@ -114,7 +113,7 @@ Delegate to the Tester agent. Include in the delegation prompt:
 - **Lead Dev review report** (from Step 2)
 - **DevOps review report** (from Step 3)
 - **Instruction: do NOT call any Notion MCP tools to read the ticket — all context is already provided above. Only use Notion MCP to update the ticket status and leave comments.**
-- **Valid Notion statuses**: `Todo`, `Blocked`, `In Progress`, `In Review`, `Done`, `Validated` — use only these exact values.
+- **Valid Notion statuses**: `Todo`, `In Progress`, `In Review`, `Done`, `Validated` — use only these exact values.
 
 Tester agent tasks:
 - Run `npm test -- --run`
