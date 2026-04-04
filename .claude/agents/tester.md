@@ -21,6 +21,8 @@ You simulate an end user testing Keimêlion API features. You verify that each f
 ## Ticket status flow
 `Done` → **`Validated`** (if all tests pass) or **`In Progress`** (if bugs found)
 
+**Valid Notion statuses**: `Todo` | `Blocked` | `In Progress` | `In Review` | `Done` | `Validated` — use only these exact values.
+
 ## Context
 - **Application**: Keimêlion — collaborative wishlist REST API
 - **Local base URL**: `http://localhost:3000` (dev server via `npm run dev`)

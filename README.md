@@ -26,6 +26,9 @@ docker compose up -d
 # Run migrations
 npm run db:migrate
 
+# (Optional) Seed with fixture users
+npm run db:seed
+
 # Start the server
 npm run dev
 ```
@@ -61,7 +64,10 @@ src/
 ├── config/          # Environment variable validation (Zod)
 ├── db/
 │   ├── client.ts    # Drizzle connection
-│   ├── schema/      # Table definitions
+│   ├── schema/      # Table definitions (one file per table)
+│   ├── seed/        # Fixture data + dev scripts (one file per table)
+│   │   ├── index.ts #   Run all seeds
+│   │   └── reset.ts #   Drop + migrate + seed (dev only)
 │   └── migrations/  # Generated SQL migrations
 ├── middlewares/     # Error handler, rate limiter, request ID
 ├── routes/
@@ -80,12 +86,29 @@ npm run build         # Compile TypeScript
 npm run lint          # ESLint
 npm run format        # Prettier
 
-npm run db:generate   # Generate migrations
-npm run db:migrate    # Apply migrations
+npm run db:generate   # Generate migrations from schema
+npm run db:migrate    # Apply pending migrations
+npm run db:seed       # Insert fixture data (truncates then re-inserts)
+npm run db:reset      # Drop schema, re-migrate, re-seed (dev only)
 npm run db:studio     # Open Drizzle Studio (GUI)
 
 npm test              # Run Vitest tests
 ```
+
+### Fixture users
+
+`npm run db:seed` populates the `users` table with 6 realistic users:
+
+| Email | Auth | Role | Notes |
+|---|---|---|---|
+| `alice.martin@gmail.com` | Google | user | Active |
+| `thomas.bernard@outlook.com` | email | user | Active — password: `password` |
+| `sophie.lefevre@gmail.com` | Google | user | Active |
+| `admin@keimelion.com` | email | admin | Platform admin — password: `password` |
+| `julien.moreau@yahoo.fr` | email | user | Soft-deleted (`deleted_at` set) |
+| `marc.dupont@hotmail.com` | email | user | Banned (`banned_at` + `ban_reason` set) |
+
+> **Warning**: `db:seed` deletes all existing rows in `users` before inserting. Development only.
 
 ---
 
