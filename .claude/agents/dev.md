@@ -106,12 +106,32 @@ describe('GET /v1/resource', () => {
 **Important**: Do NOT redeclare global mocks for `db/client.js` and `config/env.js` — they are already in `src/test/setup.ts`.
 
 ### DB naming conventions (from Notion)
-- snake_case, English only, plural table names
+- snake_case, **English only** — column names, table names, enum values, seed data values, comments
 - PK always `id` (uuid), FK = `{table_singular}_id`
 - Booleans prefixed `is_`, timestamps suffixed `_at`, dates without `_at`
 - Counters suffixed `_count`, tokens suffixed `_token`
 - Statuses prefixed: `list_status`, `item_status` (avoid SQL keyword collision)
-- Soft delete via `deleted_at` on main entities (users, lists, items)
+- **Soft delete via `deleted_at` on main entities (users, lists, items) — never hard delete these**
+- No magic strings for typed columns — use `pgEnum` for fields with a fixed set of values (e.g. `platform_role`, `auth_provider`, `role`)
+
+### DB schema checklist (apply on every schema task)
+- [ ] `deleted_at` present on every main entity table (users, lists, items)
+- [ ] `pgEnum` used for every column with a fixed set of values
+- [ ] All FK columns have explicit `references()` and `onDelete` behaviour
+- [ ] `created_at` and `updated_at` on every table
+- [ ] UNIQUE constraints declared where the spec requires them
+- [ ] Partial indexes (e.g. `WHERE is_primary = true`) declared in `extraConfig`
+
+### Seed files
+Seed scripts live in `src/db/seed/` — one file per table plus an orchestrator:
+```
+src/db/seed/
+  index.ts        # imports and calls every seedXxx() function
+  users.ts        # exports seedUsers(db)
+  reset.ts        # DROP SCHEMA → migrate → seed (dev only)
+  <table>.ts      # exports seed<Table>(db)
+```
+Do not place seed or reset scripts directly in `src/db/` alongside `client.ts`.
 
 ## Branch naming convention
 
@@ -142,7 +162,14 @@ git checkout -b feat/KEI-5-implement-post-wishlists
 4. **Read existing files** to understand patterns before writing any code
 5. **Consult DB schema** (`336355b4-4d03-815c-929d-d097a7a4d0e9`) if the task involves database work — **skip if already provided in the task prompt**
 6. **Implement** in order: DB schema → service → route → tests
-7. **Verify**: `npm test -- --run` must pass, `npx tsc --noEmit` must be clean
+   - **Tests are mandatory** for every new HTTP endpoint (`src/routes/<resource>/<resource>.test.ts`) and every complex service function (non-trivial branching, error handling, business rules)
+   - Each test file must cover: happy path, main error cases (400, 404, 500), and any edge case mentioned in the acceptance criteria
+   - Pure schema/migration tasks (no routes, no service logic) do not require tests
+7. **Verify**:
+   - `npm test -- --run` must pass
+   - `npx tsc --noEmit` must be clean
+   - If DB schema was created or modified: run `npm run db:generate -- --name=<slug>` and confirm a `.sql` file was produced in `src/db/migrations/` — if the command fails, fix the root cause before proceeding
+   - **Smoke test**: start the server (`npm run dev &`), curl each implemented endpoint (happy path only), then stop the server — the feature must respond correctly before you mark it `In Review`
 8. **Update ticket**:
    - Status → `In Review`
    - Fill in "Files Involved" with all created/modified files
@@ -155,8 +182,10 @@ git checkout -b feat/KEI-X-slug      # Create feature branch
 npm test -- --run                    # Single-pass tests
 npx tsc --noEmit                     # Type check
 npx eslint src/                      # Lint
-npm run db:generate                  # Generate Drizzle migration
+npm run db:generate -- --name=<slug> # Generate migration with a readable name (e.g. --name=add-users-table)
 npm run db:migrate                   # Apply migration (local only)
+npm run db:seed                      # Insert fixture data
+npm run db:reset                     # Drop schema + migrate + seed (dev only)
 ```
 
 ## Behaviour
@@ -164,5 +193,6 @@ npm run db:migrate                   # Apply migration (local only)
 - Never commit, never push — the developer handles all git commits and pushes
 - Read existing files BEFORE creating anything
 - Never duplicate logic — reuse existing utilities (`sendError`, `HttpStatus`, `ErrorCode`, etc.)
+- No dead code — no unused variables, unused imports, unreachable branches, commented-out code, or functions defined but never called
 - Keep changes minimal and focused on the task
 - If a task is ambiguous, leave a comment on the Notion ticket and ask for clarification

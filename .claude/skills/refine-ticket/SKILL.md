@@ -18,7 +18,7 @@ Each agent reviews the ticket from their own perspective, raises questions and c
 
 ---
 
-## Step 0 — Context fetch (YOU do this, before delegating to any agent)
+## Step 0 — Context fetch and dependency check (YOU do this, before delegating to any agent)
 
 Fetch the following pages yourself using your Notion MCP tools and store their full content:
 1. The ticket: **$ARGUMENTS**
@@ -26,6 +26,10 @@ Fetch the following pages yourself using your Notion MCP tools and store their f
 3. MVP scope: `336355b4-4d03-81d1-818e-e68530984a2a` — for PO only
 4. DB schema: `336355b4-4d03-815c-929d-d097a7a4d0e9` — for Lead Dev and Dev only
 5. Conventions: `336355b4-4d03-81a2-97e6-f9fc18df0d87` — for Lead Dev and Dev only
+
+**Dependency check**: if the ticket has entries in "Blocked By", fetch each of those tickets and check their status. If any dependency is not `Validated`:
+- Leave a comment listing which dependencies are not yet validated and their current status
+- **Stop the refinement** and inform the user — a ticket cannot be refined if its dependencies are not yet implemented
 
 Each agent receives only the pages relevant to their role (see steps below) — **no agent should call notion-fetch or notion-search**.
 
@@ -115,9 +119,28 @@ Dev agent tasks:
 
 ---
 
-## Step 5 — Synthesis and ticket update
+## Step 5 — User validation (REQUIRED before updating the ticket)
 
-Based on all four perspectives, update the Notion ticket with:
+Before touching the Notion ticket, present a consolidated summary to the user:
+
+- **PO findings**: key questions and scope concerns raised
+- **Lead Dev assessment**: proposed implementation approach, architecture concerns, dependencies
+- **DevOps constraints**: security, validation, migration, auth requirements
+- **Dev review**: complexity estimate, missing details, implementation blockers
+- **Open questions**: anything unresolved that the user needs to answer
+
+Then ask the user:
+1. Do you agree with the proposed approach?
+2. Are there any open questions you can answer now?
+3. Anything to add or change before the ticket is updated?
+
+**Wait for the user's response before proceeding to Step 6.** Incorporate their answers into the final update.
+
+---
+
+## Step 6 — Synthesis and ticket update
+
+Based on all four perspectives and the user's input, update the Notion ticket with:
 
 **Refined description** — clear, complete, unambiguous
 
@@ -137,7 +160,7 @@ Based on all four perspectives, update the Notion ticket with:
 
 **Status update** — only if the current ticket status is `Todo` or has no status set, update it to `Todo` to signal it is ready for implementation. If the ticket is already in any other status (e.g. `In Progress`, `In Review`), leave the status unchanged.
 
-Leave a comment: "Refinement completed on [date] — ticket is ready for implementation."
+Leave a comment: "Refinement completed on [date] — ticket is ready for implementation." and include any key decisions made by the user during the validation step.
 
 ---
 
