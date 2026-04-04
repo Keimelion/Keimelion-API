@@ -95,21 +95,6 @@ npm run db:studio     # Open Drizzle Studio (GUI)
 npm test              # Run Vitest tests
 ```
 
-### Fixture users
-
-`npm run db:seed` populates the `users` table with 6 realistic users:
-
-| Email | Auth | Role | Notes |
-|---|---|---|---|
-| `alice.martin@gmail.com` | Google | user | Active |
-| `thomas.bernard@outlook.com` | email | user | Active — password: `password` |
-| `sophie.lefevre@gmail.com` | Google | user | Active |
-| `admin@keimelion.com` | email | admin | Platform admin — password: `password` |
-| `julien.moreau@yahoo.fr` | email | user | Soft-deleted (`deleted_at` set) |
-| `marc.dupont@hotmail.com` | email | user | Banned (`banned_at` + `ban_reason` set) |
-
-> **Warning**: `db:seed` deletes all existing rows in `users` before inserting. Development only.
-
 ---
 
 ## Commit convention
