@@ -1,5 +1,5 @@
 CREATE TYPE "public"."auth_provider" AS ENUM('email', 'google');--> statement-breakpoint
-CREATE TYPE "public"."platform_role" AS ENUM('user', 'admin');--> statement-breakpoint
+CREATE TYPE "public"."platform_role" AS ENUM('user', 'moderator', 'admin');--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "users" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"email" text NOT NULL,

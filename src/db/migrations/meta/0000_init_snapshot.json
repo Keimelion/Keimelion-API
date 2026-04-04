@@ -145,6 +145,7 @@
       "schema": "public",
       "values": [
         "user",
+        "moderator",
         "admin"
       ]
     }

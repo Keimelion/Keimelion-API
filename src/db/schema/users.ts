@@ -1,7 +1,7 @@
 import { boolean, pgEnum, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
 
-export const platformRoleEnum = pgEnum('platform_role', ['user', 'admin'])
+export const platformRoleEnum = pgEnum('platform_role', ['user', 'moderator', 'admin'])
 export const authProviderEnum = pgEnum('auth_provider', ['email', 'google'])
 
 export const users = pgTable('users', {
