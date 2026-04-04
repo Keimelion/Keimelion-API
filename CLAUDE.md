@@ -9,10 +9,14 @@ REST API for Keimelion, a collaborative wishlist app. Built with Hono on Node.js
 - **Runtime**: Node.js (ESM, `"type": "module"`)
 - **Framework**: Hono
 - **ORM**: Drizzle ORM + `postgres` driver
-- **Validation**: Zod (env vars only for now)
+- **Validation**: Zod (env vars via `src/config/env.ts`, route inputs via `@hono/zod-validator`)
 - **Tests**: Vitest
 - **Linting**: ESLint with `typescript-eslint` strict + stylistic type-checked
 - **Formatting**: Prettier
+
+## Coding standards
+
+See `.claude/coding-standards.md` for the full coding standards (early return, no `else`, naming, strict types, etc.).
 
 ## Key conventions
 
