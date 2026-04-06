@@ -27,8 +27,10 @@ See `.claude/coding-standards.md` for the full coding standards (early return, n
 - Use `import type` for type-only imports (`@typescript-eslint/consistent-type-imports`)
 
 ### Project structure
-- Routes are organized by resource folder: `src/routes/<resource>/index.ts`
-- Tests are colocated with their route: `src/routes/<resource>/<resource>.test.ts`
+- Code is organized by feature: `src/features/<feature>/`
+- Each feature folder contains routes, service, repository, schemas, types, mappers, and tests
+- Shared infrastructure (types, utils, middlewares) lives in `src/shared/`
+- Tests are colocated with their feature: `src/features/<feature>/<feature>.test.ts`
 
 ### Testing
 - Framework: Vitest

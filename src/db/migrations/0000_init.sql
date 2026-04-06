@@ -1,12 +1,12 @@
 CREATE TYPE "public"."auth_provider" AS ENUM('email', 'google');--> statement-breakpoint
-CREATE TYPE "public"."platform_role" AS ENUM('user', 'moderator', 'admin');--> statement-breakpoint
+CREATE TYPE "public"."user_role" AS ENUM('user', 'moderator', 'admin');--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "users" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"email" text NOT NULL,
 	"username" text,
 	"password_hash" text,
 	"auth_provider" "auth_provider" NOT NULL,
-	"platform_role" "platform_role" DEFAULT 'user' NOT NULL,
+	"role" "user_role" DEFAULT 'user' NOT NULL,
 	"is_cgv_accepted" boolean DEFAULT false NOT NULL,
 	"cgv_accepted_at" timestamp with time zone,
 	"is_marketing_opted_in" boolean DEFAULT false NOT NULL,

@@ -1,6 +1,6 @@
 {
-  "id": "00dc6975-527c-4a92-a077-8e9a677685dd",
-  "prevId": "00000000-0000-0000-0000-000000000000",
+  "id": "9b70dc6d-4dea-4a2d-a580-2eea80660ef1",
+  "prevId": "00dc6975-527c-4a92-a077-8e9a677685dd",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -23,7 +23,7 @@
         },
         "username": {
           "name": "username",
-          "type": "text",
+          "type": "varchar(100)",
           "primaryKey": false,
           "notNull": false
         },
@@ -48,6 +48,12 @@
           "notNull": true,
           "default": "'user'"
         },
+        "avatar_url": {
+          "name": "avatar_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "is_cgv_accepted": {
           "name": "is_cgv_accepted",
           "type": "boolean",
@@ -67,6 +73,24 @@
           "primaryKey": false,
           "notNull": true,
           "default": false
+        },
+        "email_verify_token": {
+          "name": "email_verify_token",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "email_verify_token_expires_at": {
+          "name": "email_verify_token_expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "email_verified_at": {
+          "name": "email_verified_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
         },
         "last_active_at": {
           "name": "last_active_at",
@@ -123,6 +147,13 @@
           "nullsNotDistinct": false,
           "columns": [
             "username"
+          ]
+        },
+        "users_email_verify_token_unique": {
+          "name": "users_email_verify_token_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "email_verify_token"
           ]
         }
       },
