@@ -467,57 +467,121 @@ Code is organized by feature under `src/features/<feature>/`:
 
 ```
 src/features/users/
-  users.enums.ts       # const arrays + derived types (AuthProvider, PlatformRole…)
-  users.types.ts       # TypeScript interfaces: inputs, results, public types
-  users.schemas.ts     # Zod schemas for route validation
-  users.mappers.ts     # Transformation functions (DB row → public type)
-  users.repository.ts  # All DB access for this feature
+  endpoints/
+    get-profile.ts     # handler + Zod schema + input type, all in one file
+    update-profile.ts
+    delete-account.ts
+  users.mapper.ts      # DB row → public type; shared interfaces (BaseUser, PublicUser…)
+  users.repository.ts  # Feature-specific DB queries; re-exports shared queries from db/entities
   users.service.ts     # Business logic
-  users.routes.ts      # Route definitions
+  users.routes.ts      # Route definitions — mounts endpoints, applies middlewares
   users.test.ts        # Tests colocated with the feature
 ```
 
-Shared infrastructure (types, utils, middlewares used across features) lives in `src/shared/`:
+**Features that cover multiple resources are subdivided by resource**, with a top-level routes file that composes the sub-routers:
+
+```
+src/features/admin/
+  admin.routes.ts           # Applies guards (authMiddleware, requireAdmin), mounts sub-routers
+  users/
+    endpoints/
+      list-users.ts
+      get-user.ts
+      update-user.ts
+      delete-user.ts
+    admin-users.mapper.ts
+    admin-users.repository.ts
+    admin-users.service.ts
+    admin-users.routes.ts
+    admin-users.test.ts
+  ban/                      # Future sub-feature — same structure
+    ...
+```
+
+**Shared DB queries** go in `src/db/entities/<entity>/`:
+
+```
+src/db/entities/users/
+  users.schema.ts           # Drizzle schema + DB types
+  users.repository.ts       # Generic queries reused across features (findUserById, softDeleteUser…)
+```
+
+Feature repositories import and re-export shared queries, then add their own specific ones:
+
+```typescript
+// src/features/users/users.repository.ts
+export { findUserById, softDeleteUser } from '../../db/entities/users/users.repository.js'
+
+export async function updateUserProfile(...) { ... }  // users-feature-specific
+```
+
+**Shared Zod schemas** used across multiple features go in `src/shared/schemas/`:
+
+```
+src/shared/schemas/
+  pagination.ts    # paginationQuerySchema + PaginationInput + constants
+```
+
+**Shared infrastructure** lives in `src/shared/`:
 
 ```
 src/shared/
+  schemas/
+    pagination.ts
   types/
-    api.ts
-    app.ts
-    enums/
-      error-code.ts
-      http.ts
+    api.ts  app.ts  service.ts
+  enums/
+    error-code.ts  http.ts  user-role.ts  auth-provider.ts
   utils/
     hash.ts  logger.ts  rate-limiter.ts  response.ts  validation.ts
   middlewares/
-    auth.ts  logger.ts  rate-limit.ts  request-id.ts
+    auth.ts  require-admin.ts  logger.ts  rate-limit.ts  request-id.ts
 ```
 
 Rules:
 
-- **TypeScript is the source of truth** — define enums in the feature (`const ... as const`), then derive the DB `pgEnum` from them; the DB schema imports from features, never the reverse
-- Schemas, types, and mappers for a resource live with the feature, never in `src/shared/`
+- **Zod schemas belong next to their endpoint** — define the schema and `z.infer<>` type inline in the endpoint file, not in a separate `schemas.ts`
+- **Types used in one place stay inline** — only extract to a shared file when two or more files need the same type
+- **Mappers own shared interfaces** — `BaseUser`, `PublicUser`, `AdminUser` live in mapper files, not in standalone `types.ts` files
+- **Repository functions accept generic shared types** — a repository that paginates takes `PaginationInput`, not a feature-specific `AdminListUsersInput`
+- **TypeScript is the source of truth for enums** — define `const ... as const` in the feature or `src/shared/enums/`, derive the DB `pgEnum` from it; the DB schema imports from features/shared, never the reverse
 
 ```typescript
 // ✅ — feature defines the enum
-// src/features/users/users.enums.ts
-export const PLATFORM_ROLE_VALUES = ['user', 'moderator', 'admin'] as const
-export type PlatformRole = (typeof PLATFORM_ROLE_VALUES)[number]
+// src/shared/enums/user-role.ts
+export const USER_ROLE_VALUES = ['user', 'moderator', 'admin'] as const
+export type UserRole = (typeof USER_ROLE_VALUES)[number]
 
 // ✅ — DB schema derives from it
-// src/db/schema/users.ts
-import { PLATFORM_ROLE_VALUES } from '../../features/users/users.enums.js'
-export const platformRoleEnum = pgEnum('platform_role', PLATFORM_ROLE_VALUES)
+// src/db/entities/users/users.schema.ts
+import { USER_ROLE_VALUES } from '../../../shared/enums/user-role.js'
+export const userRoleEnum = pgEnum('user_role', USER_ROLE_VALUES)
 ```
 
 ---
 
 ## Repository pattern — all DB calls in repositories
 
-All database access goes through `src/features/<feature>/<feature>.repository.ts`. Services never call the ORM directly.
+All database access goes through repository files. Services never call the ORM directly.
 
-- One repository file per domain entity
-- Repositories may import from entities (types, enums) — entities never import from repositories
+**Two levels of repositories:**
+
+1. **`src/db/entities/<entity>/` — shared repository**: generic queries reused by multiple features (`findUserById`, `softDeleteUser`). Any feature that needs these functions imports them from here.
+
+2. **`src/features/<feature>/` — feature repository**: queries specific to one feature's business logic (`findAllUsers` with pagination, `adminUpdateUser` with role logic). Re-exports shared queries from the entity repository so callers only need one import.
+
+```typescript
+// ✅ — feature repository re-exports shared + adds its own
+// src/features/admin/users/admin-users.repository.ts
+export { findUserById, softDeleteUser } from '../../../db/entities/users/users.repository.js'
+
+export async function findAllUsers(input: PaginationInput): Promise<User[]> { ... }
+export async function adminUpdateUser(id: string, input: AdminUpdateUserInput): Promise<User | undefined> { ... }
+```
+
+Additional rules:
+
+- Repository functions that paginate accept `PaginationInput` from `src/shared/schemas/pagination.ts`, not a feature-specific input type — this keeps the repository reusable
 - Implementation details that belong to persistence (e.g. password hashing before insert) live in the repository, not in the calling service
 
 ```typescript
