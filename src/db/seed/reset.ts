@@ -2,15 +2,16 @@ import { migrate } from 'drizzle-orm/postgres-js/migrator'
 import postgres from 'postgres'
 import { drizzle } from 'drizzle-orm/postgres-js'
 import { env } from '../../config/env.js'
-import * as schema from '../schema/index.js'
-import { seedUsers } from './users.js'
+import * as usersSchema from '../entities/users/users.schema.js'
+import { seedUsers } from '../entities/users/users.fixture.js'
 
 const client = postgres(env.DATABASE_URL)
-const db = drizzle(client, { schema })
+const db = drizzle(client, { schema: { ...usersSchema } })
 
 try {
   console.log('Dropping schema...')
   await client`DROP SCHEMA public CASCADE`
+  await client`DROP SCHEMA IF EXISTS drizzle CASCADE`
   await client`CREATE SCHEMA public`
 
   console.log('Running migrations...')

@@ -262,31 +262,20 @@ Combined with TypeScript's exhaustiveness checking: if `default` should never be
 
 ## Shared enums — no magic strings or numbers
 
-Never use raw string or number literals for values that carry semantic meaning. Define an `enum` or a `const` object and reuse it.
+Never use raw string or number literals for values that carry semantic meaning. Define a `const` array with `as const` and derive the type from it.
 
 ```typescript
 // ❌
 if (item.status === 'reserved') { ... }
-if (list.visibility === 2) { ... }
 
 // ✅ — define once, reuse everywhere
-export enum ItemStatus {
-  Available = 'available',
-  Reserved = 'reserved',
-  Purchased = 'purchased',
-}
+export const ITEM_STATUS_VALUES = ['available', 'reserved', 'purchased'] as const
+export type ItemStatus = (typeof ITEM_STATUS_VALUES)[number]
 
-export enum ListVisibility {
-  Private = 1,
-  FriendsOnly = 2,
-  Public = 3,
-}
-
-if (item.status === ItemStatus.Reserved) { ... }
-if (list.visibility === ListVisibility.FriendsOnly) { ... }
+if (item.status === 'reserved') { ... }
 ```
 
-Enums that are specific to a single file stay local; enums shared across multiple files go in `src/types/`.
+Enums that are specific to a single file stay local; enums shared across multiple files (e.g. used by both the entity and the DB schema) go in the entity's `enums/` folder — see **Project structure — entity folders** below.
 
 ---
 
@@ -398,6 +387,32 @@ export function getUserById() { ... }
 
 ---
 
+## No `any` in template literals — explicit types only
+
+`@typescript-eslint/restrict-template-expressions` forbids values typed as `any`, `null`, `undefined`, or object types inside template literals. Only `string`, `number`, `boolean`, and `bigint` are allowed directly.
+
+Common triggers:
+- Optional env vars typed `string | undefined`
+- Properties of objects with `any` index signatures (e.g. untyped external payloads)
+- Values that haven't been narrowed yet
+
+Fix by narrowing, converting, or avoiding template literals where possible:
+
+```typescript
+// ❌ — string | undefined, any, or object
+const msg = `Status: ${maybeNull}`
+const url = `${env.APP_URL}/path`  // if APP_URL were string | undefined
+
+// ✅ — narrow or convert before interpolating
+const msg = `Status: ${maybeNull ?? 'unknown'}`
+const msg = `Code: ${String(value)}`
+
+// ✅ — for URLs, prefer the URL constructor (APP_URL is never in the template)
+const verifyUrl = new URL(`/auth/verify-email?token=${token}`, env.APP_URL).href
+```
+
+---
+
 ## `??` over `||` for nullish coalescing
 
 Use `??` when you want to fall back only on `null` or `undefined`. `||` also coerces `0`, `""`, and `false` — which is almost never what you want in business logic.
@@ -443,3 +458,216 @@ async function persistList(data: ListRow) { ... }
 - **Interfaces**: PascalCase noun — `UserService`, `CreateListInput`, `ListResult`
 - **Constants**: SCREAMING_SNAKE_CASE for true constants — `MAX_ITEMS_PER_LIST`
 - No single-letter variables except in well-understood math contexts
+
+---
+
+## Project structure — feature folders
+
+Code is organized by feature under `src/features/<feature>/`:
+
+```
+src/features/users/
+  users.enums.ts       # const arrays + derived types (AuthProvider, PlatformRole…)
+  users.types.ts       # TypeScript interfaces: inputs, results, public types
+  users.schemas.ts     # Zod schemas for route validation
+  users.mappers.ts     # Transformation functions (DB row → public type)
+  users.repository.ts  # All DB access for this feature
+  users.service.ts     # Business logic
+  users.routes.ts      # Route definitions
+  users.test.ts        # Tests colocated with the feature
+```
+
+Shared infrastructure (types, utils, middlewares used across features) lives in `src/shared/`:
+
+```
+src/shared/
+  types/
+    api.ts
+    app.ts
+    enums/
+      error-code.ts
+      http.ts
+  utils/
+    hash.ts  logger.ts  rate-limiter.ts  response.ts  validation.ts
+  middlewares/
+    auth.ts  logger.ts  rate-limit.ts  request-id.ts
+```
+
+Rules:
+
+- **TypeScript is the source of truth** — define enums in the feature (`const ... as const`), then derive the DB `pgEnum` from them; the DB schema imports from features, never the reverse
+- Schemas, types, and mappers for a resource live with the feature, never in `src/shared/`
+
+```typescript
+// ✅ — feature defines the enum
+// src/features/users/users.enums.ts
+export const PLATFORM_ROLE_VALUES = ['user', 'moderator', 'admin'] as const
+export type PlatformRole = (typeof PLATFORM_ROLE_VALUES)[number]
+
+// ✅ — DB schema derives from it
+// src/db/schema/users.ts
+import { PLATFORM_ROLE_VALUES } from '../../features/users/users.enums.js'
+export const platformRoleEnum = pgEnum('platform_role', PLATFORM_ROLE_VALUES)
+```
+
+---
+
+## Repository pattern — all DB calls in repositories
+
+All database access goes through `src/features/<feature>/<feature>.repository.ts`. Services never call the ORM directly.
+
+- One repository file per domain entity
+- Repositories may import from entities (types, enums) — entities never import from repositories
+- Implementation details that belong to persistence (e.g. password hashing before insert) live in the repository, not in the calling service
+
+```typescript
+// ❌ — service knows about hashing
+export async function registerUser(input: RegisterInput) {
+  const passwordHash = await hashPassword(input.password)
+  await insertUser({ ...input, passwordHash })
+}
+
+// ✅ — hashing is an insert detail
+// repository
+export async function insertUser(input: RegisterInput): Promise<User | undefined> {
+  const passwordHash = await hashPassword(input.password)
+  // ...
+}
+// service
+export async function registerUser(input: RegisterInput) {
+  const user = await insertUser(input)
+}
+```
+
+---
+
+## Routes must stay clean
+
+Route files (`src/features/<feature>/<feature>.routes.ts`) contain only route definitions, validators, and service calls. Any logic or configuration is extracted:
+
+- Rate limiter factory → `src/shared/utils/rate-limiter.ts`
+- Validation error handler → `src/shared/utils/validation.ts`
+- Any business logic → a service function
+
+```typescript
+// ❌ — config and duplication in the route file
+const REGISTER_RATE_LIMIT = 10
+const rateLimiter = rateLimiter({ limit: REGISTER_RATE_LIMIT, ... })
+
+// ✅ — route file stays declarative
+import { createRateLimiter } from '../../shared/utils/rate-limiter.js'
+router.post('/register', createRateLimiter(10), zValidator(...), async (c) => { ... })
+```
+
+---
+
+## Specific error codes — no generic fallbacks
+
+Each distinct failure mode has its own error code. `INTERNAL_ERROR` and `NOT_FOUND` are only acceptable when the situation is genuinely generic.
+
+Add a specific code when:
+- The client needs to distinguish this error from a similar one
+- The generic message would be misleading or uninformative
+
+```typescript
+// ❌
+return { data: sendError(ErrorCode.INTERNAL_ERROR), httpStatus: HttpStatus.INTERNAL_SERVER_ERROR }
+
+// ✅
+return { data: sendError(ErrorCode.USER_CREATION_FAILED), httpStatus: HttpStatus.INTERNAL_SERVER_ERROR }
+```
+
+---
+
+## Trust the validation layer
+
+Services receive already-validated, already-typed data from the route layer. Do not re-check constraints that Zod has already enforced.
+
+- If Zod guarantees `password` is a non-empty string, do not handle an empty/null case in the service
+- If Zod guarantees `email` is lowercased (via `.transform()`), do not lowercase it again in the service
+
+---
+
+## Normalise inputs at the Zod boundary
+
+Data normalisation (lowercasing emails, trimming whitespace) belongs in the Zod schema via `.transform()` or `.trim()`, not in service functions.
+
+```typescript
+// ❌ — normalisation scattered in the service
+const email = input.email.toLowerCase().trim()
+
+// ✅ — normalised once at the boundary
+const loginSchema = z.object({
+  email: z.string().email().transform(v => v.toLowerCase().trim()),
+  username: z.string().trim().regex(USERNAME_REGEX).nullable().optional(),
+})
+```
+
+---
+
+## Generic result types — avoid repeated interfaces
+
+Use `ServiceResult<T>` instead of creating a named interface for every function's return shape. Only name a result type when the shape is unique enough to be meaningful on its own.
+
+```typescript
+// ❌ — six interfaces, all structurally identical
+interface RegisterResult { data: { user: SafeUser } | Response; httpStatus: number }
+interface GetProfileResult { data: { user: SafeUser } | Response; httpStatus: number }
+// ...
+
+// ✅ — one generic, used inline
+interface ServiceResult<T> { data: T | Response; httpStatus: number }
+
+async function registerUser(input: RegisterInput): Promise<ServiceResult<{ user: SafeUser }>>
+async function getProfile(userId: string): Promise<ServiceResult<{ user: SafeUser }>>
+```
+
+---
+
+## Avoid overkill interfaces
+
+Do not create an interface for a shape used in exactly one place. Inline the type or pass values directly.
+
+```typescript
+// ❌ — interface for a 2-field object used once
+interface InsertUserParams { input: RegisterInput; emailVerifyToken: string }
+async function insertUser(params: InsertUserParams) { ... }
+
+// ✅ — just use the parameters directly
+async function insertUser(input: RegisterInput, emailVerifyToken: string) { ... }
+```
+
+---
+
+## Don't expose backend-only fields as API inputs
+
+If the backend always sets a field to a fixed value regardless of what the client sends, remove it from the input schema entirely. The client should not need to know about it.
+
+```typescript
+// ❌ — isCgvAccepted is always true server-side; no need to accept it from the client
+const registerSchema = z.object({
+  email: z.string().email(),
+  isCgvAccepted: z.literal(true),
+})
+
+// ✅ — set it unconditionally in the repository
+await db.insert(users).values({ ...input, isCgvAccepted: true, cgvAcceptedAt: new Date() })
+```
+
+---
+
+## Private helpers — ordering within the private section
+
+Within the private section of a file (after all exported functions), order helpers in the order they are first called — top to bottom mirrors the call flow.
+
+```typescript
+// ✅
+export async function registerUser(input) {
+  if (await isEmailAlreadyTaken(input.email)) { ... }  // called first
+  sendVerificationEmail(input.email, token)             // called second
+}
+
+// private section — same order as calls above
+function sendVerificationEmail(...) { ... }  // ← first
+async function isEmailAlreadyTaken(...) { ... }  // ← second
+```

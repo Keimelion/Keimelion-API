@@ -61,19 +61,21 @@ curl http://localhost:3000/v1/health
 
 ```
 src/
-├── config/          # Environment variable validation (Zod)
+├── config/              # Environment variable validation (Zod)
 ├── db/
-│   ├── client.ts    # Drizzle connection
-│   ├── schema/      # Table definitions (one file per table)
-│   ├── seed/        # Fixture data + dev scripts (one file per table)
-│   │   ├── index.ts #   Run all seeds
-│   │   └── reset.ts #   Drop + migrate + seed (dev only)
-│   └── migrations/  # Generated SQL migrations
-├── middlewares/     # Error handler, rate limiter, request ID
-├── routes/
-│   └── health/      # Route + tests colocated per resource
-├── services/        # Business logic
-└── types/           # ApiResponse<T>, ApiError, PaginatedResponse<T>
+│   ├── client.ts        # Drizzle connection
+│   ├── entities/        # Table schemas + fixtures (one folder per entity)
+│   ├── seed/            # Seed runner + dev reset script
+│   └── migrations/      # Generated SQL migrations
+├── features/            # Feature modules (routes, service, repository, tests)
+│   ├── auth/
+│   ├── health/
+│   └── users/
+└── shared/              # Cross-cutting infrastructure
+    ├── enums/           # HTTP codes, error codes, roles
+    ├── middlewares/     # Auth, logger, rate-limit, request-id
+    ├── types/           # ApiError, AppVariables, ServiceResult<T>
+    └── utils/           # Hash, logger, response helpers, validation
 ```
 
 ---

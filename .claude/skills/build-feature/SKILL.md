@@ -23,8 +23,8 @@ All review stages (Lead Dev, DevOps) leave the ticket at `In Review` and signal 
 
 Fetch the ticket **$ARGUMENTS** yourself using your Notion MCP tools and store its full content (description, acceptance criteria, technical notes, status, all comments).
 
-**Dependency check**: if the ticket has entries in "Blocked By", fetch each of those tickets and check their status. If any dependency is not `Validated`:
-- Leave a comment listing which dependencies are not yet validated and their current status
+**Dependency check**: if the ticket has entries in "Blocked By", fetch each of those tickets and check their status. If any dependency is neither `Done` nor `Validated`:
+- Leave a comment listing which dependencies are not yet done/validated and their current status
 - **Stop the pipeline** and inform the user — do not proceed with implementation
 
 You will pass this content inline to each agent — **no agent should call notion-fetch or notion-search to read the ticket**. Agents only call Notion MCP to write (update status, add comment).

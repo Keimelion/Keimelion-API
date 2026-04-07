@@ -10,6 +10,13 @@ const envSchema = z.object({
   CORS_ORIGINS: z.string().default('http://localhost:3001'),
   RATE_LIMIT_MAX: z.coerce.number().int().positive().default(100),
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(900000),
+  JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters'),
+  JWT_EXPIRES_IN: z.string().default('7d'),
+  EMAIL_VERIFY_TOKEN_TTL_HOURS: z.coerce.number().int().positive().default(24),
+  BCRYPT_ROUNDS: z.coerce.number().int().positive().default(12),
+  APP_URL: z.string().url().default('http://localhost:3000'),
+  EMAIL_API_KEY: z.string().optional(),
+  EMAIL_FROM: z.string().optional(),
 })
 
 const parsed = envSchema.safeParse(process.env)

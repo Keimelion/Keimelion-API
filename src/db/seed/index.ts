@@ -1,5 +1,5 @@
 import { db } from '../client.js'
-import { seedUsers } from './users.js'
+import { seedUsers } from '../entities/users/users.fixture.js'
 
 async function seed(): Promise<void> {
   console.log('Seeding...')

@@ -1,7 +1,7 @@
 import { serve } from '@hono/node-server'
 import { app } from './app.js'
 import { env } from './config/env.js'
-import { logger } from './utils/logger.js'
+import { logger } from './shared/utils/logger.js'
 
 const server = serve(
   {
