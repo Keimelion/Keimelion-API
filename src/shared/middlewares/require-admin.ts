@@ -1,0 +1,14 @@
+import type { MiddlewareHandler } from 'hono'
+import { ErrorCode } from '../enums/error-code.js'
+import { sendError } from '../utils/response.js'
+import type { AppVariables } from '../types/app.js'
+
+export const requireAdminMiddleware: MiddlewareHandler<{ Variables: AppVariables }> = async (context, next) => {
+  const user = context.get('user')
+
+  if (user.role !== 'admin') {
+    return sendError(ErrorCode.FORBIDDEN)
+  }
+
+  return next()
+}

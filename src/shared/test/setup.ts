@@ -21,9 +21,13 @@ vi.mock('../../config/env.js', () => ({
 vi.mock('../../db/client.js', () => ({
   db: {
     execute: vi.fn(),
+    select: vi.fn(() => ({
+      from: vi.fn(() => Promise.resolve([])),
+    })),
     query: {
       users: {
         findFirst: vi.fn(),
+        findMany: vi.fn(),
       },
     },
     insert: vi.fn(() => ({

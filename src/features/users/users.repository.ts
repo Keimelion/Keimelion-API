@@ -7,12 +7,10 @@ import type { User } from '../../db/entities/users/users.schema.js'
 import type { RegisterInput } from '../auth/endpoints/register.js'
 import type { UpdateProfileInput } from './endpoints/update-profile.js'
 
+export { findUserById, softDeleteUser } from '../../db/entities/users/users.repository.js'
+
 export function findUserByEmail(email: string): Promise<User | undefined> {
   return db.query.users.findFirst({ where: eq(users.email, email) })
-}
-
-export function findUserById(id: string): Promise<User | undefined> {
-  return db.query.users.findFirst({ where: eq(users.id, id) })
 }
 
 export function findUserByEmailVerifyToken(token: string): Promise<User | undefined> {
@@ -60,16 +58,6 @@ export async function updateUserProfile(userId: string, input: UpdateProfileInpu
   if (input.isMarketingOptedIn !== undefined) values.isMarketingOptedIn = input.isMarketingOptedIn
 
   const [user] = await db.update(users).set(values).where(eq(users.id, userId)).returning()
-
-  return user
-}
-
-export async function softDeleteUser(userId: string): Promise<User | undefined> {
-  const [user] = await db
-    .update(users)
-    .set({ deletedAt: new Date(), updatedAt: new Date() })
-    .where(eq(users.id, userId))
-    .returning()
 
   return user
 }
