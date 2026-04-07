@@ -37,7 +37,7 @@ export async function updateUser(
   targetUserId: string,
   input: AdminUpdateUserInput,
 ): Promise<ServiceResult<{ user: AdminUser }>> {
-  if (targetUserId === adminId && input.role !== undefined && input.role !== 'admin') {
+  if (targetUserId === adminId) {
     return serviceError(ErrorCode.FORBIDDEN)
   }
 
@@ -59,6 +59,10 @@ export async function updateUser(
 }
 
 export async function deleteUser(adminId: string, targetUserId: string): Promise<ServiceResult<{ message: string }>> {
+  if (targetUserId === adminId) {
+    return serviceError(ErrorCode.FORBIDDEN)
+  }
+
   const targetUser = await findUserById(targetUserId)
 
   if (!targetUser) {

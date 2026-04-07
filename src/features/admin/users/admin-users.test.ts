@@ -303,7 +303,7 @@ describe('PATCH /v1/admin/users/:id', () => {
     expect(response.status).toBe(404)
   })
 
-  it('returns 403 when admin tries to demote themselves', async () => {
+  it('returns 403 when admin tries to update themselves', async () => {
     const token = await generateTestToken(ADMIN_USER.id, 'admin')
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
 
@@ -313,7 +313,7 @@ describe('PATCH /v1/admin/users/:id', () => {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ role: 'user' }),
+      body: JSON.stringify({ avatarUrl: 'https://example.com/avatar.png' }),
     })
 
     expect(response.status).toBe(403)
@@ -411,6 +411,18 @@ describe('DELETE /v1/admin/users/:id', () => {
     })
 
     expect(response.status).toBe(404)
+  })
+
+  it('returns 403 when admin tries to delete themselves', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
+
+    const response = await app.request(`/v1/admin/users/${ADMIN_USER.id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    })
+
+    expect(response.status).toBe(403)
   })
 
   it('returns 403 when user does not have admin role', async () => {
