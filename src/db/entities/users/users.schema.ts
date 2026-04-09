@@ -25,7 +25,7 @@ export const users = pgTable('users', {
   bannedAt: timestamp('banned_at', { withTimezone: true }),
   banReason: text('ban_reason'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().default(sql`now()`),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().default(sql`now()`),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().default(sql`now()`).$onUpdateFn(() => new Date()),
 })
 
 export type User = typeof users.$inferSelect

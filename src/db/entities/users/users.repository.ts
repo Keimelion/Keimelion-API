@@ -10,7 +10,7 @@ export function findUserById(id: string): Promise<User | undefined> {
 export async function softDeleteUser(userId: string): Promise<User | undefined> {
   const [user] = await db
     .update(users)
-    .set({ deletedAt: new Date(), updatedAt: new Date() })
+    .set({ deletedAt: new Date() })
     .where(eq(users.id, userId))
     .returning()
 

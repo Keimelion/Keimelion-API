@@ -2,8 +2,10 @@ import { HttpStatus } from '../../../shared/enums/http.js'
 import { ErrorCode } from '../../../shared/enums/error-code.js'
 import { serviceError } from '../../../shared/utils/response.js'
 import { logger } from '../../../shared/utils/logger.js'
-import { findAllUsers, countAllUsers, findUserById, adminUpdateUser, softDeleteUser } from './admin-users.repository.js'
+import { findAllUsers, countAllUsers, adminUpdateUser } from './admin-users.repository.js'
+import { findUserById, softDeleteUser } from '../../../db/entities/users/users.repository.js'
 import { toAdminUser } from './admin-users.mapper.js'
+import { AdminAction } from '../admin.enums.js'
 import type { AdminUser } from './admin-users.mapper.js'
 import type { ServiceResult } from '../../../shared/types/service.js'
 import type { PaginatedResponse } from '../../../shared/types/api.js'
@@ -53,7 +55,7 @@ export async function updateUser(
     return serviceError(ErrorCode.USER_UPDATE_FAILED)
   }
 
-  logger.info({ adminId, targetUserId, action: 'admin_update_user' })
+  logger.info({ adminId, targetUserId, action: AdminAction.UPDATE_USER })
 
   return { data: { user: toAdminUser(updatedUser) }, httpStatus: HttpStatus.OK }
 }
@@ -75,7 +77,7 @@ export async function deleteUser(adminId: string, targetUserId: string): Promise
     return serviceError(ErrorCode.ACCOUNT_DELETION_FAILED)
   }
 
-  logger.info({ adminId, targetUserId, action: 'admin_delete_user' })
+  logger.info({ adminId, targetUserId, action: AdminAction.DELETE_USER })
 
   return { data: { message: 'User deleted successfully' }, httpStatus: HttpStatus.OK }
 }

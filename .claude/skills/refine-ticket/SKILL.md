@@ -14,6 +14,8 @@ argument-hint: <Notion ticket URL or ID>
 
 Run a refinement session for ticket: **$ARGUMENTS**
 
+**Language**: all output must be in English — ticket descriptions, acceptance criteria, technical notes, Notion comments.
+
 Each agent reviews the ticket from their own perspective, raises questions and concerns, and the ticket is updated with a complete, unambiguous spec ready for implementation.
 
 ---
@@ -37,10 +39,9 @@ Each agent receives only the pages relevant to their role (see steps below) — 
 
 ## Step 1 — PO: Requirements review
 
-Delegate to the PO agent. Include in the delegation prompt:
+Delegate to the PO agent. Pass:
 - The full ticket content (from Step 0)
 - The features spec and MVP scope content (from Step 0)
-- **Instruction: do NOT call any Notion MCP tools to read — all content is already provided. Only use Notion MCP to write if explicitly asked.**
 
 PO agent tasks:
 - Assess clarity of the description and acceptance criteria:
@@ -50,17 +51,16 @@ PO agent tasks:
 - Produce a list of open questions and clarifications
 - Do NOT modify the ticket yet — only report findings
 
-**Capture the PO's full findings to pass forward.**
+**Capture** (concise — bullet points only): open questions, scope concerns, missing acceptance criteria.
 
 ---
 
 ## Step 2 — Lead Dev: Technical review
 
-Delegate to the Lead Dev agent. Include in the delegation prompt:
+Delegate to the Lead Dev agent. Pass:
 - The full ticket content (from Step 0)
 - The DB schema and conventions content (from Step 0)
-- **PO findings** (full output from Step 1)
-- **Instruction: do NOT call any Notion MCP tools to read — all content is already provided. Only use Notion MCP to write if explicitly asked.**
+- PO summary from Step 1
 
 Lead Dev agent tasks:
 - Assess technical feasibility and approach:
@@ -72,18 +72,15 @@ Lead Dev agent tasks:
 - Produce a technical assessment and a proposed implementation approach
 - Raise any blocking questions or dependencies
 
-**Capture the Lead Dev's full assessment to pass forward.**
+**Capture** (concise — bullet points only): proposed implementation approach, files to create/modify, architectural concerns, blocking questions.
 
 ---
 
 ## Step 3 — DevOps: Security & Infra review
 
-Delegate to the DevOps agent. Include in the delegation prompt:
-- The full ticket content (from Step 0)
-- **PO findings** (full output from Step 1)
-- **Lead Dev assessment** (full output from Step 2)
-- No spec pages needed — DevOps works from the ticket and prior findings only
-- **Instruction: do NOT call any Notion MCP tools to read — all content is already provided. Only use Notion MCP to write if explicitly asked.**
+Delegate to the DevOps agent. Pass:
+- Ticket acceptance criteria and technical approach (from Step 0)
+- Lead Dev summary from Step 2 (proposed approach and files)
 
 DevOps agent tasks:
 - Identify security and infra constraints upfront:
@@ -95,19 +92,17 @@ DevOps agent tasks:
 - Produce a list of security/infra constraints and recommendations to include in the spec
 - Do NOT modify the ticket yet — only report findings
 
-**Capture the DevOps constraints to pass forward.**
+**Capture** (concise — bullet points only): security constraints, validation rules, migration risks, env vars, auth requirements.
 
 ---
 
 ## Step 4 — Dev: Implementation review
 
-Delegate to the Dev agent. Include in the delegation prompt:
+Delegate to the Dev agent. Pass:
 - The full ticket content (from Step 0)
 - The DB schema and conventions content (from Step 0)
-- **PO findings** (full output from Step 1)
-- **Lead Dev assessment** (full output from Step 2)
-- **DevOps constraints** (full output from Step 3)
-- **Instruction: do NOT call any Notion MCP tools to read — all content is already provided. Only use Notion MCP to write if explicitly asked.**
+- Lead Dev summary from Step 2
+- DevOps summary from Step 3
 
 Dev agent tasks:
 - Review the proposed implementation approach:
