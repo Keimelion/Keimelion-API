@@ -8,6 +8,8 @@ argument-hint: <Notion ticket URL or ID>
 
 Synchronise Notion documentation with the implemented code for ticket: **$ARGUMENTS**
 
+**Language**: all output must be in English — all Notion page content and comments.
+
 ---
 
 ## Step 0 — Context fetch (YOU do this, before delegating)
@@ -30,7 +32,7 @@ Delegate to the Doc Writer agent. Include in the delegation prompt:
 Doc Writer agent tasks:
 - Read every file listed in "Files Involved" on the ticket
 - Determine which Notion pages need updating based on what actually changed:
-  - **DB schema** — if `src/db/schema/index.ts` was modified
+  - **DB schema** — if any file under `src/db/entities/` was modified (schema or repository)
   - **Features spec** — if new endpoints or business rules were introduced
   - **MVP scope** — if the feature was part of the V1 scope list
 - Make targeted updates to each relevant page

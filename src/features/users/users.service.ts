@@ -1,7 +1,9 @@
 import { HttpStatus } from '../../shared/enums/http.js'
 import { ErrorCode } from '../../shared/enums/error-code.js'
 import { serviceError } from '../../shared/utils/response.js'
-import { findUserById, updateUserProfile, softDeleteUser } from './users.repository.js'
+import { pickDefined } from '../../shared/utils/partial-update.js'
+import { findUserById, softDeleteUser } from '../../db/entities/users/users.repository.js'
+import { updateUserProfile } from './users.repository.js'
 import { toPublicUser } from './users.mapper.js'
 import type { PublicUser } from './users.mapper.js'
 import type { ServiceResult } from '../../shared/types/service.js'
@@ -18,7 +20,7 @@ export async function getProfile(userId: string): Promise<ServiceResult<{ user: 
 }
 
 export async function updateProfile(userId: string, input: UpdateProfileInput): Promise<ServiceResult<{ user: PublicUser }>> {
-  const updatedUser = await updateUserProfile(userId, input)
+  const updatedUser = await updateUserProfile(userId, pickDefined(input))
 
   if (!updatedUser) {
     return serviceError(ErrorCode.USER_UPDATE_FAILED)

@@ -28,8 +28,13 @@ See `.claude/coding-standards.md` for the full coding standards (early return, n
 
 ### Project structure
 - Code is organized by feature: `src/features/<feature>/`
-- Each feature folder contains routes, service, repository, schemas, types, mappers, and tests
-- Shared infrastructure (types, utils, middlewares) lives in `src/shared/`
+- Each endpoint lives in its own file under `src/features/<feature>/endpoints/` — Zod schema and input type defined inline in that file, not in a separate `schemas.ts`
+- Types used only within one endpoint are defined inline; types shared across multiple files within a feature go in the mapper or service file, not in a standalone `types.ts`
+- Features that cover multiple resources are subdivided: `src/features/admin/users/`, `src/features/admin/ban/`… with a top-level `admin.routes.ts` that composes the sub-routers
+- Shared infrastructure (types, utils, middlewares, schemas) lives in `src/shared/`
+- Reusable Zod schemas shared across features (e.g. pagination) go in `src/shared/schemas/`
+- Generic DB queries reused across multiple features go in `src/db/entities/<entity>/` (e.g. `src/db/entities/users/users.repository.ts`); feature-specific queries stay in the feature repository
+- Repository functions accept generic shared types (e.g. `PaginationInput`), not feature-specific input types
 - Tests are colocated with their feature: `src/features/<feature>/<feature>.test.ts`
 
 ### Testing

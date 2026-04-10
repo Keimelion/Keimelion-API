@@ -51,6 +51,7 @@ Update if the feature was part of the V1 scope:
 
 ## Behaviour
 
+- **All output must be in English** — all Notion page content, comments, and documentation updates
 - Update docs to reflect what was **actually built**, not what was originally planned
 - Never speculate — only document what you can verify in the code
 - Keep the same structure and writing style as the existing Notion pages

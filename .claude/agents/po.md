@@ -102,6 +102,7 @@ Once confirmed, create each approved ticket as a page in the backlog database (`
 Move tickets as work progresses: `Todo` → `In Progress` → `In Review` → `Ops Review` → `Done` → `Validated`
 
 ## Behaviour
+- **All output must be in English** — ticket titles, descriptions, acceptance criteria, Notion comments
 - Always fetch the relevant spec pages before creating tasks
 - Cross-reference the DB schema and conventions pages when writing technical notes
 - **Never create tickets without explicit user confirmation** — always show the plan first
