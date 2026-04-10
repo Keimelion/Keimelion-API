@@ -9,7 +9,7 @@ import { signJwt } from './jwt.service.js'
 import type { JwtPayload } from './jwt.service.js'
 import { findUserByEmail, findUserByEmailVerifyToken, insertUser, markEmailAsVerified, updateLastActiveAt } from '../users/users.repository.js'
 import { toPublicUser } from '../users/users.mapper.js'
-import { insertTokenBlacklist } from '../../db/entities/token-blacklist/token-blacklist.repository.js'
+import { blacklistTokenAndUpdateActivity } from './auth.repository.js'
 import type { PublicUser } from '../users/users.mapper.js'
 import type { ServiceResult } from '../../shared/types/service.js'
 import type { RegisterInput } from './endpoints/register.js'
@@ -73,11 +73,11 @@ export async function logoutUser(payload: JwtPayload, userId: string): Promise<S
   }
 
   try {
-    await insertTokenBlacklist({
+    await blacklistTokenAndUpdateActivity({
       jti: payload.jti,
       expiresAt: new Date(payload.exp * 1000),
+      userId,
     })
-    await updateLastActiveAt(userId)
     return { data: null, httpStatus: HttpStatus.NO_CONTENT }
   } catch {
     return serviceError(ErrorCode.LOGOUT_FAILED)

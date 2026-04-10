@@ -288,14 +288,6 @@ describe('POST /v1/auth/logout', () => {
     const token = await generateTestToken(VALID_USER.id)
     vi.mocked(db.query.tokenBlacklist.findFirst).mockResolvedValueOnce(undefined)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(VALID_USER)
-    vi.mocked(db.insert).mockReturnValueOnce({
-      values: vi.fn().mockResolvedValueOnce([]),
-    } as never)
-    vi.mocked(db.update).mockReturnValueOnce({
-      set: vi.fn().mockReturnValueOnce({
-        where: vi.fn().mockResolvedValueOnce([]),
-      }),
-    } as never)
 
     const response = await app.request('/v1/auth/logout', {
       method: 'POST',
@@ -337,13 +329,11 @@ describe('POST /v1/auth/logout', () => {
     expect(response.status).toBe(401)
   })
 
-  it('returns 500 when blacklist insert fails', async () => {
+  it('returns 500 when the logout transaction fails', async () => {
     const token = await generateTestToken(VALID_USER.id)
     vi.mocked(db.query.tokenBlacklist.findFirst).mockResolvedValueOnce(undefined)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(VALID_USER)
-    vi.mocked(db.insert).mockReturnValueOnce({
-      values: vi.fn().mockRejectedValueOnce(new Error('DB error')),
-    } as never)
+    vi.mocked(db.transaction).mockRejectedValueOnce(new Error('DB error'))
 
     const response = await app.request('/v1/auth/logout', {
       method: 'POST',
