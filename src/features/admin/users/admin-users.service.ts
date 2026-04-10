@@ -2,6 +2,7 @@ import { HttpStatus } from '../../../shared/enums/http.js'
 import { ErrorCode } from '../../../shared/enums/error-code.js'
 import { serviceError } from '../../../shared/utils/response.js'
 import { logger } from '../../../shared/utils/logger.js'
+import { pickDefined } from '../../../shared/utils/partial-update.js'
 import { findAllUsers, countAllUsers, adminUpdateUser } from './admin-users.repository.js'
 import { findUserById, softDeleteUser } from '../../../db/entities/users/users.repository.js'
 import { toAdminUser } from './admin-users.mapper.js'
@@ -49,7 +50,7 @@ export async function updateUser(
     return serviceError(ErrorCode.NOT_FOUND)
   }
 
-  const updatedUser = await adminUpdateUser(targetUserId, input)
+  const updatedUser = await adminUpdateUser(targetUserId, pickDefined(input))
 
   if (!updatedUser) {
     return serviceError(ErrorCode.USER_UPDATE_FAILED)

@@ -4,6 +4,7 @@ import { sendError } from '../utils/response.js'
 import { verifyJwt } from '../../features/auth/jwt.service.js'
 import type { JwtPayload } from '../../features/auth/jwt.service.js'
 import { findUserById } from '../../db/entities/users/users.repository.js'
+import { HonoContextKey } from '../enums/context-key.js'
 import type { AppVariables } from '../types/app.js'
 
 export const authMiddleware: MiddlewareHandler<{ Variables: AppVariables }> = async (context, next) => {
@@ -23,7 +24,7 @@ export const authMiddleware: MiddlewareHandler<{ Variables: AppVariables }> = as
     return sendError(ErrorCode.ACCOUNT_BANNED)
   }
 
-  context.set('user', user)
+  context.set(HonoContextKey.USER, user)
   return next()
 }
 

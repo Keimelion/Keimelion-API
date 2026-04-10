@@ -3,10 +3,10 @@ import { db } from '../../db/client.js'
 import { users } from '../../db/entities/users/users.schema.js'
 import { env } from '../../config/env.js'
 import { hashPassword } from '../../shared/utils/hash.js'
-import { pickDefined } from '../../shared/utils/partial-update.js'
 import type { User } from '../../db/entities/users/users.schema.js'
 import type { RegisterInput } from '../auth/endpoints/register.js'
-import type { UpdateProfileInput } from './endpoints/update-profile.js'
+
+type UpdateUserProfileFields = Partial<Pick<typeof users.$inferInsert, 'username' | 'avatarUrl' | 'isMarketingOptedIn'>>
 
 export function findUserByEmail(email: string): Promise<User | undefined> {
   return db.query.users.findFirst({ where: eq(users.email, email) })
@@ -49,10 +49,13 @@ export async function updateLastActiveAt(userId: string): Promise<void> {
   await db.update(users).set({ lastActiveAt: new Date() }).where(eq(users.id, userId))
 }
 
-export async function updateUserProfile(userId: string, input: UpdateProfileInput): Promise<User | undefined> {
+export async function updateUserProfile(
+  userId: string,
+  input: UpdateUserProfileFields,
+): Promise<User | undefined> {
   const [user] = await db
     .update(users)
-    .set(pickDefined(input) as Partial<typeof users.$inferInsert>)
+    .set(input)
     .where(eq(users.id, userId))
     .returning()
 

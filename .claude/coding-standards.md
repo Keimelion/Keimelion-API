@@ -547,15 +547,62 @@ Rules:
 - **TypeScript is the source of truth for enums** — define `const ... as const` in the feature or `src/shared/enums/`, derive the DB `pgEnum` from it; the DB schema imports from features/shared, never the reverse
 
 ```typescript
-// ✅ — feature defines the enum
+// ✅ — feature defines the enum; array derived from object to avoid duplication
 // src/shared/enums/user-role.ts
-export const USER_ROLE_VALUES = ['user', 'moderator', 'admin'] as const
-export type UserRole = (typeof USER_ROLE_VALUES)[number]
+export const UserRoles = {
+  USER: 'user',
+  MODERATOR: 'moderator',
+  ADMIN: 'admin',
+} as const
+
+export type UserRole = (typeof UserRoles)[keyof typeof UserRoles]
+
+// Cast needed: Object.values() returns T[] but pgEnum/z.enum require a non-empty tuple [T, ...T[]]
+export const USER_ROLE_VALUES = Object.values(UserRoles) as [UserRole, ...UserRole[]]
 
 // ✅ — DB schema derives from it
 // src/db/entities/users/users.schema.ts
 import { USER_ROLE_VALUES } from '../../../shared/enums/user-role.js'
 export const userRoleEnum = pgEnum('user_role', USER_ROLE_VALUES)
+```
+
+---
+
+## Drizzle update — type repositories with `Pick`, call `pickDefined` in the service
+
+When writing a Drizzle `.update().set(...)`, type the repository parameter as `Partial<Pick<typeof table.$inferInsert, 'field1' | 'field2'>>`. Call `pickDefined` in the **service** before passing the input, not in the repository.
+
+This keeps the repository honest about which columns it touches, and removes the need for an `as` cast.
+
+```typescript
+// ❌ — cast hides the type mismatch; adding a wrong field compiles but fails at runtime
+export async function updateUserProfile(userId: string, input: UpdateProfileInput): Promise<User | undefined> {
+  const [user] = await db
+    .update(users)
+    .set(pickDefined(input) as Partial<typeof users.$inferInsert>)
+    .where(eq(users.id, userId))
+    .returning()
+  return user
+}
+
+// ✅ — local type alias names the allowed columns; compiler catches unknown ones
+// repository
+type UpdateUserProfileFields = Partial<Pick<typeof users.$inferInsert, 'username' | 'avatarUrl' | 'isMarketingOptedIn'>>
+
+export async function updateUserProfile(
+  userId: string,
+  input: UpdateUserProfileFields,
+): Promise<User | undefined> {
+  const [user] = await db
+    .update(users)
+    .set(input)
+    .where(eq(users.id, userId))
+    .returning()
+  return user
+}
+
+// service
+const updatedUser = await updateUserProfile(userId, pickDefined(input))
 ```
 
 ---

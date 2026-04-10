@@ -1,6 +1,7 @@
 import type { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
+import { HonoContextKey } from '../../../../shared/enums/context-key.js'
 import type { AppVariables } from '../../../../shared/types/app.js'
 import { uuidParamSchema } from '../../../../shared/schemas/params.js'
 import { validationErrorHandler } from '../../../../shared/utils/validation.js'
@@ -21,7 +22,7 @@ export function mountUpdateUser(router: Hono<{ Variables: AppVariables }>): void
     zValidator('param', uuidParamSchema, validationErrorHandler),
     zValidator('json', adminUpdateUserSchema, validationErrorHandler),
     async (context) => {
-      const admin = context.get('user')
+      const admin = context.get(HonoContextKey.USER)
       const { id } = context.req.valid('param')
       const input = context.req.valid('json')
       const { data, httpStatus } = await updateUser(admin.id, id, input)
