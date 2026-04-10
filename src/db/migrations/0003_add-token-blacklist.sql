@@ -1,0 +1,1 @@
+CREATE INDEX "token_blacklist_expires_at_idx" ON "token_blacklist" USING btree ("expires_at");

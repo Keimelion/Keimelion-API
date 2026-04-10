@@ -1,6 +1,23 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { SignJWT } from 'jose'
 import { app } from '../../app.js'
 import { db } from '../../db/client.js'
+
+const TEST_JWT_SECRET = 'test-secret-key-that-is-at-least-32-chars-long'
+const TEST_JTI = '00000000-0000-0000-0000-000000000099'
+
+async function generateTestToken(userId: string, options: { includeJti?: boolean } = {}): Promise<string> {
+  const { includeJti = true } = options
+  const secret = new TextEncoder().encode(TEST_JWT_SECRET)
+  const builder = new SignJWT({ sub: userId, role: 'user' })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt()
+    .setExpirationTime('1h')
+  if (includeJti) {
+    builder.setJti(TEST_JTI)
+  }
+  return builder.sign(secret)
+}
 
 const VALID_USER = {
   id: '00000000-0000-0000-0000-000000000001',
@@ -259,5 +276,80 @@ describe('POST /v1/auth/login', () => {
     })
 
     expect(response.status).toBe(403)
+  })
+})
+
+describe('POST /v1/auth/logout', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('returns 204 when logout is successful', async () => {
+    const token = await generateTestToken(VALID_USER.id)
+    vi.mocked(db.query.tokenBlacklist.findFirst).mockResolvedValueOnce(undefined)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(VALID_USER)
+    vi.mocked(db.insert).mockReturnValueOnce({
+      values: vi.fn().mockResolvedValueOnce([]),
+    } as never)
+    vi.mocked(db.update).mockReturnValueOnce({
+      set: vi.fn().mockReturnValueOnce({
+        where: vi.fn().mockResolvedValueOnce([]),
+      }),
+    } as never)
+
+    const response = await app.request('/v1/auth/logout', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    })
+
+    expect(response.status).toBe(204)
+  })
+
+  it('returns 401 when no authorization header is provided', async () => {
+    const response = await app.request('/v1/auth/logout', {
+      method: 'POST',
+    })
+
+    expect(response.status).toBe(401)
+  })
+
+  it('returns 401 when JWT has no jti claim', async () => {
+    const token = await generateTestToken(VALID_USER.id, { includeJti: false })
+
+    const response = await app.request('/v1/auth/logout', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    })
+
+    expect(response.status).toBe(401)
+  })
+
+  it('returns 401 when token is blacklisted', async () => {
+    const token = await generateTestToken(VALID_USER.id)
+    const blacklistedEntry = { jti: TEST_JTI, expiresAt: new Date(Date.now() + 60 * 60 * 1000) }
+    vi.mocked(db.query.tokenBlacklist.findFirst).mockResolvedValueOnce(blacklistedEntry as never)
+
+    const response = await app.request('/v1/auth/logout', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    })
+
+    expect(response.status).toBe(401)
+  })
+
+  it('returns 500 when blacklist insert fails', async () => {
+    const token = await generateTestToken(VALID_USER.id)
+    vi.mocked(db.query.tokenBlacklist.findFirst).mockResolvedValueOnce(undefined)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(VALID_USER)
+    vi.mocked(db.insert).mockReturnValueOnce({
+      values: vi.fn().mockRejectedValueOnce(new Error('DB error')),
+    } as never)
+
+    const response = await app.request('/v1/auth/logout', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    })
+
+    expect(response.status).toBe(500)
   })
 })

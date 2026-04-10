@@ -4,6 +4,7 @@ import { sendError } from '../utils/response.js'
 import { verifyJwt } from '../../features/auth/jwt.service.js'
 import type { JwtPayload } from '../../features/auth/jwt.service.js'
 import { findUserById } from '../../db/entities/users/users.repository.js'
+import { isTokenBlacklisted } from '../../db/entities/token-blacklist/token-blacklist.repository.js'
 import { HonoContextKey } from '../enums/context-key.js'
 import type { AppVariables } from '../types/app.js'
 
@@ -11,6 +12,15 @@ export const authMiddleware: MiddlewareHandler<{ Variables: AppVariables }> = as
   const payload = await resolveTokenPayload(context.req.header('Authorization'))
 
   if (!payload) {
+    return sendError(ErrorCode.UNAUTHORIZED)
+  }
+
+  if (!payload.jti) {
+    return sendError(ErrorCode.UNAUTHORIZED)
+  }
+
+  const blacklisted = await isTokenBlacklisted(payload.jti)
+  if (blacklisted) {
     return sendError(ErrorCode.UNAUTHORIZED)
   }
 
@@ -25,6 +35,7 @@ export const authMiddleware: MiddlewareHandler<{ Variables: AppVariables }> = as
   }
 
   context.set(HonoContextKey.USER, user)
+  context.set(HonoContextKey.JWT_PAYLOAD, payload)
   return next()
 }
 

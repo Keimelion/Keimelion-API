@@ -55,6 +55,7 @@ async function generateTestToken(userId: string, role = 'user'): Promise<string>
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
     .setExpirationTime('1h')
+    .setJti('00000000-0000-0000-0000-000000000099')
     .sign(secret)
 }
 

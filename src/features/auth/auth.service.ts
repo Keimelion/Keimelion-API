@@ -6,8 +6,10 @@ import { serviceError } from '../../shared/utils/response.js'
 import { verifyPassword } from '../../shared/utils/hash.js'
 import { logger } from '../../shared/utils/logger.js'
 import { signJwt } from './jwt.service.js'
+import type { JwtPayload } from './jwt.service.js'
 import { findUserByEmail, findUserByEmailVerifyToken, insertUser, markEmailAsVerified, updateLastActiveAt } from '../users/users.repository.js'
 import { toPublicUser } from '../users/users.mapper.js'
+import { insertTokenBlacklist } from '../../db/entities/token-blacklist/token-blacklist.repository.js'
 import type { PublicUser } from '../users/users.mapper.js'
 import type { ServiceResult } from '../../shared/types/service.js'
 import type { RegisterInput } from './endpoints/register.js'
@@ -63,6 +65,23 @@ export async function loginUser(input: LoginInput): Promise<ServiceResult<{ toke
   await updateLastActiveAt(user.id)
 
   return { data: { token, user: toPublicUser(user) }, httpStatus: HttpStatus.OK }
+}
+
+export async function logoutUser(payload: JwtPayload, userId: string): Promise<ServiceResult<null>> {
+  if (!payload.jti || !payload.exp) {
+    return serviceError(ErrorCode.LOGOUT_FAILED)
+  }
+
+  try {
+    await insertTokenBlacklist({
+      jti: payload.jti,
+      expiresAt: new Date(payload.exp * 1000),
+    })
+    await updateLastActiveAt(userId)
+    return { data: null, httpStatus: HttpStatus.NO_CONTENT }
+  } catch {
+    return serviceError(ErrorCode.LOGOUT_FAILED)
+  }
 }
 
 function sendVerificationEmail(email: string, token: string): void {
