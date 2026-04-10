@@ -319,6 +319,7 @@ describe('POST /v1/auth/logout', () => {
   it('returns 401 when token is blacklisted', async () => {
     const token = await generateTestToken(VALID_USER.id)
     const blacklistedEntry = { jti: TEST_JTI, expiresAt: new Date(Date.now() + 60 * 60 * 1000) }
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(VALID_USER)
     vi.mocked(db.query.tokenBlacklist.findFirst).mockResolvedValueOnce(blacklistedEntry as never)
 
     const response = await app.request('/v1/auth/logout', {

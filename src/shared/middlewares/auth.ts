@@ -19,11 +19,6 @@ export const authMiddleware: MiddlewareHandler<{ Variables: AppVariables }> = as
     return sendError(ErrorCode.UNAUTHORIZED)
   }
 
-  const blacklisted = await isTokenBlacklisted(payload.jti)
-  if (blacklisted) {
-    return sendError(ErrorCode.UNAUTHORIZED)
-  }
-
   const user = await findUserById(payload.userId)
 
   if (!user || user.deletedAt) {
@@ -32,6 +27,11 @@ export const authMiddleware: MiddlewareHandler<{ Variables: AppVariables }> = as
 
   if (user.bannedAt) {
     return sendError(ErrorCode.ACCOUNT_BANNED)
+  }
+
+  const blacklisted = await isTokenBlacklisted(payload.jti)
+  if (blacklisted) {
+    return sendError(ErrorCode.UNAUTHORIZED)
   }
 
   context.set(HonoContextKey.USER, user)
