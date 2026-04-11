@@ -6,13 +6,14 @@ import { db } from '../../db/client.js'
 const TEST_JWT_SECRET = 'test-secret-key-that-is-at-least-32-chars-long'
 const TEST_JTI = '00000000-0000-0000-0000-000000000099'
 
-async function generateTestToken(userId: string, options: { includeJti?: boolean } = {}): Promise<string> {
-  const { includeJti = true } = options
+async function generateTestToken(userId: string, options: { includeJti?: boolean; expired?: boolean } = {}): Promise<string> {
+  const { includeJti = true, expired = false } = options
   const secret = new TextEncoder().encode(TEST_JWT_SECRET)
+  const now = Math.floor(Date.now() / 1000)
   const builder = new SignJWT({ sub: userId, role: 'user' })
     .setProtectedHeader({ alg: 'HS256' })
-    .setIssuedAt()
-    .setExpirationTime('1h')
+    .setIssuedAt(expired ? now - 7200 : now)
+    .setExpirationTime(expired ? now - 3600 : now + 3600)
   if (includeJti) {
     builder.setJti(TEST_JTI)
   }
@@ -284,7 +285,7 @@ describe('POST /v1/auth/logout', () => {
     vi.clearAllMocks()
   })
 
-  it('returns 204 when logout is successful', async () => {
+  it('returns 204 and runs transaction when logout is successful', async () => {
     const token = await generateTestToken(VALID_USER.id)
     vi.mocked(db.query.tokenBlacklist.findFirst).mockResolvedValueOnce(undefined)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(VALID_USER)
@@ -295,11 +296,23 @@ describe('POST /v1/auth/logout', () => {
     })
 
     expect(response.status).toBe(204)
+    expect(vi.mocked(db.transaction)).toHaveBeenCalledOnce()
   })
 
   it('returns 401 when no authorization header is provided', async () => {
     const response = await app.request('/v1/auth/logout', {
       method: 'POST',
+    })
+
+    expect(response.status).toBe(401)
+  })
+
+  it('returns 401 when JWT is expired', async () => {
+    const token = await generateTestToken(VALID_USER.id, { expired: true })
+
+    const response = await app.request('/v1/auth/logout', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
     })
 
     expect(response.status).toBe(401)
