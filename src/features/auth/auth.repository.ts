@@ -1,17 +1,18 @@
 import { eq } from 'drizzle-orm'
 import { db } from '../../db/client.js'
-import { tokenBlacklist } from '../../db/entities/token-blacklist/token-blacklist.schema.js'
+import { activeTokens } from '../../db/entities/active-tokens/active-tokens.schema.js'
 import { users } from '../../db/entities/users/users.schema.js'
 
-export interface BlacklistTokenInput {
-  jti: string
-  expiresAt: Date
-  userId: string
+export async function storeTokenAndUpdateActivity(jti: string, userId: string, expiresAt: Date): Promise<void> {
+  await db.transaction(async (tx) => {
+    await tx.insert(activeTokens).values({ jti, userId, expiresAt })
+    await tx.update(users).set({ lastActiveAt: new Date() }).where(eq(users.id, userId))
+  })
 }
 
-export async function blacklistTokenAndUpdateActivity(input: BlacklistTokenInput): Promise<void> {
+export async function revokeTokenAndUpdateActivity(jti: string, userId: string): Promise<void> {
   await db.transaction(async (tx) => {
-    await tx.insert(tokenBlacklist).values({ jti: input.jti, expiresAt: input.expiresAt })
-    await tx.update(users).set({ lastActiveAt: new Date() }).where(eq(users.id, input.userId))
+    await tx.delete(activeTokens).where(eq(activeTokens.jti, jti))
+    await tx.update(users).set({ lastActiveAt: new Date() }).where(eq(users.id, userId))
   })
 }

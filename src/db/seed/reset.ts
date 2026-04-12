@@ -3,11 +3,11 @@ import postgres from 'postgres'
 import { drizzle } from 'drizzle-orm/postgres-js'
 import { env } from '../../config/env.js'
 import * as usersSchema from '../entities/users/users.schema.js'
-import * as tokenBlacklistSchema from '../entities/token-blacklist/token-blacklist.schema.js'
+import * as activeTokensSchema from '../entities/active-tokens/active-tokens.schema.js'
 import { seedUsers } from '../entities/users/users.fixture.js'
 
 const client = postgres(env.DATABASE_URL)
-const db = drizzle(client, { schema: { ...usersSchema, ...tokenBlacklistSchema } })
+const db = drizzle(client, { schema: { ...usersSchema, ...activeTokensSchema } })
 
 try {
   console.log('Dropping schema...')

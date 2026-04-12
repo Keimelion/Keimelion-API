@@ -7,15 +7,14 @@ import { verifyPassword } from '../../shared/utils/hash.js'
 import { logger } from '../../shared/utils/logger.js'
 import { signJwt } from './jwt.service.js'
 import type { JwtPayload } from './jwt.service.js'
-import { findUserByEmail, findUserByEmailVerifyToken, insertUser, markEmailAsVerified, updateLastActiveAt } from '../users/users.repository.js'
+import { findUserByEmail, findUserByEmailVerifyToken, insertUser, markEmailAsVerified } from '../users/users.repository.js'
 import { toPublicUser } from '../users/users.mapper.js'
-import { blacklistTokenAndUpdateActivity } from './auth.repository.js'
+import { storeTokenAndUpdateActivity, revokeTokenAndUpdateActivity } from './auth.repository.js'
 import type { PublicUser } from '../users/users.mapper.js'
 import type { ServiceResult } from '../../shared/types/service.js'
 import type { RegisterInput } from './endpoints/register.js'
 import type { VerifyEmailInput } from './endpoints/verify-email.js'
 import type { LoginInput } from './endpoints/login.js'
-
 
 export async function registerUser(input: RegisterInput): Promise<ServiceResult<{ user: PublicUser }>> {
   if (await isEmailAlreadyTaken(input.email)) {
@@ -61,23 +60,19 @@ export async function loginUser(input: LoginInput): Promise<ServiceResult<{ toke
     return serviceError(ErrorCode.ACCOUNT_BANNED)
   }
 
-  const token = await signJwt(user.id, user.role)
-  await updateLastActiveAt(user.id)
+  const { token, jti, expiresAt } = await signJwt(user.id, user.role)
+  await storeTokenAndUpdateActivity(jti, user.id, expiresAt)
 
   return { data: { token, user: toPublicUser(user) }, httpStatus: HttpStatus.OK }
 }
 
 export async function logoutUser(payload: JwtPayload, userId: string): Promise<ServiceResult<null>> {
-  if (!payload.jti || !payload.exp) {
+  if (!payload.jti) {
     return serviceError(ErrorCode.LOGOUT_FAILED)
   }
 
   try {
-    await blacklistTokenAndUpdateActivity({
-      jti: payload.jti,
-      expiresAt: new Date(payload.exp * 1000),
-      userId,
-    })
+    await revokeTokenAndUpdateActivity(payload.jti, userId)
     return { data: null, httpStatus: HttpStatus.NO_CONTENT }
   } catch {
     return serviceError(ErrorCode.LOGOUT_FAILED)

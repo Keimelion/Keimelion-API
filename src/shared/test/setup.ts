@@ -29,7 +29,7 @@ vi.mock('../../db/client.js', () => ({
         findFirst: vi.fn(),
         findMany: vi.fn(),
       },
-      tokenBlacklist: {
+      activeTokens: {
         findFirst: vi.fn(),
       },
     },
@@ -49,6 +49,7 @@ vi.mock('../../db/client.js', () => ({
       const tx = {
         insert: vi.fn(() => ({ values: vi.fn(() => Promise.resolve([])) })),
         update: vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn(() => Promise.resolve([])) })) })),
+        delete: vi.fn(() => ({ where: vi.fn(() => Promise.resolve([])) })),
       }
       return callback(tx)
     }),

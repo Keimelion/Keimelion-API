@@ -42,6 +42,8 @@ const VALID_USER = {
   updatedAt: new Date('2024-01-01'),
 }
 
+const ACTIVE_TOKEN_ENTRY = { jti: TEST_JTI, userId: VALID_USER.id, expiresAt: new Date(Date.now() + 60 * 60 * 1000) }
+
 describe('POST /v1/auth/register', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -202,13 +204,6 @@ describe('POST /v1/auth/login', () => {
     const userWithHash = { ...VALID_USER, passwordHash: hash }
 
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(userWithHash)
-    vi.mocked(db.update).mockReturnValueOnce({
-      set: vi.fn().mockReturnValueOnce({
-        where: vi.fn().mockReturnValueOnce({
-          returning: vi.fn().mockResolvedValueOnce([userWithHash]),
-        }),
-      }),
-    } as never)
 
     const response = await app.request('/v1/auth/login', {
       method: 'POST',
@@ -287,8 +282,8 @@ describe('POST /v1/auth/logout', () => {
 
   it('returns 204 and runs transaction when logout is successful', async () => {
     const token = await generateTestToken(VALID_USER.id)
-    vi.mocked(db.query.tokenBlacklist.findFirst).mockResolvedValueOnce(undefined)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(VALID_USER)
+    vi.mocked(db.query.activeTokens.findFirst).mockResolvedValueOnce(ACTIVE_TOKEN_ENTRY as never)
 
     const response = await app.request('/v1/auth/logout', {
       method: 'POST',
@@ -329,11 +324,10 @@ describe('POST /v1/auth/logout', () => {
     expect(response.status).toBe(401)
   })
 
-  it('returns 401 when token is blacklisted', async () => {
+  it('returns 401 when token is not active', async () => {
     const token = await generateTestToken(VALID_USER.id)
-    const blacklistedEntry = { jti: TEST_JTI, expiresAt: new Date(Date.now() + 60 * 60 * 1000) }
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(VALID_USER)
-    vi.mocked(db.query.tokenBlacklist.findFirst).mockResolvedValueOnce(blacklistedEntry as never)
+    vi.mocked(db.query.activeTokens.findFirst).mockResolvedValueOnce(undefined)
 
     const response = await app.request('/v1/auth/logout', {
       method: 'POST',
@@ -345,8 +339,8 @@ describe('POST /v1/auth/logout', () => {
 
   it('returns 500 when the logout transaction fails', async () => {
     const token = await generateTestToken(VALID_USER.id)
-    vi.mocked(db.query.tokenBlacklist.findFirst).mockResolvedValueOnce(undefined)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(VALID_USER)
+    vi.mocked(db.query.activeTokens.findFirst).mockResolvedValueOnce(ACTIVE_TOKEN_ENTRY as never)
     vi.mocked(db.transaction).mockRejectedValueOnce(new Error('DB error'))
 
     const response = await app.request('/v1/auth/logout', {

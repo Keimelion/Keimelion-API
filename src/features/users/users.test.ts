@@ -27,19 +27,23 @@ const SAFE_USER = {
   updatedAt: new Date('2024-01-01'),
 }
 
+const TEST_JTI = '00000000-0000-0000-0000-000000000099'
+const ACTIVE_TOKEN_ENTRY = { jti: TEST_JTI, userId: SAFE_USER.id, expiresAt: new Date(Date.now() + 60 * 60 * 1000) }
+
 async function generateTestToken(userId: string, role = 'user'): Promise<string> {
   const secret = new TextEncoder().encode(TEST_JWT_SECRET)
   return new SignJWT({ sub: userId, role })
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
     .setExpirationTime('1h')
-    .setJti('00000000-0000-0000-0000-000000000099')
+    .setJti(TEST_JTI)
     .sign(secret)
 }
 
 describe('GET /v1/users/me', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(db.query.activeTokens.findFirst).mockResolvedValue(ACTIVE_TOKEN_ENTRY as never)
   })
 
   it('returns 200 with user profile when authenticated', async () => {
@@ -96,6 +100,7 @@ describe('GET /v1/users/me', () => {
 describe('PATCH /v1/users/me', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(db.query.activeTokens.findFirst).mockResolvedValue(ACTIVE_TOKEN_ENTRY as never)
   })
 
   it('returns 200 with updated profile when body is valid', async () => {
@@ -161,6 +166,7 @@ describe('PATCH /v1/users/me', () => {
 describe('DELETE /v1/users/me', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(db.query.activeTokens.findFirst).mockResolvedValue(ACTIVE_TOKEN_ENTRY as never)
   })
 
   it('returns 200 and soft-deletes the account', async () => {
