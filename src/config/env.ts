@@ -17,6 +17,7 @@ const envSchema = z.object({
   APP_URL: z.string().url().default('http://localhost:3000'),
   EMAIL_API_KEY: z.string().optional(),
   EMAIL_FROM: z.string().optional(),
+  JWT_CLEANUP_INTERVAL_MS: z.coerce.number().int().min(60_000).default(3_600_000),
 })
 
 const parsed = envSchema.safeParse(process.env)
