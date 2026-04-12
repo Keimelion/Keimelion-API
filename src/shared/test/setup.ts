@@ -15,6 +15,7 @@ vi.mock('../../config/env.js', () => ({
     APP_URL: 'http://localhost:3000',
     EMAIL_API_KEY: undefined,
     EMAIL_FROM: undefined,
+    JWT_CLEANUP_INTERVAL_MS: 3_600_000,
   },
 }))
 
@@ -43,6 +44,11 @@ vi.mock('../../db/client.js', () => ({
         where: vi.fn(() => ({
           returning: vi.fn(),
         })),
+      })),
+    })),
+    delete: vi.fn(() => ({
+      where: vi.fn(() => ({
+        returning: vi.fn(),
       })),
     })),
     transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) => {
