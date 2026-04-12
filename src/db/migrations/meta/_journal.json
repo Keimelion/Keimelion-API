@@ -15,6 +15,13 @@
       "when": 1775338001909,
       "tag": "0001_add-auth-fields",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1775988456409,
+      "tag": "0002_add-active-tokens",
+      "breakpoints": true
     }
   ]
 }

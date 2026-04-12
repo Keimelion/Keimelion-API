@@ -16,6 +16,7 @@ const errorMap: Record<ErrorCode, { status: ContentfulStatusCode; message: strin
   USER_CREATION_FAILED:    { status: HttpStatus.INTERNAL_SERVER_ERROR, message: 'Account could not be created' },
   USER_UPDATE_FAILED:      { status: HttpStatus.INTERNAL_SERVER_ERROR, message: 'Account could not be updated' },
   ACCOUNT_DELETION_FAILED: { status: HttpStatus.INTERNAL_SERVER_ERROR, message: 'Account could not be deleted' },
+  LOGOUT_FAILED:           { status: HttpStatus.INTERNAL_SERVER_ERROR, message: 'Logout could not be completed' },
   INTERNAL_ERROR:          { status: HttpStatus.INTERNAL_SERVER_ERROR, message: 'An unexpected error occurred' },
 }
 

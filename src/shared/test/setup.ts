@@ -29,6 +29,9 @@ vi.mock('../../db/client.js', () => ({
         findFirst: vi.fn(),
         findMany: vi.fn(),
       },
+      activeTokens: {
+        findFirst: vi.fn(),
+      },
     },
     insert: vi.fn(() => ({
       values: vi.fn(() => ({
@@ -42,6 +45,14 @@ vi.mock('../../db/client.js', () => ({
         })),
       })),
     })),
+    transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) => {
+      const tx = {
+        insert: vi.fn(() => ({ values: vi.fn(() => Promise.resolve([])) })),
+        update: vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn(() => Promise.resolve([])) })) })),
+        delete: vi.fn(() => ({ where: vi.fn(() => Promise.resolve([])) })),
+      }
+      return callback(tx)
+    }),
   },
 }))
 

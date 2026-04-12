@@ -5,6 +5,7 @@ import { createRateLimiter } from '../../../shared/utils/rate-limiter.js'
 import { validationErrorHandler } from '../../../shared/utils/validation.js'
 import { registerUser } from '../auth.service.js'
 import { USERNAME_REGEX, MAX_PASSWORD_LENGTH } from '../../users/users.constants.js'
+import type { AppVariables } from '../../../shared/types/app.js'
 
 const registerSchema = z.object({
   email: z.string().email().transform(v => v.toLowerCase().trim()),
@@ -15,7 +16,7 @@ const registerSchema = z.object({
 
 export type RegisterInput = z.infer<typeof registerSchema>
 
-export function mountRegister(router: Hono): void {
+export function mountRegister(router: Hono<{ Variables: AppVariables }>): void {
   router.post('/register', createRateLimiter(10), zValidator('json', registerSchema, validationErrorHandler), async (context) => {
     const input = context.req.valid('json')
     const { data, httpStatus } = await registerUser(input)

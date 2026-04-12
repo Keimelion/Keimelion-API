@@ -11,6 +11,7 @@ export const ErrorCode = {
   USER_CREATION_FAILED:    'USER_CREATION_FAILED',
   USER_UPDATE_FAILED:      'USER_UPDATE_FAILED',
   ACCOUNT_DELETION_FAILED: 'ACCOUNT_DELETION_FAILED',
+  LOGOUT_FAILED:           'LOGOUT_FAILED',
   INTERNAL_ERROR:          'INTERNAL_ERROR',
 } as const
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode]
