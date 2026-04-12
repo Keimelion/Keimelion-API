@@ -2,7 +2,7 @@ import { deleteExpiredTokens } from '../db/entities/active-tokens/active-tokens.
 import { logger } from '../shared/utils/logger.js'
 
 let intervalId: ReturnType<typeof setInterval> | null = null
-let running = false
+let isRunning = false
 
 export function start(intervalMs: number): void {
   intervalId = setInterval(() => {
@@ -18,15 +18,15 @@ export function stop(): void {
 }
 
 async function runCleanup(): Promise<void> {
-  if (running) return
+  if (isRunning) return
 
-  running = true
+  isRunning = true
   try {
     const deletedCount = await deleteExpiredTokens()
     logger.info({ deletedCount }, 'Expired JWT cleanup completed')
   } catch (error) {
     logger.error({ error }, 'Expired JWT cleanup failed')
   } finally {
-    running = false
+    isRunning = false
   }
 }
