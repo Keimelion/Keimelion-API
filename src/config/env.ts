@@ -18,6 +18,8 @@ const envSchema = z.object({
   EMAIL_API_KEY: z.string().optional(),
   EMAIL_FROM: z.string().optional(),
   JWT_CLEANUP_INTERVAL_MS: z.coerce.number().int().min(60_000).default(3_600_000),
+  USER_HARD_DELETE_INTERVAL_MS: z.coerce.number().int().min(60_000).default(3_600_000),
+  USER_HARD_DELETE_GRACE_DAYS: z.coerce.number().int().min(1).default(30),
 })
 
 const parsed = envSchema.safeParse(process.env)
