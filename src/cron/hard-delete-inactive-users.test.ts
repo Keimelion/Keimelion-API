@@ -6,12 +6,6 @@ vi.mock('../db/entities/users/users.repository.js', () => ({
   insertDeletionAudit: vi.fn(),
 }))
 
-vi.mock('../db/client.js', () => ({
-  db: {
-    transaction: vi.fn(),
-  },
-}))
-
 vi.mock('../shared/utils/logger.js', () => ({
   logger: {
     info: vi.fn(),
