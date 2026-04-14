@@ -4,12 +4,12 @@ import { z } from 'zod'
 import { createRateLimiter } from '../../../shared/utils/rate-limiter.js'
 import { validationErrorHandler } from '../../../shared/utils/validation.js'
 import { resetPassword } from '../auth.service.js'
+import { MAX_PASSWORD_LENGTH } from '../../users/users.constants.js'
 import type { AppVariables } from '../../../shared/types/app.js'
 
 const PASSWORD_RESET_RATE_LIMIT_MAX = 10
 const PASSWORD_RESET_RATE_LIMIT_WINDOW_MS = 600_000
 const MIN_PASSWORD_LENGTH = 8
-const MAX_PASSWORD_LENGTH = 72
 
 const resetPasswordSchema = z.object({
   token: z.string().min(1),
