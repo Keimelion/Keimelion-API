@@ -3,7 +3,7 @@ import type { ErrorCode } from '../enums/error-code.js'
 import { HttpStatus } from '../enums/http.js'
 import type { ApiError } from '../types/api.js'
 
-const errorMap: Record<ErrorCode, { status: ContentfulStatusCode; message: string }> = {
+export const errorMap: Record<ErrorCode, { status: ContentfulStatusCode; message: string }> = {
   BAD_REQUEST:             { status: HttpStatus.BAD_REQUEST,           message: 'Bad request' },
   UNAUTHORIZED:            { status: HttpStatus.UNAUTHORIZED,          message: 'Unauthorized' },
   FORBIDDEN:               { status: HttpStatus.FORBIDDEN,             message: 'Forbidden' },
