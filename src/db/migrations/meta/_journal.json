@@ -29,6 +29,13 @@
       "when": 1776075936164,
       "tag": "0003_hard-delete-inactive-users",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1776187967136,
+      "tag": "0004_add-password-reset-token",
+      "breakpoints": true
     }
   ]
 }

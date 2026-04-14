@@ -17,6 +17,7 @@ const errorMap: Record<ErrorCode, { status: ContentfulStatusCode; message: strin
   USER_UPDATE_FAILED:      { status: HttpStatus.INTERNAL_SERVER_ERROR, message: 'Account could not be updated' },
   ACCOUNT_DELETION_FAILED: { status: HttpStatus.INTERNAL_SERVER_ERROR, message: 'Account could not be deleted' },
   LOGOUT_FAILED:           { status: HttpStatus.INTERNAL_SERVER_ERROR, message: 'Logout could not be completed' },
+  INVALID_RESET_TOKEN:     { status: HttpStatus.BAD_REQUEST,           message: 'Invalid or expired password reset token' },
   INTERNAL_ERROR:          { status: HttpStatus.INTERNAL_SERVER_ERROR, message: 'An unexpected error occurred' },
 }
 

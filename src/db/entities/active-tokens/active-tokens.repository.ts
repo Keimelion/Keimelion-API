@@ -14,3 +14,7 @@ export async function deleteExpiredTokens(): Promise<number> {
     .returning({ jti: activeTokens.jti })
   return deleted.length
 }
+
+export async function deleteAllUserTokens(userId: string): Promise<void> {
+  await db.delete(activeTokens).where(eq(activeTokens.userId, userId))
+}

@@ -6,6 +6,9 @@ import { hashPassword } from '../../shared/utils/hash.js'
 import type { User } from '../../db/entities/users/users.schema.js'
 import type { RegisterInput } from '../auth/endpoints/register.js'
 
+type SetPasswordResetTokenFields = Partial<Pick<typeof users.$inferInsert, 'passwordResetToken' | 'passwordResetTokenExpiresAt'>>
+type ResetPasswordFields = Pick<typeof users.$inferInsert, 'passwordHash' | 'passwordResetToken' | 'passwordResetTokenExpiresAt'>
+
 type UpdateUserProfileFields = Partial<Pick<typeof users.$inferInsert, 'username' | 'avatarUrl' | 'isMarketingOptedIn'>>
 
 export function findUserByEmail(email: string): Promise<User | undefined> {
@@ -60,4 +63,16 @@ export async function updateUserProfile(
     .returning()
 
   return user
+}
+
+export function findUserByPasswordResetToken(tokenHash: string): Promise<User | undefined> {
+  return db.query.users.findFirst({ where: eq(users.passwordResetToken, tokenHash) })
+}
+
+export async function setPasswordResetToken(userId: string, input: SetPasswordResetTokenFields): Promise<void> {
+  await db.update(users).set(input).where(eq(users.id, userId))
+}
+
+export async function resetUserPassword(userId: string, input: ResetPasswordFields): Promise<void> {
+  await db.update(users).set(input).where(eq(users.id, userId))
 }
