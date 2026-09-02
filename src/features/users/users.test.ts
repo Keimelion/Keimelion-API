@@ -146,6 +146,39 @@ describe('PATCH /v1/users/me', () => {
 
     expect(response.status).toBe(422)
   })
+
+  it('silently strips password fields from the body — password is never touched', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    const updatedUser = { ...SAFE_USER, username: 'legit' }
+    const setMock = vi.fn().mockReturnValueOnce({
+      where: vi.fn().mockReturnValueOnce({
+        returning: vi.fn().mockResolvedValueOnce([updatedUser]),
+      }),
+    })
+
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    vi.mocked(db.update).mockReturnValueOnce({ set: setMock } as never)
+
+    const response = await apiRequest('/v1/users/me', {
+      method: 'PATCH',
+      token,
+      body: {
+        username: 'legit',
+        password: 'evil-plaintext',
+        passwordHash: 'evil-hash',
+        role: 'admin',
+        bannedAt: null,
+      },
+    })
+
+    expect(response.status).toBe(200)
+    expect(setMock).toHaveBeenCalledOnce()
+    const setArgs = setMock.mock.calls[0]?.[0] as Record<string, unknown>
+    expect(setArgs).not.toHaveProperty('password')
+    expect(setArgs).not.toHaveProperty('passwordHash')
+    expect(setArgs).not.toHaveProperty('role')
+    expect(setArgs).not.toHaveProperty('bannedAt')
+  })
 })
 
 describe('POST /v1/users/me/change-password', () => {

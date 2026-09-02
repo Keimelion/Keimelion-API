@@ -91,7 +91,7 @@ export async function logoutUser(payload: JwtPayload, userId: string): Promise<S
   }
 }
 
-export async function requestPasswordReset(input: ForgotPasswordInput): Promise<ServiceResult<{ message: string; password_reset_token?: string }>> {
+export async function requestPasswordReset(input: ForgotPasswordInput): Promise<ServiceResult<{ message: string; passwordResetToken?: string }>> {
   const genericMessage = 'If this email is registered, a reset link has been sent'
   const user = await findUserByEmail(input.email)
 
@@ -110,14 +110,14 @@ export async function requestPasswordReset(input: ForgotPasswordInput): Promise<
   return {
     data: {
       message: genericMessage,
-      ...(env.NODE_ENV !== NodeEnvs.PRODUCTION ? { password_reset_token: rawToken } : {}),
+      ...(env.NODE_ENV !== NodeEnvs.PRODUCTION ? { passwordResetToken: rawToken } : {}),
     },
     httpStatus: HttpStatus.OK,
   }
 }
 
 export async function resetPassword(input: ResetPasswordInput): Promise<ServiceResult<{ message: string }>> {
-  const tokenHash = hashResetToken(input.password_reset_token)
+  const tokenHash = hashResetToken(input.passwordResetToken)
   const user = await findUserByPasswordResetToken(tokenHash)
 
   if (!user?.passwordResetTokenExpiresAt || user.passwordResetTokenExpiresAt < new Date()) {

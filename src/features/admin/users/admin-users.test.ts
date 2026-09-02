@@ -324,6 +324,40 @@ describe('PATCH /v1/admin/users/:id', () => {
 
     expect(response.status).toBe(403)
   })
+
+  it('silently strips password fields from the body — password is never touched', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const updatedUser = { ...TARGET_USER, role: 'moderator' as const }
+    const setMock = vi.fn().mockReturnValueOnce({
+      where: vi.fn().mockReturnValueOnce({
+        returning: vi.fn().mockResolvedValueOnce([updatedUser]),
+      }),
+    })
+
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(TARGET_USER)
+    vi.mocked(db.update).mockReturnValueOnce({ set: setMock } as never)
+
+    const response = await apiRequest(`/v1/admin/users/${TARGET_USER.id}`, {
+      method: 'PATCH',
+      token,
+      body: {
+        role: 'moderator',
+        password: 'evil-plaintext',
+        passwordHash: 'evil-hash',
+        email: 'takeover@example.com',
+        bannedAt: null,
+      },
+    })
+
+    expect(response.status).toBe(200)
+    expect(setMock).toHaveBeenCalledOnce()
+    const setArgs = setMock.mock.calls[0]?.[0] as Record<string, unknown>
+    expect(setArgs).not.toHaveProperty('password')
+    expect(setArgs).not.toHaveProperty('passwordHash')
+    expect(setArgs).not.toHaveProperty('email')
+    expect(setArgs).not.toHaveProperty('bannedAt')
+  })
 })
 
 describe('DELETE /v1/admin/users/:id', () => {

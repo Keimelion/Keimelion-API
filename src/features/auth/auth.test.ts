@@ -345,13 +345,13 @@ describe('POST /v1/auth/forgot-password', () => {
       body: { email: 'user@example.com' },
     })
 
-    const body = await response.json() as { message: string; password_reset_token?: string }
+    const body = await response.json() as { message: string; passwordResetToken?: string }
     expect(response.status).toBe(200)
     expect(body.message).toBe('If this email is registered, a reset link has been sent')
-    expect(body.password_reset_token).toMatch(/^[a-f0-9]{64}$/)
+    expect(body.passwordResetToken).toMatch(/^[a-f0-9]{64}$/)
   })
 
-  it('does not include password_reset_token when the email is unknown', async () => {
+  it('does not include passwordResetToken when the email is unknown', async () => {
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(undefined)
 
     const response = await apiRequest('/v1/auth/forgot-password', {
@@ -359,12 +359,12 @@ describe('POST /v1/auth/forgot-password', () => {
       body: { email: 'unknown@example.com' },
     })
 
-    const body = await response.json() as { message: string; password_reset_token?: string }
+    const body = await response.json() as { message: string; passwordResetToken?: string }
     expect(response.status).toBe(200)
-    expect(body.password_reset_token).toBeUndefined()
+    expect(body.passwordResetToken).toBeUndefined()
   })
 
-  it('does not leak password_reset_token in production', async () => {
+  it('does not leak passwordResetToken in production', async () => {
     const originalEnv = env.NODE_ENV
     env.NODE_ENV = NodeEnvs.PRODUCTION
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(VALID_USER)
@@ -380,9 +380,9 @@ describe('POST /v1/auth/forgot-password', () => {
         body: { email: 'user@example.com' },
       })
 
-      const body = await response.json() as { message: string; password_reset_token?: string }
+      const body = await response.json() as { message: string; passwordResetToken?: string }
       expect(response.status).toBe(200)
-      expect(body.password_reset_token).toBeUndefined()
+      expect(body.passwordResetToken).toBeUndefined()
     } finally {
       env.NODE_ENV = originalEnv
     }
@@ -456,7 +456,7 @@ describe('POST /v1/auth/reset-password', () => {
 
     const response = await apiRequest('/v1/auth/reset-password', {
       method: 'POST',
-      body: { password_reset_token: 'valid-raw-token-64-chars-long-at-least-to-pass', password: 'newpassword123' },
+      body: { passwordResetToken: 'valid-raw-token-64-chars-long-at-least-to-pass', password: 'newpassword123' },
     })
 
     const body = await response.json() as { message: string }
@@ -469,7 +469,7 @@ describe('POST /v1/auth/reset-password', () => {
 
     const response = await apiRequest('/v1/auth/reset-password', {
       method: 'POST',
-      body: { password_reset_token: 'invalid-token', password: 'newpassword123' },
+      body: { passwordResetToken: 'invalid-token', password: 'newpassword123' },
     })
 
     expect(response.status).toBe(400)
@@ -485,7 +485,7 @@ describe('POST /v1/auth/reset-password', () => {
 
     const response = await apiRequest('/v1/auth/reset-password', {
       method: 'POST',
-      body: { password_reset_token: 'expired-token', password: 'newpassword123' },
+      body: { passwordResetToken: 'expired-token', password: 'newpassword123' },
     })
 
     expect(response.status).toBe(400)
@@ -497,7 +497,7 @@ describe('POST /v1/auth/reset-password', () => {
 
     const response = await apiRequest('/v1/auth/reset-password', {
       method: 'POST',
-      body: { password_reset_token: 'some-token', password: 'newpassword123' },
+      body: { passwordResetToken: 'some-token', password: 'newpassword123' },
     })
 
     expect(response.status).toBe(400)
@@ -506,7 +506,7 @@ describe('POST /v1/auth/reset-password', () => {
   it('returns 422 when password is too short', async () => {
     const response = await apiRequest('/v1/auth/reset-password', {
       method: 'POST',
-      body: { password_reset_token: 'some-token', password: 'short' },
+      body: { passwordResetToken: 'some-token', password: 'short' },
     })
 
     expect(response.status).toBe(422)
@@ -515,13 +515,13 @@ describe('POST /v1/auth/reset-password', () => {
   it('returns 422 when password is missing', async () => {
     const response = await apiRequest('/v1/auth/reset-password', {
       method: 'POST',
-      body: { password_reset_token: 'some-token' },
+      body: { passwordResetToken: 'some-token' },
     })
 
     expect(response.status).toBe(422)
   })
 
-  it('returns 422 when password_reset_token is missing', async () => {
+  it('returns 422 when passwordResetToken is missing', async () => {
     const response = await apiRequest('/v1/auth/reset-password', {
       method: 'POST',
       body: { password: 'newpassword123' },
