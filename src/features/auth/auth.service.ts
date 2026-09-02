@@ -2,6 +2,7 @@ import { randomUUID, randomBytes, createHash } from 'crypto'
 import { env } from '../../config/env.js'
 import { HttpStatus } from '../../shared/enums/http.js'
 import { ErrorCode } from '../../shared/enums/error-code.js'
+import { NodeEnvs } from '../../shared/enums/node-env.js'
 import { serviceError } from '../../shared/utils/response.js'
 import { hashPassword, verifyPassword } from '../../shared/utils/hash.js'
 import { logger } from '../../shared/utils/logger.js'
@@ -90,11 +91,12 @@ export async function logoutUser(payload: JwtPayload, userId: string): Promise<S
   }
 }
 
-export async function requestPasswordReset(input: ForgotPasswordInput): Promise<ServiceResult<{ message: string }>> {
+export async function requestPasswordReset(input: ForgotPasswordInput): Promise<ServiceResult<{ message: string; password_reset_token?: string }>> {
+  const genericMessage = 'If this email is registered, a reset link has been sent'
   const user = await findUserByEmail(input.email)
 
   if (!user?.passwordHash) {
-    return { data: { message: 'If this email is registered, a reset link has been sent' }, httpStatus: HttpStatus.OK }
+    return { data: { message: genericMessage }, httpStatus: HttpStatus.OK }
   }
 
   const rawToken = randomBytes(32).toString('hex')
@@ -105,18 +107,24 @@ export async function requestPasswordReset(input: ForgotPasswordInput): Promise<
 
   logPasswordResetToken(user.email, rawToken)
 
-  return { data: { message: 'If this email is registered, a reset link has been sent' }, httpStatus: HttpStatus.OK }
+  return {
+    data: {
+      message: genericMessage,
+      ...(env.NODE_ENV !== NodeEnvs.PRODUCTION ? { password_reset_token: rawToken } : {}),
+    },
+    httpStatus: HttpStatus.OK,
+  }
 }
 
 export async function resetPassword(input: ResetPasswordInput): Promise<ServiceResult<{ message: string }>> {
-  const tokenHash = hashResetToken(input.token)
+  const tokenHash = hashResetToken(input.password_reset_token)
   const user = await findUserByPasswordResetToken(tokenHash)
 
   if (!user?.passwordResetTokenExpiresAt || user.passwordResetTokenExpiresAt < new Date()) {
     return serviceError(ErrorCode.INVALID_RESET_TOKEN)
   }
 
-  const newPasswordHash = await hashPassword(input.new_password)
+  const newPasswordHash = await hashPassword(input.password)
 
   await resetUserPassword(user.id, {
     passwordHash: newPasswordHash,
@@ -132,7 +140,7 @@ export async function resetPassword(input: ResetPasswordInput): Promise<ServiceR
 function sendVerificationEmail(email: string, token: string): void {
   const verifyUrl = new URL(`/auth/verify-email?token=${token}`, env.APP_URL).href
 
-  if (env.NODE_ENV !== 'production') {
+  if (env.NODE_ENV !== NodeEnvs.PRODUCTION) {
     logger.info({ email, verifyUrl }, 'Email verification URL (dev/test)')
     return
   }
@@ -155,7 +163,7 @@ function hashResetToken(rawToken: string): string {
 }
 
 function logPasswordResetToken(email: string, rawToken: string): void {
-  if (env.NODE_ENV !== 'production') {
+  if (env.NODE_ENV !== NodeEnvs.PRODUCTION) {
     logger.info({ email, rawToken }, '[DEV] Password reset token')
   }
 }

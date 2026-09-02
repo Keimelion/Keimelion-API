@@ -12,8 +12,8 @@ const PASSWORD_RESET_RATE_LIMIT_WINDOW_MS = 600_000
 const MIN_PASSWORD_LENGTH = 8
 
 const resetPasswordSchema = z.object({
-  token: z.string().min(1),
-  new_password: z.string().min(MIN_PASSWORD_LENGTH).max(MAX_PASSWORD_LENGTH),
+  password_reset_token: z.string().min(1),
+  password: z.string().min(MIN_PASSWORD_LENGTH).max(MAX_PASSWORD_LENGTH),
 })
 
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>

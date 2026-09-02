@@ -1,12 +1,13 @@
 import { config } from 'dotenv'
 import { z } from 'zod'
+import { NODE_ENV_VALUES, NodeEnvs } from '../shared/enums/node-env.js'
 
 config()
 
 const envSchema = z.object({
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
   PORT: z.coerce.number().int().positive().default(3000),
-  NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+  NODE_ENV: z.enum(NODE_ENV_VALUES).default(NodeEnvs.DEVELOPMENT),
   CORS_ORIGINS: z.string().default('http://localhost:3001'),
   RATE_LIMIT_MAX: z.coerce.number().int().positive().default(100),
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(900000),
