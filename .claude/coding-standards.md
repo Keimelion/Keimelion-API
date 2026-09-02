@@ -461,6 +461,35 @@ async function persistList(data: ListRow) { ... }
 
 ---
 
+## API payload keys — camelCase everywhere
+
+All keys in HTTP request bodies, response bodies, and query params exposed by the API use **camelCase**. This matches TypeScript identifiers so the same key flows from Zod schema → service → response without a rename layer.
+
+- **Request bodies** (Zod schemas): `currentPassword`, `newPassword`, `passwordResetToken`, `avatarUrl`, `isMarketingOptedIn`
+- **Response bodies** (`ServiceResult` `data`, `ApiError` bodies): `passwordResetToken`, `totalPages`, `deletedAt`
+- **Query params**: `page`, `limit`, `sortBy`
+
+Snake_case is only acceptable in **two places** and must not leak into API payloads:
+
+1. **SQL column names** in Drizzle schemas — `text('password_reset_token')`, `boolean('is_cgv_accepted')`. The TS property (`passwordResetToken`) is what code and API see; the SQL string only matters to the database.
+2. **URL path segments** — `/change-password`, `/verify-email`, `/forgot-password` (kebab-case, standard REST).
+
+```typescript
+// ❌ — mixed case in body keys; forces callers to remember which is which
+const resetPasswordSchema = z.object({
+  password_reset_token: z.string().min(1),
+  password: z.string().min(8),
+})
+
+// ✅ — camelCase throughout
+const resetPasswordSchema = z.object({
+  passwordResetToken: z.string().min(1),
+  password: z.string().min(8),
+})
+```
+
+---
+
 ## Project structure — feature folders
 
 Code is organized by feature under `src/features/<feature>/`:

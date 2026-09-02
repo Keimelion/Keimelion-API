@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { SignJWT } from 'jose'
-import { app } from '../../app.js'
 import { db } from '../../db/client.js'
 import { env } from '../../config/env.js'
 import { NodeEnvs } from '../../shared/enums/node-env.js'
+import { apiRequest } from '../../shared/test/api-request.js'
 
 const TEST_JWT_SECRET = 'test-secret-key-that-is-at-least-32-chars-long'
 const TEST_JTI = '00000000-0000-0000-0000-000000000099'
@@ -82,14 +82,13 @@ describe('POST /v1/auth/register', () => {
     mockInsertReturning(VALID_USER)
     mockInsertNoReturning()
 
-    const response = await app.request('/v1/auth/register', {
+    const response = await apiRequest('/v1/auth/register', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+      body: {
         email: 'user@example.com',
         password: 'securepassword123',
         isCgvAccepted: true,
-      }),
+      },
     })
 
     const body = await response.json() as { user: { id: string; email: string }; refreshToken: string }
@@ -102,43 +101,40 @@ describe('POST /v1/auth/register', () => {
   it('returns 409 when email already exists', async () => {
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(VALID_USER)
 
-    const response = await app.request('/v1/auth/register', {
+    const response = await apiRequest('/v1/auth/register', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+      body: {
         email: 'user@example.com',
         password: 'securepassword123',
         isCgvAccepted: true,
-      }),
+      },
     })
 
     expect(response.status).toBe(409)
   })
 
   it('returns 422 when username contains invalid characters', async () => {
-    const response = await app.request('/v1/auth/register', {
+    const response = await apiRequest('/v1/auth/register', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+      body: {
         email: 'user@example.com',
         password: 'securepassword123',
         isCgvAccepted: true,
         username: 'invalid username with spaces',
-      }),
+      },
     })
 
     expect(response.status).toBe(422)
   })
 
   it('returns 422 when password is too short', async () => {
-    const response = await app.request('/v1/auth/register', {
+    const response = await apiRequest('/v1/auth/register', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+      body: {
         email: 'user@example.com',
         password: 'short',
         isCgvAccepted: true,
-      }),
+      },
     })
 
     expect(response.status).toBe(422)
@@ -167,10 +163,9 @@ describe('POST /v1/auth/verify-email', () => {
       }),
     } as never)
 
-    const response = await app.request('/v1/auth/verify-email', {
+    const response = await apiRequest('/v1/auth/verify-email', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token: validToken }),
+      body: { token: validToken },
     })
 
     const body = await response.json() as { message: string }
@@ -181,10 +176,9 @@ describe('POST /v1/auth/verify-email', () => {
   it('returns 400 when token is invalid', async () => {
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(undefined)
 
-    const response = await app.request('/v1/auth/verify-email', {
+    const response = await apiRequest('/v1/auth/verify-email', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token: '00000000-0000-0000-0000-000000000000' }),
+      body: { token: '00000000-0000-0000-0000-000000000000' },
     })
 
     expect(response.status).toBe(400)
@@ -200,20 +194,18 @@ describe('POST /v1/auth/verify-email', () => {
     }
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(userWithExpiredToken)
 
-    const response = await app.request('/v1/auth/verify-email', {
+    const response = await apiRequest('/v1/auth/verify-email', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token: expiredToken }),
+      body: { token: expiredToken },
     })
 
     expect(response.status).toBe(400)
   })
 
   it('returns 422 when token is not a valid uuid', async () => {
-    const response = await app.request('/v1/auth/verify-email', {
+    const response = await apiRequest('/v1/auth/verify-email', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token: 'not-a-uuid' }),
+      body: { token: 'not-a-uuid' },
     })
 
     expect(response.status).toBe(422)
@@ -233,10 +225,9 @@ describe('POST /v1/auth/login', () => {
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(userWithHash)
     mockInsertNoReturning()
 
-    const response = await app.request('/v1/auth/login', {
+    const response = await apiRequest('/v1/auth/login', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'user@example.com', password: 'securepassword123' }),
+      body: { email: 'user@example.com', password: 'securepassword123' },
     })
 
     const body = await response.json() as { accessToken: string; refreshToken: string; user: { email: string } }
@@ -250,10 +241,9 @@ describe('POST /v1/auth/login', () => {
   it('returns 401 when email is unknown', async () => {
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(undefined)
 
-    const response = await app.request('/v1/auth/login', {
+    const response = await apiRequest('/v1/auth/login', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'unknown@example.com', password: 'somepassword' }),
+      body: { email: 'unknown@example.com', password: 'somepassword' },
     })
 
     expect(response.status).toBe(401)
@@ -265,10 +255,9 @@ describe('POST /v1/auth/login', () => {
     const userWithHash = { ...VALID_USER, passwordHash: hash }
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(userWithHash)
 
-    const response = await app.request('/v1/auth/login', {
+    const response = await apiRequest('/v1/auth/login', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'user@example.com', password: 'wrongpassword' }),
+      body: { email: 'user@example.com', password: 'wrongpassword' },
     })
 
     expect(response.status).toBe(401)
@@ -280,10 +269,9 @@ describe('POST /v1/auth/login', () => {
     const unverifiedUser = { ...VALID_USER, passwordHash: hash, emailVerifiedAt: null }
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(unverifiedUser)
 
-    const response = await app.request('/v1/auth/login', {
+    const response = await apiRequest('/v1/auth/login', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'user@example.com', password: 'securepassword123' }),
+      body: { email: 'user@example.com', password: 'securepassword123' },
     })
 
     expect(response.status).toBe(403)
@@ -295,10 +283,9 @@ describe('POST /v1/auth/login', () => {
     const bannedUser = { ...VALID_USER, passwordHash: hash, bannedAt: new Date('2024-01-01') }
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(bannedUser)
 
-    const response = await app.request('/v1/auth/login', {
+    const response = await apiRequest('/v1/auth/login', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'user@example.com', password: 'securepassword123' }),
+      body: { email: 'user@example.com', password: 'securepassword123' },
     })
 
     expect(response.status).toBe(403)
@@ -310,35 +297,28 @@ describe('POST /v1/auth/logout', () => {
     vi.clearAllMocks()
   })
 
-  it('returns 204 and runs transaction when logout is successful', async () => {
+  it('returns 200 with message and runs transaction when logout is successful', async () => {
     const token = await generateTestToken(VALID_USER.id)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(VALID_USER)
     vi.mocked(db.query.activeTokens.findFirst).mockResolvedValueOnce(ACTIVE_TOKEN_ENTRY as never)
 
-    const response = await app.request('/v1/auth/logout', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    const response = await apiRequest('/v1/auth/logout', { method: 'POST', token })
 
-    expect(response.status).toBe(204)
+    const body = await response.json() as { message: string }
+    expect(response.status).toBe(200)
+    expect(body.message).toBe('Logged out successfully')
     expect(vi.mocked(db.transaction)).toHaveBeenCalledOnce()
   })
 
   it('returns 401 when no authorization header is provided', async () => {
-    const response = await app.request('/v1/auth/logout', {
-      method: 'POST',
-    })
-
+    const response = await apiRequest('/v1/auth/logout', { method: 'POST' })
     expect(response.status).toBe(401)
   })
 
   it('returns 401 when JWT is expired', async () => {
     const token = await generateTestToken(VALID_USER.id, { expired: true })
 
-    const response = await app.request('/v1/auth/logout', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    const response = await apiRequest('/v1/auth/logout', { method: 'POST', token })
 
     expect(response.status).toBe(401)
   })
@@ -346,10 +326,7 @@ describe('POST /v1/auth/logout', () => {
   it('returns 401 when JWT has no jti claim', async () => {
     const token = await generateTestToken(VALID_USER.id, { includeJti: false })
 
-    const response = await app.request('/v1/auth/logout', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    const response = await apiRequest('/v1/auth/logout', { method: 'POST', token })
 
     expect(response.status).toBe(401)
   })
@@ -359,10 +336,7 @@ describe('POST /v1/auth/logout', () => {
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(VALID_USER)
     vi.mocked(db.query.activeTokens.findFirst).mockResolvedValueOnce(undefined)
 
-    const response = await app.request('/v1/auth/logout', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    const response = await apiRequest('/v1/auth/logout', { method: 'POST', token })
 
     expect(response.status).toBe(401)
   })
@@ -373,10 +347,7 @@ describe('POST /v1/auth/logout', () => {
     vi.mocked(db.query.activeTokens.findFirst).mockResolvedValueOnce(ACTIVE_TOKEN_ENTRY as never)
     vi.mocked(db.transaction).mockRejectedValueOnce(new Error('DB error'))
 
-    const response = await app.request('/v1/auth/logout', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    const response = await apiRequest('/v1/auth/logout', { method: 'POST', token })
 
     expect(response.status).toBe(500)
   })
@@ -395,33 +366,31 @@ describe('POST /v1/auth/forgot-password', () => {
       }),
     } as never)
 
-    const response = await app.request('/v1/auth/forgot-password', {
+    const response = await apiRequest('/v1/auth/forgot-password', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'user@example.com' }),
+      body: { email: 'user@example.com' },
     })
 
-    const body = await response.json() as { message: string; password_reset_token?: string }
+    const body = await response.json() as { message: string; passwordResetToken?: string }
     expect(response.status).toBe(200)
     expect(body.message).toBe('If this email is registered, a reset link has been sent')
-    expect(body.password_reset_token).toMatch(/^[a-f0-9]{64}$/)
+    expect(body.passwordResetToken).toMatch(/^[a-f0-9]{64}$/)
   })
 
-  it('does not include password_reset_token when the email is unknown', async () => {
+  it('does not include passwordResetToken when the email is unknown', async () => {
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(undefined)
 
-    const response = await app.request('/v1/auth/forgot-password', {
+    const response = await apiRequest('/v1/auth/forgot-password', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'unknown@example.com' }),
+      body: { email: 'unknown@example.com' },
     })
 
-    const body = await response.json() as { message: string; password_reset_token?: string }
+    const body = await response.json() as { message: string; passwordResetToken?: string }
     expect(response.status).toBe(200)
-    expect(body.password_reset_token).toBeUndefined()
+    expect(body.passwordResetToken).toBeUndefined()
   })
 
-  it('does not leak password_reset_token in production', async () => {
+  it('does not leak passwordResetToken in production', async () => {
     const originalEnv = env.NODE_ENV
     env.NODE_ENV = NodeEnvs.PRODUCTION
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(VALID_USER)
@@ -432,15 +401,14 @@ describe('POST /v1/auth/forgot-password', () => {
     } as never)
 
     try {
-      const response = await app.request('/v1/auth/forgot-password', {
+      const response = await apiRequest('/v1/auth/forgot-password', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: 'user@example.com' }),
+        body: { email: 'user@example.com' },
       })
 
-      const body = await response.json() as { message: string; password_reset_token?: string }
+      const body = await response.json() as { message: string; passwordResetToken?: string }
       expect(response.status).toBe(200)
-      expect(body.password_reset_token).toBeUndefined()
+      expect(body.passwordResetToken).toBeUndefined()
     } finally {
       env.NODE_ENV = originalEnv
     }
@@ -449,10 +417,9 @@ describe('POST /v1/auth/forgot-password', () => {
   it('returns 200 with generic message when email is unknown', async () => {
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(undefined)
 
-    const response = await app.request('/v1/auth/forgot-password', {
+    const response = await apiRequest('/v1/auth/forgot-password', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'unknown@example.com' }),
+      body: { email: 'unknown@example.com' },
     })
 
     const body = await response.json() as { message: string }
@@ -464,10 +431,9 @@ describe('POST /v1/auth/forgot-password', () => {
     const oauthUser = { ...VALID_USER, passwordHash: null }
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(oauthUser)
 
-    const response = await app.request('/v1/auth/forgot-password', {
+    const response = await apiRequest('/v1/auth/forgot-password', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'user@example.com' }),
+      body: { email: 'user@example.com' },
     })
 
     expect(response.status).toBe(200)
@@ -475,20 +441,18 @@ describe('POST /v1/auth/forgot-password', () => {
   })
 
   it('returns 422 when email is malformed', async () => {
-    const response = await app.request('/v1/auth/forgot-password', {
+    const response = await apiRequest('/v1/auth/forgot-password', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'not-an-email' }),
+      body: { email: 'not-an-email' },
     })
 
     expect(response.status).toBe(422)
   })
 
   it('returns 422 when email is missing', async () => {
-    const response = await app.request('/v1/auth/forgot-password', {
+    const response = await apiRequest('/v1/auth/forgot-password', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({}),
+      body: {},
     })
 
     expect(response.status).toBe(422)
@@ -516,10 +480,9 @@ describe('POST /v1/auth/reset-password', () => {
       where: vi.fn().mockResolvedValue(undefined),
     } as never)
 
-    const response = await app.request('/v1/auth/reset-password', {
+    const response = await apiRequest('/v1/auth/reset-password', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password_reset_token: 'valid-raw-token-64-chars-long-at-least-to-pass', password: 'newpassword123' }),
+      body: { passwordResetToken: 'valid-raw-token-64-chars-long-at-least-to-pass', password: 'newpassword123' },
     })
 
     const body = await response.json() as { message: string }
@@ -530,10 +493,9 @@ describe('POST /v1/auth/reset-password', () => {
   it('returns 400 when token does not match any user', async () => {
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(undefined)
 
-    const response = await app.request('/v1/auth/reset-password', {
+    const response = await apiRequest('/v1/auth/reset-password', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password_reset_token: 'invalid-token', password: 'newpassword123' }),
+      body: { passwordResetToken: 'invalid-token', password: 'newpassword123' },
     })
 
     expect(response.status).toBe(400)
@@ -547,10 +509,9 @@ describe('POST /v1/auth/reset-password', () => {
     }
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(userWithExpiredToken)
 
-    const response = await app.request('/v1/auth/reset-password', {
+    const response = await apiRequest('/v1/auth/reset-password', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password_reset_token: 'expired-token', password: 'newpassword123' }),
+      body: { passwordResetToken: 'expired-token', password: 'newpassword123' },
     })
 
     expect(response.status).toBe(400)
@@ -560,40 +521,36 @@ describe('POST /v1/auth/reset-password', () => {
     const userWithNoToken = { ...VALID_USER, passwordResetToken: null, passwordResetTokenExpiresAt: null }
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(userWithNoToken)
 
-    const response = await app.request('/v1/auth/reset-password', {
+    const response = await apiRequest('/v1/auth/reset-password', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password_reset_token: 'some-token', password: 'newpassword123' }),
+      body: { passwordResetToken: 'some-token', password: 'newpassword123' },
     })
 
     expect(response.status).toBe(400)
   })
 
   it('returns 422 when password is too short', async () => {
-    const response = await app.request('/v1/auth/reset-password', {
+    const response = await apiRequest('/v1/auth/reset-password', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password_reset_token: 'some-token', password: 'short' }),
+      body: { passwordResetToken: 'some-token', password: 'short' },
     })
 
     expect(response.status).toBe(422)
   })
 
   it('returns 422 when password is missing', async () => {
-    const response = await app.request('/v1/auth/reset-password', {
+    const response = await apiRequest('/v1/auth/reset-password', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password_reset_token: 'some-token' }),
+      body: { passwordResetToken: 'some-token' },
     })
 
     expect(response.status).toBe(422)
   })
 
-  it('returns 422 when password_reset_token is missing', async () => {
-    const response = await app.request('/v1/auth/reset-password', {
+  it('returns 422 when passwordResetToken is missing', async () => {
+    const response = await apiRequest('/v1/auth/reset-password', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password: 'newpassword123' }),
+      body: { password: 'newpassword123' },
     })
 
     expect(response.status).toBe(422)
@@ -610,10 +567,9 @@ describe('POST /v1/auth/refresh', () => {
     vi.mocked(db.query.refreshTokens.findFirst).mockResolvedValueOnce(VALID_REFRESH_TOKEN_ROW as never)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(VALID_USER)
 
-    const response = await app.request('/v1/auth/refresh', {
+    const response = await apiRequest('/v1/auth/refresh', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refreshToken: submittedRefreshToken }),
+      body: { refreshToken: submittedRefreshToken },
     })
 
     const body = await response.json() as { accessToken: string; refreshToken: string }
@@ -628,10 +584,9 @@ describe('POST /v1/auth/refresh', () => {
   it('returns 401 when refreshToken is not found', async () => {
     vi.mocked(db.query.refreshTokens.findFirst).mockResolvedValueOnce(undefined)
 
-    const response = await app.request('/v1/auth/refresh', {
+    const response = await apiRequest('/v1/auth/refresh', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refreshToken: 'unknown-token' }),
+      body: { refreshToken: 'unknown-token' },
     })
 
     expect(response.status).toBe(401)
@@ -641,10 +596,9 @@ describe('POST /v1/auth/refresh', () => {
     const revokedToken = { ...VALID_REFRESH_TOKEN_ROW, revokedAt: new Date('2024-01-01') }
     vi.mocked(db.query.refreshTokens.findFirst).mockResolvedValueOnce(revokedToken as never)
 
-    const response = await app.request('/v1/auth/refresh', {
+    const response = await apiRequest('/v1/auth/refresh', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refreshToken: 'revoked-token' }),
+      body: { refreshToken: 'revoked-token' },
     })
 
     expect(response.status).toBe(401)
@@ -654,10 +608,9 @@ describe('POST /v1/auth/refresh', () => {
     const expiredToken = { ...VALID_REFRESH_TOKEN_ROW, expiresAt: new Date(Date.now() - 1000) }
     vi.mocked(db.query.refreshTokens.findFirst).mockResolvedValueOnce(expiredToken as never)
 
-    const response = await app.request('/v1/auth/refresh', {
+    const response = await apiRequest('/v1/auth/refresh', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refreshToken: 'expired-token' }),
+      body: { refreshToken: 'expired-token' },
     })
 
     expect(response.status).toBe(401)
@@ -667,10 +620,9 @@ describe('POST /v1/auth/refresh', () => {
     vi.mocked(db.query.refreshTokens.findFirst).mockResolvedValueOnce(VALID_REFRESH_TOKEN_ROW as never)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce({ ...VALID_USER, deletedAt: new Date('2024-01-01') })
 
-    const response = await app.request('/v1/auth/refresh', {
+    const response = await apiRequest('/v1/auth/refresh', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refreshToken: 'some-token' }),
+      body: { refreshToken: 'some-token' },
     })
 
     expect(response.status).toBe(401)
@@ -680,20 +632,18 @@ describe('POST /v1/auth/refresh', () => {
     vi.mocked(db.query.refreshTokens.findFirst).mockResolvedValueOnce(VALID_REFRESH_TOKEN_ROW as never)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce({ ...VALID_USER, bannedAt: new Date('2024-01-01') })
 
-    const response = await app.request('/v1/auth/refresh', {
+    const response = await apiRequest('/v1/auth/refresh', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refreshToken: 'some-token' }),
+      body: { refreshToken: 'some-token' },
     })
 
     expect(response.status).toBe(403)
   })
 
   it('returns 422 when refreshToken field is missing', async () => {
-    const response = await app.request('/v1/auth/refresh', {
+    const response = await apiRequest('/v1/auth/refresh', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({}),
+      body: {},
     })
 
     expect(response.status).toBe(422)
