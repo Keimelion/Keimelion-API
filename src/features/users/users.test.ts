@@ -165,6 +165,137 @@ describe('PATCH /v1/users/me', () => {
   })
 })
 
+describe('POST /v1/users/me/change-password', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(db.query.activeTokens.findFirst).mockResolvedValue(ACTIVE_TOKEN_ENTRY as never)
+  })
+
+  it('returns 204 and revokes all tokens when current password is correct', async () => {
+    const bcrypt = await import('bcryptjs')
+    const hash = await bcrypt.default.hash('OldPassword1', 4)
+    const token = await generateTestToken(SAFE_USER.id)
+    const userWithHash = { ...SAFE_USER, passwordHash: hash }
+
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(userWithHash)
+
+    const response = await app.request('/v1/users/me/change-password', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ currentPassword: 'OldPassword1', newPassword: 'NewPassword9' }),
+    })
+
+    expect(response.status).toBe(204)
+    expect(vi.mocked(db.transaction)).toHaveBeenCalledOnce()
+  })
+
+  it('returns 401 when no authorization header is provided', async () => {
+    const response = await app.request('/v1/users/me/change-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ currentPassword: 'OldPassword1', newPassword: 'NewPassword9' }),
+    })
+
+    expect(response.status).toBe(401)
+  })
+
+  it('returns 422 when currentPassword is missing', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+
+    const response = await app.request('/v1/users/me/change-password', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ newPassword: 'NewPassword9' }),
+    })
+
+    expect(response.status).toBe(422)
+  })
+
+  it('returns 422 when newPassword is missing', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+
+    const response = await app.request('/v1/users/me/change-password', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ currentPassword: 'OldPassword1' }),
+    })
+
+    expect(response.status).toBe(422)
+  })
+
+  it('returns 422 when newPassword is the same as currentPassword', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+
+    const response = await app.request('/v1/users/me/change-password', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ currentPassword: 'SamePassword1', newPassword: 'SamePassword1' }),
+    })
+
+    expect(response.status).toBe(422)
+  })
+
+  it('returns 400 with INVALID_CREDENTIALS when currentPassword does not match', async () => {
+    const bcrypt = await import('bcryptjs')
+    const hash = await bcrypt.default.hash('OldPassword1', 4)
+    const token = await generateTestToken(SAFE_USER.id)
+    const userWithHash = { ...SAFE_USER, passwordHash: hash }
+
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(userWithHash)
+
+    const response = await app.request('/v1/users/me/change-password', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ currentPassword: 'WrongPassword1', newPassword: 'NewPassword9' }),
+    })
+
+    const body = await response.json() as { code: string }
+    expect(response.status).toBe(400)
+    expect(body.code).toBe('INVALID_CREDENTIALS')
+  })
+
+  it('returns 400 with INVALID_OPERATION when user has no password (OAuth user)', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    const oauthUser = { ...SAFE_USER, passwordHash: null }
+
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(oauthUser)
+
+    const response = await app.request('/v1/users/me/change-password', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ currentPassword: 'OldPassword1', newPassword: 'NewPassword9' }),
+    })
+
+    const body = await response.json() as { code: string }
+    expect(response.status).toBe(400)
+    expect(body.code).toBe('INVALID_OPERATION')
+  })
+})
+
 describe('DELETE /v1/users/me', () => {
   beforeEach(() => {
     vi.clearAllMocks()

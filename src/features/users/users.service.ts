@@ -1,8 +1,11 @@
+import { db } from '../../db/client.js'
 import { HttpStatus } from '../../shared/enums/http.js'
 import { ErrorCode } from '../../shared/enums/error-code.js'
 import { serviceError } from '../../shared/utils/response.js'
 import { pickDefined } from '../../shared/utils/partial-update.js'
-import { findUserById, softDeleteUser } from '../../db/entities/users/users.repository.js'
+import { hashPassword, verifyPassword } from '../../shared/utils/hash.js'
+import { findUserById, softDeleteUser, updatePasswordHash } from '../../db/entities/users/users.repository.js'
+import { deleteAllUserTokens } from '../../db/entities/active-tokens/active-tokens.repository.js'
 import { updateUserProfile } from './users.repository.js'
 import { toPublicUser } from './users.mapper.js'
 import type { PublicUser } from './users.mapper.js'
@@ -37,4 +40,31 @@ export async function deleteAccount(userId: string): Promise<ServiceResult<{ mes
   }
 
   return { data: { message: 'Account deleted successfully' }, httpStatus: HttpStatus.OK }
+}
+
+export async function changePassword(userId: string, currentPassword: string, newPassword: string): Promise<ServiceResult<null>> {
+  const user = await findUserById(userId)
+
+  if (!user) {
+    return serviceError(ErrorCode.NOT_FOUND)
+  }
+
+  if (!user.passwordHash) {
+    return serviceError(ErrorCode.INVALID_OPERATION)
+  }
+
+  const isCurrentPasswordValid = await verifyPassword(currentPassword, user.passwordHash)
+
+  if (!isCurrentPasswordValid) {
+    return serviceError(ErrorCode.INVALID_CREDENTIALS)
+  }
+
+  const newPasswordHash = await hashPassword(newPassword)
+
+  await db.transaction(async (tx) => {
+    await updatePasswordHash(userId, newPasswordHash, tx)
+    await deleteAllUserTokens(userId, tx)
+  })
+
+  return { data: null, httpStatus: HttpStatus.NO_CONTENT }
 }
