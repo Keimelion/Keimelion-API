@@ -1,4 +1,4 @@
-import { boolean, pgEnum, pgTable, text, timestamp, uuid, varchar } from 'drizzle-orm/pg-core'
+import { boolean, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid, varchar } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
 import { USER_ROLE_VALUES } from '../../../shared/enums/user-role.js'
 import { AUTH_PROVIDER_VALUES } from '../../../shared/enums/auth-provider.js'
@@ -20,12 +20,16 @@ export const users = pgTable('users', {
   emailVerifyToken: uuid('email_verify_token').unique(),
   emailVerifyTokenExpiresAt: timestamp('email_verify_token_expires_at', { withTimezone: true }),
   emailVerifiedAt: timestamp('email_verified_at', { withTimezone: true }),
+  passwordResetToken: text('password_reset_token'),
+  passwordResetTokenExpiresAt: timestamp('password_reset_token_expires_at', { withTimezone: true }),
   lastActiveAt: timestamp('last_active_at', { withTimezone: true }),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
   bannedAt: timestamp('banned_at', { withTimezone: true }),
   banReason: text('ban_reason'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().default(sql`now()`),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().default(sql`now()`).$onUpdateFn(() => new Date()),
-})
+},
+(table) => [uniqueIndex('users_password_reset_token_idx').on(table.passwordResetToken)]
+)
 
 export type User = typeof users.$inferSelect

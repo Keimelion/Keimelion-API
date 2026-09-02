@@ -1,10 +1,11 @@
 import { vi } from 'vitest'
+import { NodeEnvs } from '../enums/node-env.js'
 
 vi.mock('../../config/env.js', () => ({
   env: {
     DATABASE_URL: 'postgres://localhost/test',
     PORT: 3000,
-    NODE_ENV: 'test' as const,
+    NODE_ENV: NodeEnvs.TEST,
     CORS_ORIGINS: 'http://localhost:3001',
     RATE_LIMIT_MAX: 1000,
     RATE_LIMIT_WINDOW_MS: 900000,

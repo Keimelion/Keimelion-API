@@ -3,7 +3,7 @@ import type { ErrorCode } from '../enums/error-code.js'
 import { HttpStatus } from '../enums/http.js'
 import type { ApiError } from '../types/api.js'
 
-const errorMap: Record<ErrorCode, { status: ContentfulStatusCode; message: string }> = {
+export const errorMap: Record<ErrorCode, { status: ContentfulStatusCode; message: string }> = {
   BAD_REQUEST:             { status: HttpStatus.BAD_REQUEST,           message: 'Bad request' },
   UNAUTHORIZED:            { status: HttpStatus.UNAUTHORIZED,          message: 'Unauthorized' },
   FORBIDDEN:               { status: HttpStatus.FORBIDDEN,             message: 'Forbidden' },
@@ -17,6 +17,7 @@ const errorMap: Record<ErrorCode, { status: ContentfulStatusCode; message: strin
   USER_UPDATE_FAILED:      { status: HttpStatus.INTERNAL_SERVER_ERROR, message: 'Account could not be updated' },
   ACCOUNT_DELETION_FAILED: { status: HttpStatus.INTERNAL_SERVER_ERROR, message: 'Account could not be deleted' },
   LOGOUT_FAILED:           { status: HttpStatus.INTERNAL_SERVER_ERROR, message: 'Logout could not be completed' },
+  INVALID_RESET_TOKEN:     { status: HttpStatus.BAD_REQUEST,           message: 'Invalid or expired password reset token' },
   INTERNAL_ERROR:          { status: HttpStatus.INTERNAL_SERVER_ERROR, message: 'An unexpected error occurred' },
 }
 

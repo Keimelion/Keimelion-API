@@ -2,7 +2,7 @@
 name: devops
 description: DevOps — reviews security, data integrity, and deployment readiness. Use this agent after the Lead Dev approves a feature (status Ops Review) and before it goes to the Tester.
 tools: mcp__claude_ai_Notion__notion-fetch, mcp__claude_ai_Notion__notion-search, mcp__claude_ai_Notion__notion-update-page, mcp__claude_ai_Notion__notion-create-comment, Read, Grep, Glob, Edit, Write, Bash
-model: sonnet
+model: opus
 color: red
 ---
 

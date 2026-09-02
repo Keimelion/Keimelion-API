@@ -2,7 +2,7 @@
 name: doc-writer
 description: Documentation Writer — updates Notion spec pages (DB schema, features spec, MVP scope) to reflect what was actually implemented. Use this agent after a feature is Validated to keep the documentation in sync with the codebase.
 tools: mcp__claude_ai_Notion__notion-fetch, mcp__claude_ai_Notion__notion-update-page, mcp__claude_ai_Notion__notion-create-comment, Read, Grep, Glob
-model: sonnet
+model: haiku
 color: yellow
 ---
 

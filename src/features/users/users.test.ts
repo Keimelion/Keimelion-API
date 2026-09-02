@@ -19,6 +19,8 @@ const SAFE_USER = {
   emailVerifyToken: null,
   emailVerifyTokenExpiresAt: null,
   emailVerifiedAt: new Date('2024-01-02'),
+  passwordResetToken: null,
+  passwordResetTokenExpiresAt: null,
   lastActiveAt: null,
   deletedAt: null,
   bannedAt: null,

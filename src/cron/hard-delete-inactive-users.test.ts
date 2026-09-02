@@ -38,6 +38,8 @@ function makeUser(overrides: Partial<User> = {}): User {
     emailVerifyToken: null,
     emailVerifyTokenExpiresAt: null,
     emailVerifiedAt: null,
+    passwordResetToken: null,
+    passwordResetTokenExpiresAt: null,
     lastActiveAt: null,
     deletedAt: null,
     bannedAt: null,
