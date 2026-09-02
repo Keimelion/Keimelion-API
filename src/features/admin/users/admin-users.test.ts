@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { SignJWT } from 'jose'
-import { app } from '../../../app.js'
 import { db } from '../../../db/client.js'
+import { apiRequest } from '../../../shared/test/api-request.js'
 
 const TEST_JWT_SECRET = 'test-secret-key-that-is-at-least-32-chars-long'
 
@@ -78,9 +78,7 @@ describe('GET /v1/admin/users', () => {
     vi.mocked(db.query.users.findMany).mockResolvedValueOnce([ADMIN_USER, TARGET_USER])
     vi.mocked(db.select).mockReturnValueOnce({ from: vi.fn().mockResolvedValueOnce([{ count: 2 }]) } as never)
 
-    const response = await app.request('/v1/admin/users', {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    const response = await apiRequest('/v1/admin/users', { token })
 
     const body = await response.json() as { items: { email: string }[]; pagination: { total: number } }
     expect(response.status).toBe(200)
@@ -96,9 +94,7 @@ describe('GET /v1/admin/users', () => {
     vi.mocked(db.query.users.findMany).mockResolvedValueOnce([ADMIN_USER, deletedUser])
     vi.mocked(db.select).mockReturnValueOnce({ from: vi.fn().mockResolvedValueOnce([{ count: 2 }]) } as never)
 
-    const response = await app.request('/v1/admin/users', {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    const response = await apiRequest('/v1/admin/users', { token })
 
     const body = await response.json() as { items: { deletedAt: string | null }[] }
     expect(response.status).toBe(200)
@@ -109,9 +105,7 @@ describe('GET /v1/admin/users', () => {
     const token = await generateTestToken(ADMIN_USER.id, 'admin')
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
 
-    const response = await app.request('/v1/admin/users?page=0', {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    const response = await apiRequest('/v1/admin/users?page=0', { token })
 
     expect(response.status).toBe(422)
   })
@@ -120,9 +114,7 @@ describe('GET /v1/admin/users', () => {
     const token = await generateTestToken(ADMIN_USER.id, 'admin')
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
 
-    const response = await app.request('/v1/admin/users?limit=101', {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    const response = await apiRequest('/v1/admin/users?limit=101', { token })
 
     expect(response.status).toBe(422)
   })
@@ -131,9 +123,7 @@ describe('GET /v1/admin/users', () => {
     const token = await generateTestToken(ADMIN_USER.id, 'admin')
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
 
-    const response = await app.request('/v1/admin/users?page=1.5', {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    const response = await apiRequest('/v1/admin/users?page=1.5', { token })
 
     expect(response.status).toBe(422)
   })
@@ -142,22 +132,18 @@ describe('GET /v1/admin/users', () => {
     const token = await generateTestToken(TARGET_USER.id, 'user')
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(TARGET_USER)
 
-    const response = await app.request('/v1/admin/users', {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    const response = await apiRequest('/v1/admin/users', { token })
 
     expect(response.status).toBe(403)
   })
 
   it('returns 401 when no authorization header is provided', async () => {
-    const response = await app.request('/v1/admin/users')
+    const response = await apiRequest('/v1/admin/users')
     expect(response.status).toBe(401)
   })
 
   it('returns 401 when JWT is invalid', async () => {
-    const response = await app.request('/v1/admin/users', {
-      headers: { Authorization: 'Bearer invalidtoken' },
-    })
+    const response = await apiRequest('/v1/admin/users', { token: 'invalidtoken' })
     expect(response.status).toBe(401)
   })
 })
@@ -173,9 +159,7 @@ describe('GET /v1/admin/users/:id', () => {
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(TARGET_USER)
 
-    const response = await app.request(`/v1/admin/users/${TARGET_USER.id}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    const response = await apiRequest(`/v1/admin/users/${TARGET_USER.id}`, { token })
 
     const body = await response.json() as { user: { email: string } }
     expect(response.status).toBe(200)
@@ -188,9 +172,7 @@ describe('GET /v1/admin/users/:id', () => {
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(deletedUser)
 
-    const response = await app.request(`/v1/admin/users/${TARGET_USER.id}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    const response = await apiRequest(`/v1/admin/users/${TARGET_USER.id}`, { token })
 
     const body = await response.json() as { user: { deletedAt: string | null } }
     expect(response.status).toBe(200)
@@ -201,9 +183,7 @@ describe('GET /v1/admin/users/:id', () => {
     const token = await generateTestToken(ADMIN_USER.id, 'admin')
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
 
-    const response = await app.request('/v1/admin/users/not-a-uuid', {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    const response = await apiRequest('/v1/admin/users/not-a-uuid', { token })
 
     expect(response.status).toBe(422)
   })
@@ -213,9 +193,7 @@ describe('GET /v1/admin/users/:id', () => {
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(undefined)
 
-    const response = await app.request(`/v1/admin/users/${TARGET_USER.id}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    const response = await apiRequest(`/v1/admin/users/${TARGET_USER.id}`, { token })
 
     expect(response.status).toBe(404)
   })
@@ -224,9 +202,7 @@ describe('GET /v1/admin/users/:id', () => {
     const token = await generateTestToken(TARGET_USER.id, 'user')
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(TARGET_USER)
 
-    const response = await app.request(`/v1/admin/users/${TARGET_USER.id}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    const response = await apiRequest(`/v1/admin/users/${TARGET_USER.id}`, { token })
 
     expect(response.status).toBe(403)
   })
@@ -251,13 +227,10 @@ describe('PATCH /v1/admin/users/:id', () => {
       }),
     } as never)
 
-    const response = await app.request(`/v1/admin/users/${TARGET_USER.id}`, {
+    const response = await apiRequest(`/v1/admin/users/${TARGET_USER.id}`, {
       method: 'PATCH',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ role: 'moderator' }),
+      token,
+      body: { role: 'moderator' },
     })
 
     const body = await response.json() as { user: { role: string } }
@@ -269,13 +242,10 @@ describe('PATCH /v1/admin/users/:id', () => {
     const token = await generateTestToken(ADMIN_USER.id, 'admin')
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
 
-    const response = await app.request(`/v1/admin/users/${TARGET_USER.id}`, {
+    const response = await apiRequest(`/v1/admin/users/${TARGET_USER.id}`, {
       method: 'PATCH',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ avatarUrl: 'not-a-url' }),
+      token,
+      body: { avatarUrl: 'not-a-url' },
     })
 
     expect(response.status).toBe(422)
@@ -285,13 +255,10 @@ describe('PATCH /v1/admin/users/:id', () => {
     const token = await generateTestToken(ADMIN_USER.id, 'admin')
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
 
-    const response = await app.request(`/v1/admin/users/${TARGET_USER.id}`, {
+    const response = await apiRequest(`/v1/admin/users/${TARGET_USER.id}`, {
       method: 'PATCH',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ role: 'superuser' }),
+      token,
+      body: { role: 'superuser' },
     })
 
     expect(response.status).toBe(422)
@@ -302,13 +269,10 @@ describe('PATCH /v1/admin/users/:id', () => {
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(undefined)
 
-    const response = await app.request(`/v1/admin/users/${TARGET_USER.id}`, {
+    const response = await apiRequest(`/v1/admin/users/${TARGET_USER.id}`, {
       method: 'PATCH',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ role: 'moderator' }),
+      token,
+      body: { role: 'moderator' },
     })
 
     expect(response.status).toBe(404)
@@ -318,13 +282,10 @@ describe('PATCH /v1/admin/users/:id', () => {
     const token = await generateTestToken(ADMIN_USER.id, 'admin')
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
 
-    const response = await app.request(`/v1/admin/users/${ADMIN_USER.id}`, {
+    const response = await apiRequest(`/v1/admin/users/${ADMIN_USER.id}`, {
       method: 'PATCH',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ avatarUrl: 'https://example.com/avatar.png' }),
+      token,
+      body: { avatarUrl: 'https://example.com/avatar.png' },
     })
 
     expect(response.status).toBe(403)
@@ -342,13 +303,10 @@ describe('PATCH /v1/admin/users/:id', () => {
       }),
     } as never)
 
-    const response = await app.request(`/v1/admin/users/${TARGET_USER.id}`, {
+    const response = await apiRequest(`/v1/admin/users/${TARGET_USER.id}`, {
       method: 'PATCH',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ role: 'moderator' }),
+      token,
+      body: { role: 'moderator' },
     })
 
     expect(response.status).toBe(500)
@@ -358,16 +316,47 @@ describe('PATCH /v1/admin/users/:id', () => {
     const token = await generateTestToken(TARGET_USER.id, 'user')
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(TARGET_USER)
 
-    const response = await app.request(`/v1/admin/users/${TARGET_USER.id}`, {
+    const response = await apiRequest(`/v1/admin/users/${TARGET_USER.id}`, {
       method: 'PATCH',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ role: 'moderator' }),
+      token,
+      body: { role: 'moderator' },
     })
 
     expect(response.status).toBe(403)
+  })
+
+  it('silently strips password fields from the body — password is never touched', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const updatedUser = { ...TARGET_USER, role: 'moderator' as const }
+    const setMock = vi.fn().mockReturnValueOnce({
+      where: vi.fn().mockReturnValueOnce({
+        returning: vi.fn().mockResolvedValueOnce([updatedUser]),
+      }),
+    })
+
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(TARGET_USER)
+    vi.mocked(db.update).mockReturnValueOnce({ set: setMock } as never)
+
+    const response = await apiRequest(`/v1/admin/users/${TARGET_USER.id}`, {
+      method: 'PATCH',
+      token,
+      body: {
+        role: 'moderator',
+        password: 'evil-plaintext',
+        passwordHash: 'evil-hash',
+        email: 'takeover@example.com',
+        bannedAt: null,
+      },
+    })
+
+    expect(response.status).toBe(200)
+    expect(setMock).toHaveBeenCalledOnce()
+    const setArgs = setMock.mock.calls[0]?.[0] as Record<string, unknown>
+    expect(setArgs).not.toHaveProperty('password')
+    expect(setArgs).not.toHaveProperty('passwordHash')
+    expect(setArgs).not.toHaveProperty('email')
+    expect(setArgs).not.toHaveProperty('bannedAt')
   })
 })
 
@@ -390,10 +379,7 @@ describe('DELETE /v1/admin/users/:id', () => {
       }),
     } as never)
 
-    const response = await app.request(`/v1/admin/users/${TARGET_USER.id}`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    const response = await apiRequest(`/v1/admin/users/${TARGET_USER.id}`, { method: 'DELETE', token })
 
     const body = await response.json() as { message: string }
     expect(response.status).toBe(200)
@@ -404,10 +390,7 @@ describe('DELETE /v1/admin/users/:id', () => {
     const token = await generateTestToken(ADMIN_USER.id, 'admin')
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
 
-    const response = await app.request('/v1/admin/users/not-a-uuid', {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    const response = await apiRequest('/v1/admin/users/not-a-uuid', { method: 'DELETE', token })
 
     expect(response.status).toBe(422)
   })
@@ -417,10 +400,7 @@ describe('DELETE /v1/admin/users/:id', () => {
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(undefined)
 
-    const response = await app.request(`/v1/admin/users/${TARGET_USER.id}`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    const response = await apiRequest(`/v1/admin/users/${TARGET_USER.id}`, { method: 'DELETE', token })
 
     expect(response.status).toBe(404)
   })
@@ -429,10 +409,7 @@ describe('DELETE /v1/admin/users/:id', () => {
     const token = await generateTestToken(ADMIN_USER.id, 'admin')
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
 
-    const response = await app.request(`/v1/admin/users/${ADMIN_USER.id}`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    const response = await apiRequest(`/v1/admin/users/${ADMIN_USER.id}`, { method: 'DELETE', token })
 
     expect(response.status).toBe(403)
   })
@@ -441,10 +418,7 @@ describe('DELETE /v1/admin/users/:id', () => {
     const token = await generateTestToken(TARGET_USER.id, 'user')
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(TARGET_USER)
 
-    const response = await app.request(`/v1/admin/users/${TARGET_USER.id}`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    const response = await apiRequest(`/v1/admin/users/${TARGET_USER.id}`, { method: 'DELETE', token })
 
     expect(response.status).toBe(403)
   })

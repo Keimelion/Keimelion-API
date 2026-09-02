@@ -92,3 +92,8 @@ export async function updateLastActiveAt(userId: string): Promise<void> {
     sql`UPDATE users SET last_active_at = now() WHERE id = ${userId} AND (last_active_at IS NULL OR last_active_at < now() - interval '1 hour')`,
   )
 }
+
+export async function updatePasswordHash(userId: string, hash: string, tx?: DbTransaction): Promise<void> {
+  const client = tx ?? db
+  await client.update(users).set({ passwordHash: hash }).where(eq(users.id, userId))
+}

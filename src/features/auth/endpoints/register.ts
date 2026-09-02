@@ -4,12 +4,13 @@ import { z } from 'zod'
 import { createRateLimiter } from '../../../shared/utils/rate-limiter.js'
 import { validationErrorHandler } from '../../../shared/utils/validation.js'
 import { registerUser } from '../auth.service.js'
-import { USERNAME_REGEX, MAX_PASSWORD_LENGTH } from '../../users/users.constants.js'
+import { USERNAME_REGEX } from '../../users/users.constants.js'
+import { passwordSchema } from '../../../shared/schemas/password.js'
 import type { AppVariables } from '../../../shared/types/app.js'
 
 const registerSchema = z.object({
   email: z.string().email().transform(v => v.toLowerCase().trim()),
-  password: z.string().min(8).max(MAX_PASSWORD_LENGTH),
+  password: passwordSchema,
   username: z.string().trim().regex(USERNAME_REGEX).nullable().optional().transform(v => v ?? null),
   isMarketingOptedIn: z.boolean().default(false),
 })
