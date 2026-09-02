@@ -20,6 +20,8 @@ import {
 import { toPublicUser } from '../users/users.mapper.js'
 import { storeTokenAndUpdateActivity, revokeTokenAndUpdateActivity } from './auth.repository.js'
 import { deleteAllUserTokens } from '../../db/entities/active-tokens/active-tokens.repository.js'
+import { insertRefreshToken, findRefreshTokenByHash, revokeRefreshToken } from '../../db/entities/refresh-tokens/refresh-tokens.repository.js'
+import { findUserById } from '../../db/entities/users/users.repository.js'
 import type { PublicUser } from '../users/users.mapper.js'
 import type { ServiceResult } from '../../shared/types/service.js'
 import type { RegisterInput } from './endpoints/register.js'
@@ -28,7 +30,7 @@ import type { LoginInput } from './endpoints/login.js'
 import type { ForgotPasswordInput } from './endpoints/forgot-password.js'
 import type { ResetPasswordInput } from './endpoints/reset-password.js'
 
-export async function registerUser(input: RegisterInput): Promise<ServiceResult<{ user: PublicUser }>> {
+export async function registerUser(input: RegisterInput): Promise<ServiceResult<{ user: PublicUser; refreshToken: string }>> {
   if (await isEmailAlreadyTaken(input.email)) {
     return serviceError(ErrorCode.CONFLICT)
   }
@@ -42,7 +44,9 @@ export async function registerUser(input: RegisterInput): Promise<ServiceResult<
 
   sendVerificationEmail(input.email, emailVerifyToken)
 
-  return { data: { user: toPublicUser(createdUser) }, httpStatus: HttpStatus.CREATED }
+  const rawRefreshToken = await issueRefreshToken(createdUser.id)
+
+  return { data: { user: toPublicUser(createdUser), refreshToken: rawRefreshToken }, httpStatus: HttpStatus.CREATED }
 }
 
 export async function verifyEmail(input: VerifyEmailInput): Promise<ServiceResult<{ message: string }>> {
@@ -57,7 +61,7 @@ export async function verifyEmail(input: VerifyEmailInput): Promise<ServiceResul
   return { data: { message: 'Email verified successfully' }, httpStatus: HttpStatus.OK }
 }
 
-export async function loginUser(input: LoginInput): Promise<ServiceResult<{ token: string; user: PublicUser }>> {
+export async function loginUser(input: LoginInput): Promise<ServiceResult<{ token: string; refreshToken: string; user: PublicUser }>> {
   const user = await findUserByEmail(input.email)
 
   if (!user || await isPasswordInvalid(input.password, user.passwordHash)) {
@@ -75,7 +79,37 @@ export async function loginUser(input: LoginInput): Promise<ServiceResult<{ toke
   const { token, jti, expiresAt } = await signJwt(user.id, user.role)
   await storeTokenAndUpdateActivity(jti, user.id, expiresAt)
 
-  return { data: { token, user: toPublicUser(user) }, httpStatus: HttpStatus.OK }
+  const rawRefreshToken = await issueRefreshToken(user.id)
+
+  return { data: { token, refreshToken: rawRefreshToken, user: toPublicUser(user) }, httpStatus: HttpStatus.OK }
+}
+
+export async function refreshAccessToken(rawToken: string): Promise<ServiceResult<{ accessToken: string; refreshToken: string }>> {
+  const tokenHash = hashToken(rawToken)
+  const existingToken = await findRefreshTokenByHash(tokenHash)
+
+  if (!existingToken || existingToken.revokedAt || existingToken.expiresAt < new Date()) {
+    return serviceError(ErrorCode.INVALID_REFRESH_TOKEN)
+  }
+
+  const user = await findUserById(existingToken.userId)
+
+  if (!user || user.deletedAt) {
+    return serviceError(ErrorCode.INVALID_REFRESH_TOKEN)
+  }
+
+  if (user.bannedAt) {
+    return serviceError(ErrorCode.ACCOUNT_BANNED)
+  }
+
+  await revokeRefreshToken(existingToken.id)
+
+  const { token, jti, expiresAt } = await signJwt(user.id, user.role)
+  await storeTokenAndUpdateActivity(jti, user.id, expiresAt)
+
+  const newRawRefreshToken = await issueRefreshToken(user.id)
+
+  return { data: { accessToken: token, refreshToken: newRawRefreshToken }, httpStatus: HttpStatus.OK }
 }
 
 export async function logoutUser(payload: JwtPayload, userId: string): Promise<ServiceResult<null>> {
@@ -135,6 +169,26 @@ export async function resetPassword(input: ResetPasswordInput): Promise<ServiceR
   await deleteAllUserTokens(user.id)
 
   return { data: { message: 'Password reset successfully' }, httpStatus: HttpStatus.OK }
+}
+
+async function issueRefreshToken(userId: string): Promise<string> {
+  const rawToken = generateRawRefreshToken()
+  const tokenHash = hashToken(rawToken)
+  const expiresAt = computeRefreshTokenExpiresAt()
+  await insertRefreshToken(tokenHash, userId, expiresAt)
+  return rawToken
+}
+
+function generateRawRefreshToken(): string {
+  return randomBytes(32).toString('hex')
+}
+
+function hashToken(rawToken: string): string {
+  return createHash('sha256').update(rawToken).digest('hex')
+}
+
+function computeRefreshTokenExpiresAt(): Date {
+  return new Date(Date.now() + env.REFRESH_TOKEN_EXPIRES_IN * 1000)
 }
 
 function sendVerificationEmail(email: string, token: string): void {

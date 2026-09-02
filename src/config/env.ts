@@ -21,6 +21,7 @@ const envSchema = z.object({
   JWT_CLEANUP_INTERVAL_MS: z.coerce.number().int().min(60_000).default(3_600_000),
   USER_HARD_DELETE_INTERVAL_MS: z.coerce.number().int().min(60_000).default(3_600_000),
   USER_HARD_DELETE_GRACE_DAYS: z.coerce.number().int().min(1).default(30),
+  REFRESH_TOKEN_EXPIRES_IN: z.coerce.number().int().positive().min(3600).default(2592000),
 })
 
 const parsed = envSchema.safeParse(process.env)

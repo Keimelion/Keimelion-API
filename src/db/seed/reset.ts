@@ -5,10 +5,11 @@ import { env } from '../../config/env.js'
 import * as usersSchema from '../entities/users/users.schema.js'
 import * as activeTokensSchema from '../entities/active-tokens/active-tokens.schema.js'
 import * as userDeletionAuditSchema from '../entities/user-deletion-audit/user-deletion-audit.schema.js'
+import * as refreshTokensSchema from '../entities/refresh-tokens/refresh-tokens.schema.js'
 import { seedUsers } from '../entities/users/users.fixture.js'
 
 const client = postgres(env.DATABASE_URL)
-const db = drizzle(client, { schema: { ...usersSchema, ...activeTokensSchema, ...userDeletionAuditSchema } })
+const db = drizzle(client, { schema: { ...usersSchema, ...activeTokensSchema, ...userDeletionAuditSchema, ...refreshTokensSchema } })
 
 try {
   console.log('Dropping schema...')

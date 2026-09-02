@@ -5,6 +5,7 @@ import { mountLogin } from './endpoints/login.js'
 import { mountLogout } from './endpoints/logout.js'
 import { mountForgotPassword } from './endpoints/forgot-password.js'
 import { mountResetPassword } from './endpoints/reset-password.js'
+import { mountRefresh } from './endpoints/refresh.js'
 import type { AppVariables } from '../../shared/types/app.js'
 
 export const authRouter = new Hono<{ Variables: AppVariables }>()
@@ -14,3 +15,4 @@ mountLogin(authRouter)
 mountLogout(authRouter)
 mountForgotPassword(authRouter)
 mountResetPassword(authRouter)
+mountRefresh(authRouter)

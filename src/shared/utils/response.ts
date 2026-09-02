@@ -17,8 +17,9 @@ export const errorMap: Record<ErrorCode, { status: ContentfulStatusCode; message
   USER_UPDATE_FAILED:      { status: HttpStatus.INTERNAL_SERVER_ERROR, message: 'Account could not be updated' },
   ACCOUNT_DELETION_FAILED: { status: HttpStatus.INTERNAL_SERVER_ERROR, message: 'Account could not be deleted' },
   LOGOUT_FAILED:           { status: HttpStatus.INTERNAL_SERVER_ERROR, message: 'Logout could not be completed' },
-  INVALID_RESET_TOKEN:     { status: HttpStatus.BAD_REQUEST,           message: 'Invalid or expired password reset token' },
-  INTERNAL_ERROR:          { status: HttpStatus.INTERNAL_SERVER_ERROR, message: 'An unexpected error occurred' },
+  INVALID_RESET_TOKEN:         { status: HttpStatus.BAD_REQUEST,           message: 'Invalid or expired password reset token' },
+  INVALID_REFRESH_TOKEN:       { status: HttpStatus.UNAUTHORIZED,          message: 'Invalid or expired refresh token' },
+  INTERNAL_ERROR:              { status: HttpStatus.INTERNAL_SERVER_ERROR, message: 'An unexpected error occurred' },
 }
 
 export function sendError(code: ErrorCode, metadata: Record<string, unknown> = {}): Response {
