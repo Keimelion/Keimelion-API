@@ -95,5 +95,5 @@ export async function updateLastActiveAt(userId: string): Promise<void> {
 
 export async function updatePasswordHash(userId: string, hash: string, tx?: DbTransaction): Promise<void> {
   const client = tx ?? db
-  await client.update(users).set({ passwordHash: hash, updatedAt: new Date() }).where(eq(users.id, userId))
+  await client.update(users).set({ passwordHash: hash }).where(eq(users.id, userId))
 }

@@ -29,7 +29,7 @@ export function mountChangePassword(router: Hono<{ Variables: AppVariables }>): 
     async (context) => {
       const user = context.get(HonoContextKey.USER)
       const input = context.req.valid('json')
-      const { data, httpStatus } = await changePassword(user.id, input.currentPassword, input.newPassword)
+      const { data, httpStatus } = await changePassword(user.id, input)
 
       if (httpStatus !== HttpStatus.NO_CONTENT) {
         return context.json(data, httpStatus as 400)

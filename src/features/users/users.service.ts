@@ -11,6 +11,7 @@ import { toPublicUser } from './users.mapper.js'
 import type { PublicUser } from './users.mapper.js'
 import type { ServiceResult } from '../../shared/types/service.js'
 import type { UpdateProfileInput } from './endpoints/update-profile.js'
+import type { ChangePasswordInput } from './endpoints/change-password.js'
 
 export async function getProfile(userId: string): Promise<ServiceResult<{ user: PublicUser }>> {
   const user = await findUserById(userId)
@@ -42,7 +43,7 @@ export async function deleteAccount(userId: string): Promise<ServiceResult<{ mes
   return { data: { message: 'Account deleted successfully' }, httpStatus: HttpStatus.OK }
 }
 
-export async function changePassword(userId: string, currentPassword: string, newPassword: string): Promise<ServiceResult<null>> {
+export async function changePassword(userId: string, input: ChangePasswordInput): Promise<ServiceResult<null>> {
   const user = await findUserById(userId)
 
   if (!user) {
@@ -53,13 +54,13 @@ export async function changePassword(userId: string, currentPassword: string, ne
     return serviceError(ErrorCode.INVALID_OPERATION)
   }
 
-  const isCurrentPasswordValid = await verifyPassword(currentPassword, user.passwordHash)
+  const isCurrentPasswordValid = await verifyPassword(input.currentPassword, user.passwordHash)
 
   if (!isCurrentPasswordValid) {
     return serviceError(ErrorCode.INVALID_CREDENTIALS)
   }
 
-  const newPasswordHash = await hashPassword(newPassword)
+  const newPasswordHash = await hashPassword(input.newPassword)
 
   await db.transaction(async (tx) => {
     await updatePasswordHash(userId, newPasswordHash, tx)
