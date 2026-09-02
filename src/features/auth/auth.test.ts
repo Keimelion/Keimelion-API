@@ -380,6 +380,63 @@ describe('POST /v1/auth/logout', () => {
 
     expect(response.status).toBe(500)
   })
+
+  it('revokes the refresh token when refreshToken is provided in the body', async () => {
+    const token = await generateTestToken(VALID_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(VALID_USER)
+    vi.mocked(db.query.activeTokens.findFirst).mockResolvedValueOnce(ACTIVE_TOKEN_ENTRY as never)
+
+    const txUpdate = vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn(() => Promise.resolve([])) })) }))
+    const txDelete = vi.fn(() => ({ where: vi.fn(() => Promise.resolve([])) }))
+    vi.mocked(db.transaction).mockImplementationOnce((async (callback: (tx: unknown) => Promise<unknown>) => {
+      return callback({ delete: txDelete, update: txUpdate, insert: vi.fn() })
+    }) as never)
+
+    const response = await app.request('/v1/auth/logout', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken: 'some-refresh-token' }),
+    })
+
+    expect(response.status).toBe(204)
+    expect(txDelete).toHaveBeenCalledTimes(1)
+    expect(txUpdate).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not touch refresh_tokens when the body has no refreshToken', async () => {
+    const token = await generateTestToken(VALID_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(VALID_USER)
+    vi.mocked(db.query.activeTokens.findFirst).mockResolvedValueOnce(ACTIVE_TOKEN_ENTRY as never)
+
+    const txUpdate = vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn(() => Promise.resolve([])) })) }))
+    const txDelete = vi.fn(() => ({ where: vi.fn(() => Promise.resolve([])) }))
+    vi.mocked(db.transaction).mockImplementationOnce((async (callback: (tx: unknown) => Promise<unknown>) => {
+      return callback({ delete: txDelete, update: txUpdate, insert: vi.fn() })
+    }) as never)
+
+    const response = await app.request('/v1/auth/logout', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    })
+
+    expect(response.status).toBe(204)
+    expect(txDelete).toHaveBeenCalledTimes(1)
+    expect(txUpdate).toHaveBeenCalledTimes(1)
+  })
+
+  it('returns 422 when refreshToken is an empty string', async () => {
+    const token = await generateTestToken(VALID_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(VALID_USER)
+    vi.mocked(db.query.activeTokens.findFirst).mockResolvedValueOnce(ACTIVE_TOKEN_ENTRY as never)
+
+    const response = await app.request('/v1/auth/logout', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken: '' }),
+    })
+
+    expect(response.status).toBe(422)
+  })
 })
 
 describe('POST /v1/auth/forgot-password', () => {
