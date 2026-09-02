@@ -124,13 +124,15 @@ export async function refreshAccessToken(rawToken: string): Promise<ServiceResul
   return { data: { accessToken: token, refreshToken: newRawRefreshToken }, httpStatus: HttpStatus.OK }
 }
 
-export async function logoutUser(payload: JwtPayload, userId: string): Promise<ServiceResult<{ message: string }>> {
+export async function logoutUser(payload: JwtPayload, userId: string, refreshToken?: string): Promise<ServiceResult<{ message: string }>> {
   if (!payload.jti) {
     return serviceError(ErrorCode.LOGOUT_FAILED)
   }
 
+  const refreshTokenHash = refreshToken === undefined ? undefined : hashSha256Hex(refreshToken)
+
   try {
-    await revokeTokenAndUpdateActivity(payload.jti, userId)
+    await revokeTokenAndUpdateActivity(payload.jti, userId, refreshTokenHash)
     return { data: { message: 'Logged out successfully' }, httpStatus: HttpStatus.OK }
   } catch {
     return serviceError(ErrorCode.LOGOUT_FAILED)
