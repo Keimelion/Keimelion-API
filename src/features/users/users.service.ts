@@ -43,7 +43,7 @@ export async function deleteAccount(userId: string): Promise<ServiceResult<{ mes
   return { data: { message: 'Account deleted successfully' }, httpStatus: HttpStatus.OK }
 }
 
-export async function changePassword(userId: string, input: ChangePasswordInput): Promise<ServiceResult<null>> {
+export async function changePassword(userId: string, input: ChangePasswordInput): Promise<ServiceResult<{ message: string }>> {
   const user = await findUserById(userId)
 
   if (!user) {
@@ -67,5 +67,5 @@ export async function changePassword(userId: string, input: ChangePasswordInput)
     await deleteAllUserTokens(userId, tx)
   })
 
-  return { data: null, httpStatus: HttpStatus.NO_CONTENT }
+  return { data: { message: 'Password changed successfully' }, httpStatus: HttpStatus.OK }
 }

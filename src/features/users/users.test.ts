@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { SignJWT } from 'jose'
-import { app } from '../../app.js'
 import { db } from '../../db/client.js'
+import { apiRequest } from '../../shared/test/api-request.js'
 
 const TEST_JWT_SECRET = 'test-secret-key-that-is-at-least-32-chars-long'
 
@@ -53,9 +53,7 @@ describe('GET /v1/users/me', () => {
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
 
-    const response = await app.request('/v1/users/me', {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    const response = await apiRequest('/v1/users/me', { token })
 
     const body = await response.json() as { user: { email: string } }
     expect(response.status).toBe(200)
@@ -63,14 +61,12 @@ describe('GET /v1/users/me', () => {
   })
 
   it('returns 401 when no authorization header is provided', async () => {
-    const response = await app.request('/v1/users/me')
+    const response = await apiRequest('/v1/users/me')
     expect(response.status).toBe(401)
   })
 
   it('returns 401 when JWT is expired or invalid', async () => {
-    const response = await app.request('/v1/users/me', {
-      headers: { Authorization: 'Bearer invalidtoken' },
-    })
+    const response = await apiRequest('/v1/users/me', { token: 'invalidtoken' })
     expect(response.status).toBe(401)
   })
 
@@ -79,9 +75,7 @@ describe('GET /v1/users/me', () => {
     const deletedUser = { ...SAFE_USER, deletedAt: new Date('2024-01-01') }
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(deletedUser)
 
-    const response = await app.request('/v1/users/me', {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    const response = await apiRequest('/v1/users/me', { token })
 
     expect(response.status).toBe(401)
   })
@@ -91,9 +85,7 @@ describe('GET /v1/users/me', () => {
     const bannedUser = { ...SAFE_USER, bannedAt: new Date('2024-01-01') }
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(bannedUser)
 
-    const response = await app.request('/v1/users/me', {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    const response = await apiRequest('/v1/users/me', { token })
 
     expect(response.status).toBe(403)
   })
@@ -118,13 +110,10 @@ describe('PATCH /v1/users/me', () => {
       }),
     } as never)
 
-    const response = await app.request('/v1/users/me', {
+    const response = await apiRequest('/v1/users/me', {
       method: 'PATCH',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ username: 'newusername' }),
+      token,
+      body: { username: 'newusername' },
     })
 
     const body = await response.json() as { user: { username: string } }
@@ -136,13 +125,10 @@ describe('PATCH /v1/users/me', () => {
     const token = await generateTestToken(SAFE_USER.id)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
 
-    const response = await app.request('/v1/users/me', {
+    const response = await apiRequest('/v1/users/me', {
       method: 'PATCH',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ avatarUrl: 'not-a-url' }),
+      token,
+      body: { avatarUrl: 'not-a-url' },
     })
 
     expect(response.status).toBe(422)
@@ -152,13 +138,10 @@ describe('PATCH /v1/users/me', () => {
     const token = await generateTestToken(SAFE_USER.id)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
 
-    const response = await app.request('/v1/users/me', {
+    const response = await apiRequest('/v1/users/me', {
       method: 'PATCH',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ username: 'invalid username@' }),
+      token,
+      body: { username: 'invalid username@' },
     })
 
     expect(response.status).toBe(422)
@@ -171,7 +154,7 @@ describe('POST /v1/users/me/change-password', () => {
     vi.mocked(db.query.activeTokens.findFirst).mockResolvedValue(ACTIVE_TOKEN_ENTRY as never)
   })
 
-  it('returns 204 and revokes all tokens when current password is correct', async () => {
+  it('returns 200 with message and revokes all tokens when current password is correct', async () => {
     const bcrypt = await import('bcryptjs')
     const hash = await bcrypt.default.hash('OldPassword1', 4)
     const token = await generateTestToken(SAFE_USER.id)
@@ -180,24 +163,22 @@ describe('POST /v1/users/me/change-password', () => {
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(userWithHash)
 
-    const response = await app.request('/v1/users/me/change-password', {
+    const response = await apiRequest('/v1/users/me/change-password', {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ currentPassword: 'OldPassword1', newPassword: 'NewPassword9' }),
+      token,
+      body: { currentPassword: 'OldPassword1', newPassword: 'NewPassword9' },
     })
 
-    expect(response.status).toBe(204)
+    const body = await response.json() as { message: string }
+    expect(response.status).toBe(200)
+    expect(body.message).toBe('Password changed successfully')
     expect(vi.mocked(db.transaction)).toHaveBeenCalledOnce()
   })
 
   it('returns 401 when no authorization header is provided', async () => {
-    const response = await app.request('/v1/users/me/change-password', {
+    const response = await apiRequest('/v1/users/me/change-password', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ currentPassword: 'OldPassword1', newPassword: 'NewPassword9' }),
+      body: { currentPassword: 'OldPassword1', newPassword: 'NewPassword9' },
     })
 
     expect(response.status).toBe(401)
@@ -207,13 +188,10 @@ describe('POST /v1/users/me/change-password', () => {
     const token = await generateTestToken(SAFE_USER.id)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
 
-    const response = await app.request('/v1/users/me/change-password', {
+    const response = await apiRequest('/v1/users/me/change-password', {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ newPassword: 'NewPassword9' }),
+      token,
+      body: { newPassword: 'NewPassword9' },
     })
 
     expect(response.status).toBe(422)
@@ -223,13 +201,10 @@ describe('POST /v1/users/me/change-password', () => {
     const token = await generateTestToken(SAFE_USER.id)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
 
-    const response = await app.request('/v1/users/me/change-password', {
+    const response = await apiRequest('/v1/users/me/change-password', {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ currentPassword: 'OldPassword1' }),
+      token,
+      body: { currentPassword: 'OldPassword1' },
     })
 
     expect(response.status).toBe(422)
@@ -239,13 +214,10 @@ describe('POST /v1/users/me/change-password', () => {
     const token = await generateTestToken(SAFE_USER.id)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
 
-    const response = await app.request('/v1/users/me/change-password', {
+    const response = await apiRequest('/v1/users/me/change-password', {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ currentPassword: 'SamePassword1', newPassword: 'SamePassword1' }),
+      token,
+      body: { currentPassword: 'SamePassword1', newPassword: 'SamePassword1' },
     })
 
     expect(response.status).toBe(422)
@@ -260,13 +232,10 @@ describe('POST /v1/users/me/change-password', () => {
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(userWithHash)
 
-    const response = await app.request('/v1/users/me/change-password', {
+    const response = await apiRequest('/v1/users/me/change-password', {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ currentPassword: 'WrongPassword1', newPassword: 'NewPassword9' }),
+      token,
+      body: { currentPassword: 'WrongPassword1', newPassword: 'NewPassword9' },
     })
 
     const body = await response.json() as { code: string }
@@ -281,13 +250,10 @@ describe('POST /v1/users/me/change-password', () => {
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(oauthUser)
 
-    const response = await app.request('/v1/users/me/change-password', {
+    const response = await apiRequest('/v1/users/me/change-password', {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ currentPassword: 'OldPassword1', newPassword: 'NewPassword9' }),
+      token,
+      body: { currentPassword: 'OldPassword1', newPassword: 'NewPassword9' },
     })
 
     const body = await response.json() as { code: string }
@@ -315,10 +281,7 @@ describe('DELETE /v1/users/me', () => {
       }),
     } as never)
 
-    const response = await app.request('/v1/users/me', {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    const response = await apiRequest('/v1/users/me', { method: 'DELETE', token })
 
     const body = await response.json() as { message: string }
     expect(response.status).toBe(200)
@@ -326,7 +289,7 @@ describe('DELETE /v1/users/me', () => {
   })
 
   it('returns 401 when not authenticated', async () => {
-    const response = await app.request('/v1/users/me', { method: 'DELETE' })
+    const response = await apiRequest('/v1/users/me', { method: 'DELETE' })
     expect(response.status).toBe(401)
   })
 })

@@ -5,7 +5,6 @@ import { createRateLimiter } from '../../../shared/utils/rate-limiter.js'
 import { validationErrorHandler } from '../../../shared/utils/validation.js'
 import { passwordSchema } from '../../../shared/schemas/password.js'
 import { HonoContextKey } from '../../../shared/enums/context-key.js'
-import { HttpStatus } from '../../../shared/enums/http.js'
 import { changePassword } from '../users.service.js'
 import type { AppVariables } from '../../../shared/types/app.js'
 
@@ -30,12 +29,7 @@ export function mountChangePassword(router: Hono<{ Variables: AppVariables }>): 
       const user = context.get(HonoContextKey.USER)
       const input = context.req.valid('json')
       const { data, httpStatus } = await changePassword(user.id, input)
-
-      if (httpStatus !== HttpStatus.NO_CONTENT) {
-        return context.json(data, httpStatus as 400)
-      }
-
-      return context.body(null, HttpStatus.NO_CONTENT)
+      return context.json(data, httpStatus as 200)
     },
   )
 }

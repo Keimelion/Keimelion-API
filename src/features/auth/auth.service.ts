@@ -78,14 +78,14 @@ export async function loginUser(input: LoginInput): Promise<ServiceResult<{ toke
   return { data: { token, user: toPublicUser(user) }, httpStatus: HttpStatus.OK }
 }
 
-export async function logoutUser(payload: JwtPayload, userId: string): Promise<ServiceResult<null>> {
+export async function logoutUser(payload: JwtPayload, userId: string): Promise<ServiceResult<{ message: string }>> {
   if (!payload.jti) {
     return serviceError(ErrorCode.LOGOUT_FAILED)
   }
 
   try {
     await revokeTokenAndUpdateActivity(payload.jti, userId)
-    return { data: null, httpStatus: HttpStatus.NO_CONTENT }
+    return { data: { message: 'Logged out successfully' }, httpStatus: HttpStatus.OK }
   } catch {
     return serviceError(ErrorCode.LOGOUT_FAILED)
   }
