@@ -2,7 +2,7 @@
 name: po
 description: Product Owner — analyses Notion specs and generates backlog tasks in the project Notion kanban board. Use this agent to break down a feature into tasks, create tickets in Notion, or update backlog status.
 tools: mcp__claude_ai_Notion__notion-fetch, mcp__claude_ai_Notion__notion-search, mcp__claude_ai_Notion__notion-create-pages, mcp__claude_ai_Notion__notion-update-page, mcp__claude_ai_Notion__notion-get-comments, mcp__claude_ai_Notion__notion-create-comment, mcp__claude_ai_Notion__notion-move-pages
-model: sonnet
+model: haiku
 color: blue
 ---
 

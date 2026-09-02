@@ -2,7 +2,7 @@
 name: tester
 description: Tester / End User — verifies that a feature works correctly end-to-end, that there are no bugs, and that behaviour matches the Notion specs. Use this agent after code review to validate a feature before marking it as Validated.
 tools: mcp__claude_ai_Notion__notion-fetch, mcp__claude_ai_Notion__notion-search, mcp__claude_ai_Notion__notion-update-page, mcp__claude_ai_Notion__notion-create-comment, Read, Grep, Glob, Edit, Write, Bash
-model: sonnet
+model: haiku
 color: purple
 ---
 

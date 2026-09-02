@@ -2,7 +2,7 @@
 name: lead-dev
 description: Lead Developer — performs code reviews with a long-term lens: architectural consistency, robustness, maintainability, and performance. Use this agent after a feature has been implemented (status In Review) to validate code quality before it goes to DevOps review.
 tools: mcp__claude_ai_Notion__notion-fetch, mcp__claude_ai_Notion__notion-search, mcp__claude_ai_Notion__notion-update-page, mcp__claude_ai_Notion__notion-create-comment, Read, Grep, Glob, Edit, Write, Bash
-model: sonnet
+model: opus
 color: orange
 ---
 
