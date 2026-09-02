@@ -1,10 +1,10 @@
-import { randomUUID, randomBytes, createHash } from 'crypto'
+import { randomUUID, randomBytes } from 'crypto'
 import { env } from '../../config/env.js'
 import { HttpStatus } from '../../shared/enums/http.js'
 import { ErrorCode } from '../../shared/enums/error-code.js'
 import { NodeEnvs } from '../../shared/enums/node-env.js'
 import { serviceError } from '../../shared/utils/response.js'
-import { hashPassword, verifyPassword } from '../../shared/utils/hash.js'
+import { hashPassword, verifyPassword, hashSha256Hex } from '../../shared/utils/hash.js'
 import { logger } from '../../shared/utils/logger.js'
 import { signJwt } from './jwt.service.js'
 import type { JwtPayload } from './jwt.service.js'
@@ -18,9 +18,13 @@ import {
   resetUserPassword,
 } from '../users/users.repository.js'
 import { toPublicUser } from '../users/users.mapper.js'
-import { storeTokenAndUpdateActivity, revokeTokenAndUpdateActivity } from './auth.repository.js'
+import {
+  storeTokenAndUpdateActivity,
+  revokeTokenAndUpdateActivity,
+  rotateRefreshTokenAndIssueAccessToken,
+} from './auth.repository.js'
 import { deleteAllUserTokens } from '../../db/entities/active-tokens/active-tokens.repository.js'
-import { insertRefreshToken, findRefreshTokenByHash, revokeRefreshToken } from '../../db/entities/refresh-tokens/refresh-tokens.repository.js'
+import { insertRefreshToken, findRefreshTokenByHash } from '../../db/entities/refresh-tokens/refresh-tokens.repository.js'
 import { findUserById } from '../../db/entities/users/users.repository.js'
 import type { PublicUser } from '../users/users.mapper.js'
 import type { ServiceResult } from '../../shared/types/service.js'
@@ -29,6 +33,9 @@ import type { VerifyEmailInput } from './endpoints/verify-email.js'
 import type { LoginInput } from './endpoints/login.js'
 import type { ForgotPasswordInput } from './endpoints/forgot-password.js'
 import type { ResetPasswordInput } from './endpoints/reset-password.js'
+
+const PASSWORD_RESET_TOKEN_TTL_MS = 60 * 60 * 1000
+const REFRESH_TOKEN_BYTE_LENGTH = 32
 
 export async function registerUser(input: RegisterInput): Promise<ServiceResult<{ user: PublicUser; refreshToken: string }>> {
   if (await isEmailAlreadyTaken(input.email)) {
@@ -61,7 +68,7 @@ export async function verifyEmail(input: VerifyEmailInput): Promise<ServiceResul
   return { data: { message: 'Email verified successfully' }, httpStatus: HttpStatus.OK }
 }
 
-export async function loginUser(input: LoginInput): Promise<ServiceResult<{ token: string; refreshToken: string; user: PublicUser }>> {
+export async function loginUser(input: LoginInput): Promise<ServiceResult<{ accessToken: string; refreshToken: string; user: PublicUser }>> {
   const user = await findUserByEmail(input.email)
 
   if (!user || await isPasswordInvalid(input.password, user.passwordHash)) {
@@ -81,11 +88,11 @@ export async function loginUser(input: LoginInput): Promise<ServiceResult<{ toke
 
   const rawRefreshToken = await issueRefreshToken(user.id)
 
-  return { data: { token, refreshToken: rawRefreshToken, user: toPublicUser(user) }, httpStatus: HttpStatus.OK }
+  return { data: { accessToken: token, refreshToken: rawRefreshToken, user: toPublicUser(user) }, httpStatus: HttpStatus.OK }
 }
 
 export async function refreshAccessToken(rawToken: string): Promise<ServiceResult<{ accessToken: string; refreshToken: string }>> {
-  const tokenHash = hashToken(rawToken)
+  const tokenHash = hashSha256Hex(rawToken)
   const existingToken = await findRefreshTokenByHash(tokenHash)
 
   if (!existingToken || existingToken.revokedAt || existingToken.expiresAt < new Date()) {
@@ -102,12 +109,17 @@ export async function refreshAccessToken(rawToken: string): Promise<ServiceResul
     return serviceError(ErrorCode.ACCOUNT_BANNED)
   }
 
-  await revokeRefreshToken(existingToken.id)
-
   const { token, jti, expiresAt } = await signJwt(user.id, user.role)
-  await storeTokenAndUpdateActivity(jti, user.id, expiresAt)
+  const newRawRefreshToken = generateRawRefreshToken()
 
-  const newRawRefreshToken = await issueRefreshToken(user.id)
+  await rotateRefreshTokenAndIssueAccessToken({
+    previousRefreshTokenId: existingToken.id,
+    newAccessTokenJti: jti,
+    newAccessTokenExpiresAt: expiresAt,
+    newRefreshTokenHash: hashSha256Hex(newRawRefreshToken),
+    newRefreshTokenExpiresAt: computeRefreshTokenExpiresAt(),
+    userId: user.id,
+  })
 
   return { data: { accessToken: token, refreshToken: newRawRefreshToken }, httpStatus: HttpStatus.OK }
 }
@@ -133,8 +145,8 @@ export async function requestPasswordReset(input: ForgotPasswordInput): Promise<
     return { data: { message: genericMessage }, httpStatus: HttpStatus.OK }
   }
 
-  const rawToken = randomBytes(32).toString('hex')
-  const tokenHash = hashResetToken(rawToken)
+  const rawToken = randomBytes(REFRESH_TOKEN_BYTE_LENGTH).toString('hex')
+  const tokenHash = hashSha256Hex(rawToken)
   const expiresAt = new Date(Date.now() + PASSWORD_RESET_TOKEN_TTL_MS)
 
   await setPasswordResetToken(user.id, { passwordResetToken: tokenHash, passwordResetTokenExpiresAt: expiresAt })
@@ -151,7 +163,7 @@ export async function requestPasswordReset(input: ForgotPasswordInput): Promise<
 }
 
 export async function resetPassword(input: ResetPasswordInput): Promise<ServiceResult<{ message: string }>> {
-  const tokenHash = hashResetToken(input.password_reset_token)
+  const tokenHash = hashSha256Hex(input.password_reset_token)
   const user = await findUserByPasswordResetToken(tokenHash)
 
   if (!user?.passwordResetTokenExpiresAt || user.passwordResetTokenExpiresAt < new Date()) {
@@ -171,24 +183,12 @@ export async function resetPassword(input: ResetPasswordInput): Promise<ServiceR
   return { data: { message: 'Password reset successfully' }, httpStatus: HttpStatus.OK }
 }
 
-async function issueRefreshToken(userId: string): Promise<string> {
-  const rawToken = generateRawRefreshToken()
-  const tokenHash = hashToken(rawToken)
-  const expiresAt = computeRefreshTokenExpiresAt()
-  await insertRefreshToken(tokenHash, userId, expiresAt)
-  return rawToken
+async function isEmailAlreadyTaken(email: string): Promise<boolean> {
+  return (await findUserByEmail(email)) !== undefined
 }
 
-function generateRawRefreshToken(): string {
-  return randomBytes(32).toString('hex')
-}
-
-function hashToken(rawToken: string): string {
-  return createHash('sha256').update(rawToken).digest('hex')
-}
-
-function computeRefreshTokenExpiresAt(): Date {
-  return new Date(Date.now() + env.REFRESH_TOKEN_EXPIRES_IN * 1000)
+async function isPasswordInvalid(password: string, hash: string | null): Promise<boolean> {
+  return !hash || !(await verifyPassword(password, hash))
 }
 
 function sendVerificationEmail(email: string, token: string): void {
@@ -202,18 +202,18 @@ function sendVerificationEmail(email: string, token: string): void {
   logger.info({ email }, 'Sending verification email via Resend')
 }
 
-async function isEmailAlreadyTaken(email: string): Promise<boolean> {
-  return (await findUserByEmail(email)) !== undefined
+async function issueRefreshToken(userId: string): Promise<string> {
+  const rawToken = generateRawRefreshToken()
+  await insertRefreshToken(hashSha256Hex(rawToken), userId, computeRefreshTokenExpiresAt())
+  return rawToken
 }
 
-async function isPasswordInvalid(password: string, hash: string | null): Promise<boolean> {
-  return !hash || !(await verifyPassword(password, hash))
+function generateRawRefreshToken(): string {
+  return randomBytes(REFRESH_TOKEN_BYTE_LENGTH).toString('hex')
 }
 
-const PASSWORD_RESET_TOKEN_TTL_MS = 60 * 60 * 1000
-
-function hashResetToken(rawToken: string): string {
-  return createHash('sha256').update(rawToken).digest('hex')
+function computeRefreshTokenExpiresAt(): Date {
+  return new Date(Date.now() + env.REFRESH_TOKEN_EXPIRES_IN * 1000)
 }
 
 function logPasswordResetToken(email: string, rawToken: string): void {

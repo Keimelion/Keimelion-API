@@ -225,7 +225,7 @@ describe('POST /v1/auth/login', () => {
     vi.clearAllMocks()
   })
 
-  it('returns 200 with token, refreshToken, and user when credentials are valid', async () => {
+  it('returns 200 with accessToken, refreshToken, and user when credentials are valid', async () => {
     const bcrypt = await import('bcryptjs')
     const hash = await bcrypt.default.hash('securepassword123', 4)
     const userWithHash = { ...VALID_USER, passwordHash: hash }
@@ -239,9 +239,9 @@ describe('POST /v1/auth/login', () => {
       body: JSON.stringify({ email: 'user@example.com', password: 'securepassword123' }),
     })
 
-    const body = await response.json() as { token: string; refreshToken: string; user: { email: string } }
+    const body = await response.json() as { accessToken: string; refreshToken: string; user: { email: string } }
     expect(response.status).toBe(200)
-    expect(typeof body.token).toBe('string')
+    expect(typeof body.accessToken).toBe('string')
     expect(typeof body.refreshToken).toBe('string')
     expect(body.refreshToken.length).toBeGreaterThan(0)
     expect(body.user.email).toBe('user@example.com')
@@ -605,26 +605,24 @@ describe('POST /v1/auth/refresh', () => {
     vi.clearAllMocks()
   })
 
-  it('returns 200 with new accessToken and refreshToken when token is valid', async () => {
+  it('returns 200 with a new accessToken and a rotated refreshToken inside a single transaction', async () => {
+    const submittedRefreshToken = 'some-valid-raw-token'
     vi.mocked(db.query.refreshTokens.findFirst).mockResolvedValueOnce(VALID_REFRESH_TOKEN_ROW as never)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(VALID_USER)
-    vi.mocked(db.update).mockReturnValueOnce({
-      set: vi.fn().mockReturnValueOnce({
-        where: vi.fn().mockResolvedValueOnce(undefined),
-      }),
-    } as never)
-    mockInsertNoReturning()
 
     const response = await app.request('/v1/auth/refresh', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refreshToken: 'some-valid-raw-token' }),
+      body: JSON.stringify({ refreshToken: submittedRefreshToken }),
     })
 
     const body = await response.json() as { accessToken: string; refreshToken: string }
     expect(response.status).toBe(200)
     expect(typeof body.accessToken).toBe('string')
-    expect(typeof body.refreshToken).toBe('string')
+    expect(body.accessToken.length).toBeGreaterThan(0)
+    expect(body.refreshToken).not.toBe(submittedRefreshToken)
+    expect(body.refreshToken).toMatch(/^[a-f0-9]{64}$/)
+    expect(vi.mocked(db.transaction)).toHaveBeenCalledOnce()
   })
 
   it('returns 401 when refreshToken is not found', async () => {
