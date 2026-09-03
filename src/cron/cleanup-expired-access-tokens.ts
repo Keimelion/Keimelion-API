@@ -1,4 +1,4 @@
-import { deleteExpiredTokens } from '../db/entities/active-tokens/active-tokens.repository.js'
+import { deleteExpiredTokens } from '../db/entities/access-tokens/access-tokens.repository.js'
 import { logger } from '../shared/utils/logger.js'
 
 let intervalId: ReturnType<typeof setInterval> | null = null

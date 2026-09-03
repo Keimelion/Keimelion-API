@@ -65,7 +65,8 @@ Delegate to the Dev agent. Pass:
 - The full ticket content (from Step 0)
 
 Dev agent tasks:
-- Create a branch following the naming convention, from `dev`
+- **Sync `dev` first** — run `git fetch origin dev` then `git checkout dev && git merge --ff-only origin/dev`. If the fast-forward fails (local `dev` has diverged), stop and report — do NOT force-update or rebase without explicit user approval.
+- Create a branch following the naming convention, from the up-to-date `dev`
 - Read existing files to understand patterns before writing any code
 - Implement in order: DB schema → service → route → tests
 - If DB schema was created or modified: run `npm run db:generate -- --name=<slug>` and confirm a `.sql` file was produced in `src/db/migrations/`

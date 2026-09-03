@@ -7,6 +7,7 @@ import { apiRequest } from '../../shared/test/api-request.js'
 
 const TEST_JWT_SECRET = 'test-secret-key-that-is-at-least-32-chars-long'
 const TEST_JTI = '00000000-0000-0000-0000-000000000099'
+const TEST_REFRESH_TOKEN_HASH = 'a'.repeat(64)
 
 async function generateTestToken(userId: string, options: { includeJti?: boolean; expired?: boolean } = {}): Promise<string> {
   const { includeJti = true, expired = false } = options
@@ -46,20 +47,40 @@ const VALID_USER = {
   updatedAt: new Date('2024-01-01'),
 }
 
-const ACTIVE_TOKEN_ENTRY = { jti: TEST_JTI, userId: VALID_USER.id, expiresAt: new Date(Date.now() + 60 * 60 * 1000) }
+const ACCESS_TOKEN_ENTRY = { tokenId: TEST_JTI, userId: VALID_USER.id, expiresAt: new Date(Date.now() + 60 * 60 * 1000) }
+
+const VALID_REFRESH_TOKEN_ROW = {
+  id: '00000000-0000-0000-0000-000000000010',
+  userId: VALID_USER.id,
+  tokenHash: TEST_REFRESH_TOKEN_HASH,
+  expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+  createdAt: new Date('2024-01-01'),
+  revokedAt: null,
+}
+
+function mockInsertReturning(returnValue: unknown): void {
+  vi.mocked(db.insert).mockReturnValueOnce({
+    values: vi.fn().mockReturnValueOnce({
+      returning: vi.fn().mockResolvedValueOnce([returnValue]),
+    }),
+  } as never)
+}
+
+function mockInsertNoReturning(): void {
+  vi.mocked(db.insert).mockReturnValueOnce({
+    values: vi.fn().mockResolvedValueOnce(undefined),
+  } as never)
+}
 
 describe('POST /v1/auth/register', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
 
-  it('returns 201 with user when registration is successful', async () => {
+  it('returns 201 with user and refreshToken when registration is successful', async () => {
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(undefined)
-    vi.mocked(db.insert).mockReturnValueOnce({
-      values: vi.fn().mockReturnValueOnce({
-        returning: vi.fn().mockResolvedValueOnce([VALID_USER]),
-      }),
-    } as never)
+    mockInsertReturning(VALID_USER)
+    mockInsertNoReturning()
 
     const response = await apiRequest('/v1/auth/register', {
       method: 'POST',
@@ -70,9 +91,11 @@ describe('POST /v1/auth/register', () => {
       },
     })
 
-    const body = await response.json() as { user: { id: string; email: string } }
+    const body = await response.json() as { user: { id: string; email: string }; refreshToken: string }
     expect(response.status).toBe(201)
     expect(body.user.email).toBe('user@example.com')
+    expect(typeof body.refreshToken).toBe('string')
+    expect(body.refreshToken.length).toBeGreaterThan(0)
   })
 
   it('returns 409 when email already exists', async () => {
@@ -194,21 +217,24 @@ describe('POST /v1/auth/login', () => {
     vi.clearAllMocks()
   })
 
-  it('returns 200 with token and user when credentials are valid', async () => {
+  it('returns 200 with accessToken, refreshToken, and user when credentials are valid', async () => {
     const bcrypt = await import('bcryptjs')
     const hash = await bcrypt.default.hash('securepassword123', 4)
     const userWithHash = { ...VALID_USER, passwordHash: hash }
 
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(userWithHash)
+    mockInsertNoReturning()
 
     const response = await apiRequest('/v1/auth/login', {
       method: 'POST',
       body: { email: 'user@example.com', password: 'securepassword123' },
     })
 
-    const body = await response.json() as { token: string; user: { email: string } }
+    const body = await response.json() as { accessToken: string; refreshToken: string; user: { email: string } }
     expect(response.status).toBe(200)
-    expect(typeof body.token).toBe('string')
+    expect(typeof body.accessToken).toBe('string')
+    expect(typeof body.refreshToken).toBe('string')
+    expect(body.refreshToken.length).toBeGreaterThan(0)
     expect(body.user.email).toBe('user@example.com')
   })
 
@@ -274,7 +300,7 @@ describe('POST /v1/auth/logout', () => {
   it('returns 200 with message and runs transaction when logout is successful', async () => {
     const token = await generateTestToken(VALID_USER.id)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(VALID_USER)
-    vi.mocked(db.query.activeTokens.findFirst).mockResolvedValueOnce(ACTIVE_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValueOnce(ACCESS_TOKEN_ENTRY as never)
 
     const response = await apiRequest('/v1/auth/logout', { method: 'POST', token })
 
@@ -308,7 +334,7 @@ describe('POST /v1/auth/logout', () => {
   it('returns 401 when token is not active', async () => {
     const token = await generateTestToken(VALID_USER.id)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(VALID_USER)
-    vi.mocked(db.query.activeTokens.findFirst).mockResolvedValueOnce(undefined)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValueOnce(undefined)
 
     const response = await apiRequest('/v1/auth/logout', { method: 'POST', token })
 
@@ -318,12 +344,66 @@ describe('POST /v1/auth/logout', () => {
   it('returns 500 when the logout transaction fails', async () => {
     const token = await generateTestToken(VALID_USER.id)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(VALID_USER)
-    vi.mocked(db.query.activeTokens.findFirst).mockResolvedValueOnce(ACTIVE_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValueOnce(ACCESS_TOKEN_ENTRY as never)
     vi.mocked(db.transaction).mockRejectedValueOnce(new Error('DB error'))
 
     const response = await apiRequest('/v1/auth/logout', { method: 'POST', token })
 
     expect(response.status).toBe(500)
+  })
+
+  it('revokes the refresh token when refreshToken is provided in the body', async () => {
+    const token = await generateTestToken(VALID_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(VALID_USER)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValueOnce(ACCESS_TOKEN_ENTRY as never)
+
+    const txUpdate = vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn(() => Promise.resolve([])) })) }))
+    const txDelete = vi.fn(() => ({ where: vi.fn(() => Promise.resolve([])) }))
+    vi.mocked(db.transaction).mockImplementationOnce((async (callback: (tx: unknown) => Promise<unknown>) => {
+      return callback({ delete: txDelete, update: txUpdate, insert: vi.fn() })
+    }) as never)
+
+    const response = await apiRequest('/v1/auth/logout', {
+      method: 'POST',
+      token,
+      body: { refreshToken: 'some-refresh-token' },
+    })
+
+    expect(response.status).toBe(200)
+    expect(txDelete).toHaveBeenCalledTimes(1)
+    expect(txUpdate).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not touch refresh_tokens when the body has no refreshToken', async () => {
+    const token = await generateTestToken(VALID_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(VALID_USER)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValueOnce(ACCESS_TOKEN_ENTRY as never)
+
+    const txUpdate = vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn(() => Promise.resolve([])) })) }))
+    const txDelete = vi.fn(() => ({ where: vi.fn(() => Promise.resolve([])) }))
+    vi.mocked(db.transaction).mockImplementationOnce((async (callback: (tx: unknown) => Promise<unknown>) => {
+      return callback({ delete: txDelete, update: txUpdate, insert: vi.fn() })
+    }) as never)
+
+    const response = await apiRequest('/v1/auth/logout', { method: 'POST', token })
+
+    expect(response.status).toBe(200)
+    expect(txDelete).toHaveBeenCalledTimes(1)
+    expect(txUpdate).toHaveBeenCalledTimes(1)
+  })
+
+  it('returns 422 when refreshToken is an empty string', async () => {
+    const token = await generateTestToken(VALID_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(VALID_USER)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValueOnce(ACCESS_TOKEN_ENTRY as never)
+
+    const response = await apiRequest('/v1/auth/logout', {
+      method: 'POST',
+      token,
+      body: { refreshToken: '' },
+    })
+
+    expect(response.status).toBe(422)
   })
 })
 
@@ -525,6 +605,99 @@ describe('POST /v1/auth/reset-password', () => {
     const response = await apiRequest('/v1/auth/reset-password', {
       method: 'POST',
       body: { password: 'newpassword123' },
+    })
+
+    expect(response.status).toBe(422)
+  })
+})
+
+describe('POST /v1/auth/refresh', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('returns 200 with a new accessToken and a rotated refreshToken inside a single transaction', async () => {
+    const submittedRefreshToken = 'some-valid-raw-token'
+    vi.mocked(db.query.refreshTokens.findFirst).mockResolvedValueOnce(VALID_REFRESH_TOKEN_ROW as never)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(VALID_USER)
+
+    const response = await apiRequest('/v1/auth/refresh', {
+      method: 'POST',
+      body: { refreshToken: submittedRefreshToken },
+    })
+
+    const body = await response.json() as { accessToken: string; refreshToken: string }
+    expect(response.status).toBe(200)
+    expect(typeof body.accessToken).toBe('string')
+    expect(body.accessToken.length).toBeGreaterThan(0)
+    expect(body.refreshToken).not.toBe(submittedRefreshToken)
+    expect(body.refreshToken).toMatch(/^[a-f0-9]{64}$/)
+    expect(vi.mocked(db.transaction)).toHaveBeenCalledOnce()
+  })
+
+  it('returns 401 when refreshToken is not found', async () => {
+    vi.mocked(db.query.refreshTokens.findFirst).mockResolvedValueOnce(undefined)
+
+    const response = await apiRequest('/v1/auth/refresh', {
+      method: 'POST',
+      body: { refreshToken: 'unknown-token' },
+    })
+
+    expect(response.status).toBe(401)
+  })
+
+  it('returns 401 when refreshToken is revoked', async () => {
+    const revokedToken = { ...VALID_REFRESH_TOKEN_ROW, revokedAt: new Date('2024-01-01') }
+    vi.mocked(db.query.refreshTokens.findFirst).mockResolvedValueOnce(revokedToken as never)
+
+    const response = await apiRequest('/v1/auth/refresh', {
+      method: 'POST',
+      body: { refreshToken: 'revoked-token' },
+    })
+
+    expect(response.status).toBe(401)
+  })
+
+  it('returns 401 when refreshToken is expired', async () => {
+    const expiredToken = { ...VALID_REFRESH_TOKEN_ROW, expiresAt: new Date(Date.now() - 1000) }
+    vi.mocked(db.query.refreshTokens.findFirst).mockResolvedValueOnce(expiredToken as never)
+
+    const response = await apiRequest('/v1/auth/refresh', {
+      method: 'POST',
+      body: { refreshToken: 'expired-token' },
+    })
+
+    expect(response.status).toBe(401)
+  })
+
+  it('returns 401 when user is soft-deleted', async () => {
+    vi.mocked(db.query.refreshTokens.findFirst).mockResolvedValueOnce(VALID_REFRESH_TOKEN_ROW as never)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce({ ...VALID_USER, deletedAt: new Date('2024-01-01') })
+
+    const response = await apiRequest('/v1/auth/refresh', {
+      method: 'POST',
+      body: { refreshToken: 'some-token' },
+    })
+
+    expect(response.status).toBe(401)
+  })
+
+  it('returns 403 when user is banned', async () => {
+    vi.mocked(db.query.refreshTokens.findFirst).mockResolvedValueOnce(VALID_REFRESH_TOKEN_ROW as never)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce({ ...VALID_USER, bannedAt: new Date('2024-01-01') })
+
+    const response = await apiRequest('/v1/auth/refresh', {
+      method: 'POST',
+      body: { refreshToken: 'some-token' },
+    })
+
+    expect(response.status).toBe(403)
+  })
+
+  it('returns 422 when refreshToken field is missing', async () => {
+    const response = await apiRequest('/v1/auth/refresh', {
+      method: 'POST',
+      body: {},
     })
 
     expect(response.status).toBe(422)

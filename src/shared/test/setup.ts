@@ -17,6 +17,7 @@ vi.mock('../../config/env.js', () => ({
     EMAIL_API_KEY: undefined,
     EMAIL_FROM: undefined,
     JWT_CLEANUP_INTERVAL_MS: 3_600_000,
+    REFRESH_TOKEN_EXPIRES_IN: 2592000,
   },
 }))
 
@@ -31,7 +32,10 @@ vi.mock('../../db/client.js', () => ({
         findFirst: vi.fn(),
         findMany: vi.fn(),
       },
-      activeTokens: {
+      accessTokens: {
+        findFirst: vi.fn(),
+      },
+      refreshTokens: {
         findFirst: vi.fn(),
       },
     },

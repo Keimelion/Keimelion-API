@@ -9,6 +9,6 @@ CREATE TABLE "user_deletion_audit" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-ALTER TABLE "active_tokens" DROP CONSTRAINT "active_tokens_user_id_users_id_fk";
+ALTER TABLE "access_tokens" DROP CONSTRAINT "access_tokens_user_id_users_id_fk";
 --> statement-breakpoint
-ALTER TABLE "active_tokens" ADD CONSTRAINT "active_tokens_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+ALTER TABLE "access_tokens" ADD CONSTRAINT "access_tokens_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;

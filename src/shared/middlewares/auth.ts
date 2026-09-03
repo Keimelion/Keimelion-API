@@ -4,7 +4,7 @@ import { sendError } from '../utils/response.js'
 import { verifyJwt } from '../../features/auth/jwt.service.js'
 import type { JwtPayload } from '../../features/auth/jwt.service.js'
 import { findUserById, updateLastActiveAt } from '../../db/entities/users/users.repository.js'
-import { isTokenActive } from '../../db/entities/active-tokens/active-tokens.repository.js'
+import { isTokenActive } from '../../db/entities/access-tokens/access-tokens.repository.js'
 import { HonoContextKey } from '../enums/context-key.js'
 import type { AppVariables } from '../types/app.js'
 import { logger } from '../utils/logger.js'
@@ -16,7 +16,7 @@ export const authMiddleware: MiddlewareHandler<{ Variables: AppVariables }> = as
     return sendError(ErrorCode.UNAUTHORIZED)
   }
 
-  if (!payload.jti) {
+  if (!payload.tokenId) {
     return sendError(ErrorCode.UNAUTHORIZED)
   }
 
@@ -30,7 +30,7 @@ export const authMiddleware: MiddlewareHandler<{ Variables: AppVariables }> = as
     return sendError(ErrorCode.ACCOUNT_BANNED)
   }
 
-  const active = await isTokenActive(payload.jti)
+  const active = await isTokenActive(payload.tokenId)
   if (!active) {
     return sendError(ErrorCode.UNAUTHORIZED)
   }

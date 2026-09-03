@@ -9,26 +9,26 @@ const ALGORITHM = 'HS256'
 export interface JwtPayload {
   userId: string
   role: UserRole
-  jti: string | null
+  tokenId: string | null
   exp: number | null
 }
 
 export interface SignedToken {
   token: string
-  jti: string
+  tokenId: string
   expiresAt: Date
 }
 
 export async function signJwt(userId: string, role: UserRole): Promise<SignedToken> {
-  const jti = randomUUID()
+  const tokenId = randomUUID()
   const expiresAt = computeExpiresAt(env.JWT_EXPIRES_IN)
   const token = await new SignJWT({ sub: userId, role })
     .setProtectedHeader({ alg: ALGORITHM })
     .setIssuedAt()
     .setExpirationTime(env.JWT_EXPIRES_IN)
-    .setJti(jti)
+    .setJti(tokenId)
     .sign(encodeSecret())
-  return { token, jti, expiresAt }
+  return { token, tokenId, expiresAt }
 }
 
 export async function verifyJwt(token: string): Promise<JwtPayload | null> {
@@ -40,7 +40,7 @@ export async function verifyJwt(token: string): Promise<JwtPayload | null> {
     return {
       userId,
       role,
-      jti: typeof payload.jti === 'string' ? payload.jti : null,
+      tokenId: typeof payload.jti === 'string' ? payload.jti : null,
       exp: typeof payload.exp === 'number' ? payload.exp : null,
     }
   } catch {
