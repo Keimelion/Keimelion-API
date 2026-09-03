@@ -11,11 +11,12 @@ vi.mock('../shared/utils/logger.js', () => ({
   },
 }))
 
+import { env } from '../config/env.js'
 import { deleteExpiredRefreshTokens } from '../db/entities/refresh-tokens/refresh-tokens.repository.js'
 import { logger } from '../shared/utils/logger.js'
-import { start, stop } from './cleanup-expired-refresh-tokens.js'
+import { cleanupExpiredRefreshTokens } from './cleanup-expired-refresh-tokens.js'
 
-const INTERVAL_MS = 60_000
+const INTERVAL_MS = env.REFRESH_TOKEN_CLEANUP_INTERVAL_MS
 
 describe('cleanup-expired-refresh-tokens cron job', () => {
   beforeEach(() => {
@@ -24,12 +25,12 @@ describe('cleanup-expired-refresh-tokens cron job', () => {
   })
 
   afterEach(() => {
-    stop()
+    cleanupExpiredRefreshTokens.stop()
     vi.useRealTimers()
   })
 
   it('does not run at startup', () => {
-    start(INTERVAL_MS)
+    cleanupExpiredRefreshTokens.start()
 
     expect(vi.mocked(deleteExpiredRefreshTokens)).not.toHaveBeenCalled()
   })
@@ -37,7 +38,7 @@ describe('cleanup-expired-refresh-tokens cron job', () => {
   it('runs after the interval elapses', async () => {
     vi.mocked(deleteExpiredRefreshTokens).mockResolvedValueOnce(3)
 
-    start(INTERVAL_MS)
+    cleanupExpiredRefreshTokens.start()
     await vi.advanceTimersByTimeAsync(INTERVAL_MS)
 
     expect(vi.mocked(deleteExpiredRefreshTokens)).toHaveBeenCalledOnce()
@@ -46,7 +47,7 @@ describe('cleanup-expired-refresh-tokens cron job', () => {
   it('logs the number of deleted rows after each run', async () => {
     vi.mocked(deleteExpiredRefreshTokens).mockResolvedValueOnce(5)
 
-    start(INTERVAL_MS)
+    cleanupExpiredRefreshTokens.start()
     await vi.advanceTimersByTimeAsync(INTERVAL_MS)
 
     expect(vi.mocked(logger.info)).toHaveBeenCalledWith({ deletedCount: 5 }, 'Expired refresh token cleanup completed')
@@ -55,7 +56,7 @@ describe('cleanup-expired-refresh-tokens cron job', () => {
   it('logs zero deleted rows when no tokens are expired', async () => {
     vi.mocked(deleteExpiredRefreshTokens).mockResolvedValueOnce(0)
 
-    start(INTERVAL_MS)
+    cleanupExpiredRefreshTokens.start()
     await vi.advanceTimersByTimeAsync(INTERVAL_MS)
 
     expect(vi.mocked(logger.info)).toHaveBeenCalledWith({ deletedCount: 0 }, 'Expired refresh token cleanup completed')
@@ -66,7 +67,7 @@ describe('cleanup-expired-refresh-tokens cron job', () => {
     vi.mocked(deleteExpiredRefreshTokens).mockRejectedValueOnce(error)
     vi.mocked(deleteExpiredRefreshTokens).mockResolvedValueOnce(2)
 
-    start(INTERVAL_MS)
+    cleanupExpiredRefreshTokens.start()
     await vi.advanceTimersByTimeAsync(INTERVAL_MS)
 
     expect(vi.mocked(logger.error)).toHaveBeenCalledWith({ error }, 'Expired refresh token cleanup failed')
@@ -85,7 +86,7 @@ describe('cleanup-expired-refresh-tokens cron job', () => {
     })
     vi.mocked(deleteExpiredRefreshTokens).mockReturnValueOnce(firstRunPromise)
 
-    start(INTERVAL_MS)
+    cleanupExpiredRefreshTokens.start()
     await vi.advanceTimersByTimeAsync(INTERVAL_MS)
 
     await vi.advanceTimersByTimeAsync(INTERVAL_MS)
@@ -102,8 +103,8 @@ describe('cleanup-expired-refresh-tokens cron job', () => {
   it('stop cancels scheduled runs', async () => {
     vi.mocked(deleteExpiredRefreshTokens).mockResolvedValue(0)
 
-    start(INTERVAL_MS)
-    stop()
+    cleanupExpiredRefreshTokens.start()
+    cleanupExpiredRefreshTokens.stop()
     await vi.advanceTimersByTimeAsync(INTERVAL_MS * 3)
 
     expect(vi.mocked(deleteExpiredRefreshTokens)).not.toHaveBeenCalled()

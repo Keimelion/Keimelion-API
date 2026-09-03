@@ -1,16 +1,17 @@
 import { logger } from '../shared/utils/logger.js'
 
 export interface CronJob {
-  start: (intervalMs: number) => void
+  start: () => void
   stop: () => void
 }
 
 export interface CronJobOptions {
   name: string
+  intervalMs: number
   run: () => Promise<number>
 }
 
-export function createCronJob({ name, run }: CronJobOptions): CronJob {
+export function createCronJob({ name, intervalMs, run }: CronJobOptions): CronJob {
   let intervalId: ReturnType<typeof setInterval> | null = null
   let isRunning = false
 
@@ -29,7 +30,7 @@ export function createCronJob({ name, run }: CronJobOptions): CronJob {
   }
 
   return {
-    start: (intervalMs) => {
+    start: () => {
       intervalId = setInterval(() => {
         void tick()
       }, intervalMs)

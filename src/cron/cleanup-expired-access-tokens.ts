@@ -1,7 +1,9 @@
-import { deleteExpiredTokens } from '../db/entities/access-tokens/access-tokens.repository.js'
+import { env } from '../config/env.js'
+import { deleteExpiredAccessTokens } from '../db/entities/access-tokens/access-tokens.repository.js'
 import { createCronJob } from './create-cron-job.js'
 
-export const { start, stop } = createCronJob({
+export const cleanupExpiredAccessTokens = createCronJob({
   name: 'Expired JWT cleanup',
-  run: deleteExpiredTokens,
+  intervalMs: env.JWT_CLEANUP_INTERVAL_MS,
+  run: deleteExpiredAccessTokens,
 })

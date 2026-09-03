@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { db } from '../../client.js'
-import { deleteExpiredTokens } from './access-tokens.repository.js'
+import { deleteExpiredAccessTokens } from './access-tokens.repository.js'
 
-describe('deleteExpiredTokens', () => {
+describe('deleteExpiredAccessTokens', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
@@ -18,7 +18,7 @@ describe('deleteExpiredTokens', () => {
       }),
     } as never)
 
-    const count = await deleteExpiredTokens()
+    const count = await deleteExpiredAccessTokens()
 
     expect(count).toBe(2)
     expect(vi.mocked(db.delete)).toHaveBeenCalledOnce()
@@ -31,7 +31,7 @@ describe('deleteExpiredTokens', () => {
       }),
     } as never)
 
-    const count = await deleteExpiredTokens()
+    const count = await deleteExpiredAccessTokens()
 
     expect(count).toBe(0)
   })
@@ -43,6 +43,6 @@ describe('deleteExpiredTokens', () => {
       }),
     } as never)
 
-    await expect(deleteExpiredTokens()).rejects.toThrow('DB connection lost')
+    await expect(deleteExpiredAccessTokens()).rejects.toThrow('DB connection lost')
   })
 })
