@@ -1,14 +1,14 @@
-import { env } from '../config/env.js'
-import { db } from '../db/client.js'
+import { env } from '../../config/env.js'
+import { db } from '../../db/client.js'
 import {
   findUsersEligibleForHardDelete,
   hardDeleteUser,
   insertDeletionAudit,
-} from '../db/entities/users/users.repository.js'
-import type { User } from '../db/entities/users/users.schema.js'
-import type { DeletionReason } from '../shared/enums/deletion-reason.js'
-import { logger } from '../shared/utils/logger.js'
-import { createCronJob } from './create-cron-job.js'
+} from '../../db/entities/users/users.repository.js'
+import type { User } from '../../db/entities/users/users.schema.js'
+import type { DeletionReason } from '../../shared/enums/deletion-reason.js'
+import { logger } from '../../shared/utils/logger.js'
+import { createCronJob } from '../create-cron-job.js'
 
 async function runHardDelete(): Promise<number> {
   const eligibleUsers = await findUsersEligibleForHardDelete(env.USER_HARD_DELETE_GRACE_DAYS)

@@ -1,19 +1,19 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-vi.mock('../db/entities/refresh-tokens/refresh-tokens.repository.js', () => ({
+vi.mock('../../db/entities/refresh-tokens/refresh-tokens.repository.js', () => ({
   deleteExpiredRefreshTokens: vi.fn(),
 }))
 
-vi.mock('../shared/utils/logger.js', () => ({
+vi.mock('../../shared/utils/logger.js', () => ({
   logger: {
     info: vi.fn(),
     error: vi.fn(),
   },
 }))
 
-import { env } from '../config/env.js'
-import { deleteExpiredRefreshTokens } from '../db/entities/refresh-tokens/refresh-tokens.repository.js'
-import { logger } from '../shared/utils/logger.js'
+import { env } from '../../config/env.js'
+import { deleteExpiredRefreshTokens } from '../../db/entities/refresh-tokens/refresh-tokens.repository.js'
+import { logger } from '../../shared/utils/logger.js'
 import { cleanupExpiredRefreshTokens } from './cleanup-expired-refresh-tokens.js'
 
 const INTERVAL_MS = env.REFRESH_TOKEN_CLEANUP_INTERVAL_MS

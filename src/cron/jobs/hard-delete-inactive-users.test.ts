@@ -1,12 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-vi.mock('../db/entities/users/users.repository.js', () => ({
+vi.mock('../../db/entities/users/users.repository.js', () => ({
   findUsersEligibleForHardDelete: vi.fn(),
   hardDeleteUser: vi.fn(),
   insertDeletionAudit: vi.fn(),
 }))
 
-vi.mock('../shared/utils/logger.js', () => ({
+vi.mock('../../shared/utils/logger.js', () => ({
   logger: {
     info: vi.fn(),
     error: vi.fn(),
@@ -14,12 +14,12 @@ vi.mock('../shared/utils/logger.js', () => ({
   },
 }))
 
-import { env } from '../config/env.js'
-import { findUsersEligibleForHardDelete, hardDeleteUser, insertDeletionAudit } from '../db/entities/users/users.repository.js'
-import { db } from '../db/client.js'
-import { logger } from '../shared/utils/logger.js'
+import { env } from '../../config/env.js'
+import { findUsersEligibleForHardDelete, hardDeleteUser, insertDeletionAudit } from '../../db/entities/users/users.repository.js'
+import { db } from '../../db/client.js'
+import { logger } from '../../shared/utils/logger.js'
 import { hardDeleteInactiveUsers } from './hard-delete-inactive-users.js'
-import type { User } from '../db/entities/users/users.schema.js'
+import type { User } from '../../db/entities/users/users.schema.js'
 
 const INTERVAL_MS = env.USER_HARD_DELETE_INTERVAL_MS
 

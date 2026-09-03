@@ -1,19 +1,19 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-vi.mock('../db/entities/access-tokens/access-tokens.repository.js', () => ({
+vi.mock('../../db/entities/access-tokens/access-tokens.repository.js', () => ({
   deleteExpiredAccessTokens: vi.fn(),
 }))
 
-vi.mock('../shared/utils/logger.js', () => ({
+vi.mock('../../shared/utils/logger.js', () => ({
   logger: {
     info: vi.fn(),
     error: vi.fn(),
   },
 }))
 
-import { env } from '../config/env.js'
-import { deleteExpiredAccessTokens } from '../db/entities/access-tokens/access-tokens.repository.js'
-import { logger } from '../shared/utils/logger.js'
+import { env } from '../../config/env.js'
+import { deleteExpiredAccessTokens } from '../../db/entities/access-tokens/access-tokens.repository.js'
+import { logger } from '../../shared/utils/logger.js'
 import { cleanupExpiredAccessTokens } from './cleanup-expired-access-tokens.js'
 
 const INTERVAL_MS = env.JWT_CLEANUP_INTERVAL_MS
