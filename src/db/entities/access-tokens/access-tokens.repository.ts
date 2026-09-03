@@ -9,7 +9,7 @@ export async function isTokenActive(tokenId: string): Promise<boolean> {
   return entry !== undefined
 }
 
-export async function deleteExpiredTokens(): Promise<number> {
+export async function deleteExpiredAccessTokens(): Promise<number> {
   const deleted = await db
     .delete(accessTokens)
     .where(lt(accessTokens.expiresAt, new Date()))

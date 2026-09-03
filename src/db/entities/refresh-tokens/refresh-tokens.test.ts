@@ -1,16 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { db } from '../../client.js'
-import { deleteExpiredAccessTokens } from './access-tokens.repository.js'
+import { deleteExpiredRefreshTokens } from './refresh-tokens.repository.js'
 
-describe('deleteExpiredAccessTokens', () => {
+describe('deleteExpiredRefreshTokens', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
 
   it('returns the count of deleted rows', async () => {
     const deletedRows = [
-      { tokenId: '00000000-0000-0000-0000-000000000001' },
-      { tokenId: '00000000-0000-0000-0000-000000000002' },
+      { id: '00000000-0000-0000-0000-000000000001' },
+      { id: '00000000-0000-0000-0000-000000000002' },
     ]
     vi.mocked(db.delete).mockReturnValueOnce({
       where: vi.fn().mockReturnValueOnce({
@@ -18,7 +18,7 @@ describe('deleteExpiredAccessTokens', () => {
       }),
     } as never)
 
-    const count = await deleteExpiredAccessTokens()
+    const count = await deleteExpiredRefreshTokens()
 
     expect(count).toBe(2)
     expect(vi.mocked(db.delete)).toHaveBeenCalledOnce()
@@ -31,7 +31,7 @@ describe('deleteExpiredAccessTokens', () => {
       }),
     } as never)
 
-    const count = await deleteExpiredAccessTokens()
+    const count = await deleteExpiredRefreshTokens()
 
     expect(count).toBe(0)
   })
@@ -43,6 +43,6 @@ describe('deleteExpiredAccessTokens', () => {
       }),
     } as never)
 
-    await expect(deleteExpiredAccessTokens()).rejects.toThrow('DB connection lost')
+    await expect(deleteExpiredRefreshTokens()).rejects.toThrow('DB connection lost')
   })
 })

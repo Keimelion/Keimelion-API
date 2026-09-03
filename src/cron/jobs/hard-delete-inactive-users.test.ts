@@ -1,12 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-vi.mock('../db/entities/users/users.repository.js', () => ({
+vi.mock('../../db/entities/users/users.repository.js', () => ({
   findUsersEligibleForHardDelete: vi.fn(),
   hardDeleteUser: vi.fn(),
   insertDeletionAudit: vi.fn(),
 }))
 
-vi.mock('../shared/utils/logger.js', () => ({
+vi.mock('../../shared/utils/logger.js', () => ({
   logger: {
     info: vi.fn(),
     error: vi.fn(),
@@ -14,14 +14,14 @@ vi.mock('../shared/utils/logger.js', () => ({
   },
 }))
 
-import { findUsersEligibleForHardDelete, hardDeleteUser, insertDeletionAudit } from '../db/entities/users/users.repository.js'
-import { db } from '../db/client.js'
-import { logger } from '../shared/utils/logger.js'
-import { start, stop } from './hard-delete-inactive-users.js'
-import type { User } from '../db/entities/users/users.schema.js'
+import { env } from '../../config/env.js'
+import { findUsersEligibleForHardDelete, hardDeleteUser, insertDeletionAudit } from '../../db/entities/users/users.repository.js'
+import { db } from '../../db/client.js'
+import { logger } from '../../shared/utils/logger.js'
+import { hardDeleteInactiveUsers } from './hard-delete-inactive-users.js'
+import type { User } from '../../db/entities/users/users.schema.js'
 
-const INTERVAL_MS = 60_000
-const GRACE_DAYS = 30
+const INTERVAL_MS = env.USER_HARD_DELETE_INTERVAL_MS
 
 function makeUser(overrides: Partial<User> = {}): User {
   return {
@@ -61,18 +61,18 @@ describe('hard-delete-inactive-users cron job', () => {
   })
 
   afterEach(() => {
-    stop()
+    hardDeleteInactiveUsers.stop()
     vi.useRealTimers()
   })
 
   it('does not run at startup', () => {
-    start(INTERVAL_MS, GRACE_DAYS)
+    hardDeleteInactiveUsers.start()
     expect(vi.mocked(findUsersEligibleForHardDelete)).not.toHaveBeenCalled()
   })
 
   it('runs after the interval elapses', async () => {
     vi.mocked(findUsersEligibleForHardDelete).mockResolvedValueOnce([])
-    start(INTERVAL_MS, GRACE_DAYS)
+    hardDeleteInactiveUsers.start()
     await vi.advanceTimersByTimeAsync(INTERVAL_MS)
     expect(vi.mocked(findUsersEligibleForHardDelete)).toHaveBeenCalledOnce()
   })
@@ -82,7 +82,7 @@ describe('hard-delete-inactive-users cron job', () => {
     vi.mocked(findUsersEligibleForHardDelete).mockResolvedValueOnce([
       { user, reason: 'soft_delete_grace' },
     ])
-    start(INTERVAL_MS, GRACE_DAYS)
+    hardDeleteInactiveUsers.start()
     await vi.advanceTimersByTimeAsync(INTERVAL_MS)
     expect(vi.mocked(db.transaction)).toHaveBeenCalledOnce()
     expect(vi.mocked(logger.info)).toHaveBeenCalledWith(
@@ -96,7 +96,7 @@ describe('hard-delete-inactive-users cron job', () => {
     vi.mocked(findUsersEligibleForHardDelete).mockResolvedValueOnce([
       { user, reason: 'inactive_24mo' },
     ])
-    start(INTERVAL_MS, GRACE_DAYS)
+    hardDeleteInactiveUsers.start()
     await vi.advanceTimersByTimeAsync(INTERVAL_MS)
     expect(vi.mocked(db.transaction)).toHaveBeenCalledOnce()
     expect(vi.mocked(logger.info)).toHaveBeenCalledWith(
@@ -107,7 +107,7 @@ describe('hard-delete-inactive-users cron job', () => {
 
   it('does not touch ineligible users', async () => {
     vi.mocked(findUsersEligibleForHardDelete).mockResolvedValueOnce([])
-    start(INTERVAL_MS, GRACE_DAYS)
+    hardDeleteInactiveUsers.start()
     await vi.advanceTimersByTimeAsync(INTERVAL_MS)
     expect(vi.mocked(db.transaction)).not.toHaveBeenCalled()
     expect(vi.mocked(logger.info)).toHaveBeenCalledWith(
@@ -121,7 +121,7 @@ describe('hard-delete-inactive-users cron job', () => {
     vi.mocked(findUsersEligibleForHardDelete).mockResolvedValueOnce([
       { user, reason: 'soft_delete_grace' },
     ])
-    start(INTERVAL_MS, GRACE_DAYS)
+    hardDeleteInactiveUsers.start()
     await vi.advanceTimersByTimeAsync(INTERVAL_MS)
     expect(vi.mocked(insertDeletionAudit)).toHaveBeenCalledOnce()
     expect(vi.mocked(hardDeleteUser)).toHaveBeenCalledOnce()
@@ -152,7 +152,7 @@ describe('hard-delete-inactive-users cron job', () => {
         const fakeTx = {} as Parameters<Parameters<typeof db.transaction>[0]>[0]
         return callback(fakeTx)
       })
-    start(INTERVAL_MS, GRACE_DAYS)
+    hardDeleteInactiveUsers.start()
     await vi.advanceTimersByTimeAsync(INTERVAL_MS)
     expect(vi.mocked(logger.error)).toHaveBeenCalledWith(
       { error: transactionError },
@@ -173,7 +173,7 @@ describe('hard-delete-inactive-users cron job', () => {
       firstRunPromise as Promise<never>,
     )
     vi.mocked(findUsersEligibleForHardDelete).mockResolvedValue([])
-    start(INTERVAL_MS, GRACE_DAYS)
+    hardDeleteInactiveUsers.start()
     await vi.advanceTimersByTimeAsync(INTERVAL_MS)
     await vi.advanceTimersByTimeAsync(INTERVAL_MS)
     expect(vi.mocked(findUsersEligibleForHardDelete)).toHaveBeenCalledOnce()
@@ -185,8 +185,8 @@ describe('hard-delete-inactive-users cron job', () => {
 
   it('stop cancels scheduled runs', async () => {
     vi.mocked(findUsersEligibleForHardDelete).mockResolvedValue([])
-    start(INTERVAL_MS, GRACE_DAYS)
-    stop()
+    hardDeleteInactiveUsers.start()
+    hardDeleteInactiveUsers.stop()
     await vi.advanceTimersByTimeAsync(INTERVAL_MS * 3)
     expect(vi.mocked(findUsersEligibleForHardDelete)).not.toHaveBeenCalled()
   })
@@ -194,7 +194,7 @@ describe('hard-delete-inactive-users cron job', () => {
   it('logs error when findUsersEligibleForHardDelete throws', async () => {
     const error = new Error('DB failure')
     vi.mocked(findUsersEligibleForHardDelete).mockRejectedValueOnce(error)
-    start(INTERVAL_MS, GRACE_DAYS)
+    hardDeleteInactiveUsers.start()
     await vi.advanceTimersByTimeAsync(INTERVAL_MS)
     expect(vi.mocked(logger.error)).toHaveBeenCalledWith(
       { error },

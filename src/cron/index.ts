@@ -1,16 +1,13 @@
-import { env } from '../config/env.js'
-import { start as startCleanupExpiredAccessTokens, stop as stopCleanupExpiredAccessTokens } from './cleanup-expired-access-tokens.js'
-import {
-  start as startHardDeleteInactiveUsers,
-  stop as stopHardDeleteInactiveUsers,
-} from './hard-delete-inactive-users.js'
+import { cleanupExpiredAccessTokens } from './jobs/cleanup-expired-access-tokens.js'
+import { cleanupExpiredRefreshTokens } from './jobs/cleanup-expired-refresh-tokens.js'
+import { hardDeleteInactiveUsers } from './jobs/hard-delete-inactive-users.js'
+
+const jobs = [cleanupExpiredAccessTokens, cleanupExpiredRefreshTokens, hardDeleteInactiveUsers]
 
 export function startCronJobs(): void {
-  startCleanupExpiredAccessTokens(env.JWT_CLEANUP_INTERVAL_MS)
-  startHardDeleteInactiveUsers(env.USER_HARD_DELETE_INTERVAL_MS, env.USER_HARD_DELETE_GRACE_DAYS)
+  for (const job of jobs) job.start()
 }
 
 export function stopCronJobs(): void {
-  stopCleanupExpiredAccessTokens()
-  stopHardDeleteInactiveUsers()
+  for (const job of jobs) job.stop()
 }
