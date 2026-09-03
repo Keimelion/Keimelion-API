@@ -54,7 +54,7 @@ const TARGET_USER = {
 }
 
 const TEST_JTI = '00000000-0000-0000-0000-000000000099'
-const ACTIVE_TOKEN_ENTRY = { jti: TEST_JTI, userId: ADMIN_USER.id, expiresAt: new Date(Date.now() + 60 * 60 * 1000) }
+const ACCESS_TOKEN_ENTRY = { tokenId: TEST_JTI, userId: ADMIN_USER.id, expiresAt: new Date(Date.now() + 60 * 60 * 1000) }
 
 async function generateTestToken(userId: string, role = 'user'): Promise<string> {
   const secret = new TextEncoder().encode(TEST_JWT_SECRET)
@@ -69,7 +69,7 @@ async function generateTestToken(userId: string, role = 'user'): Promise<string>
 describe('GET /v1/admin/users', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(db.query.activeTokens.findFirst).mockResolvedValue(ACTIVE_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
   })
 
   it('returns 200 with paginated users list when admin is authenticated', async () => {
@@ -151,7 +151,7 @@ describe('GET /v1/admin/users', () => {
 describe('GET /v1/admin/users/:id', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(db.query.activeTokens.findFirst).mockResolvedValue(ACTIVE_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
   })
 
   it('returns 200 with admin user when id is valid', async () => {
@@ -211,7 +211,7 @@ describe('GET /v1/admin/users/:id', () => {
 describe('PATCH /v1/admin/users/:id', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(db.query.activeTokens.findFirst).mockResolvedValue(ACTIVE_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
   })
 
   it('returns 200 with updated user when body is valid', async () => {
@@ -363,7 +363,7 @@ describe('PATCH /v1/admin/users/:id', () => {
 describe('DELETE /v1/admin/users/:id', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(db.query.activeTokens.findFirst).mockResolvedValue(ACTIVE_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
   })
 
   it('returns 200 and soft-deletes the user', async () => {

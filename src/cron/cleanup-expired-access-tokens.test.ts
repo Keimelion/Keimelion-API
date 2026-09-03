@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-vi.mock('../db/entities/active-tokens/active-tokens.repository.js', () => ({
+vi.mock('../db/entities/access-tokens/access-tokens.repository.js', () => ({
   deleteExpiredTokens: vi.fn(),
 }))
 
@@ -11,13 +11,13 @@ vi.mock('../shared/utils/logger.js', () => ({
   },
 }))
 
-import { deleteExpiredTokens } from '../db/entities/active-tokens/active-tokens.repository.js'
+import { deleteExpiredTokens } from '../db/entities/access-tokens/access-tokens.repository.js'
 import { logger } from '../shared/utils/logger.js'
-import { start, stop } from './cleanup-expired-tokens.js'
+import { start, stop } from './cleanup-expired-access-tokens.js'
 
 const INTERVAL_MS = 60_000
 
-describe('cleanup-expired-tokens cron job', () => {
+describe('cleanup-expired-access-tokens cron job', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     vi.clearAllMocks()

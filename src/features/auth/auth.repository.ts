@@ -1,28 +1,28 @@
 import { and, eq } from 'drizzle-orm'
 import { db } from '../../db/client.js'
-import { activeTokens } from '../../db/entities/active-tokens/active-tokens.schema.js'
+import { accessTokens } from '../../db/entities/access-tokens/access-tokens.schema.js'
 import { users } from '../../db/entities/users/users.schema.js'
 import { refreshTokens } from '../../db/entities/refresh-tokens/refresh-tokens.schema.js'
 
 interface RotateRefreshTokenInput {
   previousRefreshTokenId: string
-  newAccessTokenJti: string
+  newAccessTokenId: string
   newAccessTokenExpiresAt: Date
   newRefreshTokenHash: string
   newRefreshTokenExpiresAt: Date
   userId: string
 }
 
-export async function storeTokenAndUpdateActivity(jti: string, userId: string, expiresAt: Date): Promise<void> {
+export async function storeTokenAndUpdateActivity(tokenId: string, userId: string, expiresAt: Date): Promise<void> {
   await db.transaction(async (tx) => {
-    await tx.insert(activeTokens).values({ jti, userId, expiresAt })
+    await tx.insert(accessTokens).values({ tokenId, userId, expiresAt })
     await tx.update(users).set({ lastActiveAt: new Date() }).where(eq(users.id, userId))
   })
 }
 
-export async function revokeTokenAndUpdateActivity(jti: string, userId: string, refreshTokenHash?: string): Promise<void> {
+export async function revokeTokenAndUpdateActivity(tokenId: string, userId: string, refreshTokenHash?: string): Promise<void> {
   await db.transaction(async (tx) => {
-    await tx.delete(activeTokens).where(eq(activeTokens.jti, jti))
+    await tx.delete(accessTokens).where(eq(accessTokens.tokenId, tokenId))
     if (refreshTokenHash !== undefined) {
       await tx
         .update(refreshTokens)
@@ -36,8 +36,8 @@ export async function revokeTokenAndUpdateActivity(jti: string, userId: string, 
 export async function rotateRefreshTokenAndIssueAccessToken(input: RotateRefreshTokenInput): Promise<void> {
   await db.transaction(async (tx) => {
     await tx.update(refreshTokens).set({ revokedAt: new Date() }).where(eq(refreshTokens.id, input.previousRefreshTokenId))
-    await tx.insert(activeTokens).values({
-      jti: input.newAccessTokenJti,
+    await tx.insert(accessTokens).values({
+      tokenId: input.newAccessTokenId,
       userId: input.userId,
       expiresAt: input.newAccessTokenExpiresAt,
     })

@@ -32,7 +32,7 @@ vi.mock('../../db/client.js', () => ({
         findFirst: vi.fn(),
         findMany: vi.fn(),
       },
-      activeTokens: {
+      accessTokens: {
         findFirst: vi.fn(),
       },
       refreshTokens: {

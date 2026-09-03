@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { db } from '../../client.js'
-import { deleteExpiredTokens } from './active-tokens.repository.js'
+import { deleteExpiredTokens } from './access-tokens.repository.js'
 
 describe('deleteExpiredTokens', () => {
   beforeEach(() => {
@@ -9,8 +9,8 @@ describe('deleteExpiredTokens', () => {
 
   it('returns the count of deleted rows', async () => {
     const deletedRows = [
-      { jti: '00000000-0000-0000-0000-000000000001' },
-      { jti: '00000000-0000-0000-0000-000000000002' },
+      { tokenId: '00000000-0000-0000-0000-000000000001' },
+      { tokenId: '00000000-0000-0000-0000-000000000002' },
     ]
     vi.mocked(db.delete).mockReturnValueOnce({
       where: vi.fn().mockReturnValueOnce({

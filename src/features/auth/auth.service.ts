@@ -23,7 +23,7 @@ import {
   revokeTokenAndUpdateActivity,
   rotateRefreshTokenAndIssueAccessToken,
 } from './auth.repository.js'
-import { deleteAllUserTokens } from '../../db/entities/active-tokens/active-tokens.repository.js'
+import { deleteAllUserTokens } from '../../db/entities/access-tokens/access-tokens.repository.js'
 import { insertRefreshToken, findRefreshTokenByHash } from '../../db/entities/refresh-tokens/refresh-tokens.repository.js'
 import { findUserById } from '../../db/entities/users/users.repository.js'
 import type { PublicUser } from '../users/users.mapper.js'
@@ -83,8 +83,8 @@ export async function loginUser(input: LoginInput): Promise<ServiceResult<{ acce
     return serviceError(ErrorCode.ACCOUNT_BANNED)
   }
 
-  const { token, jti, expiresAt } = await signJwt(user.id, user.role)
-  await storeTokenAndUpdateActivity(jti, user.id, expiresAt)
+  const { token, tokenId, expiresAt } = await signJwt(user.id, user.role)
+  await storeTokenAndUpdateActivity(tokenId, user.id, expiresAt)
 
   const rawRefreshToken = await issueRefreshToken(user.id)
 
@@ -109,12 +109,12 @@ export async function refreshAccessToken(rawToken: string): Promise<ServiceResul
     return serviceError(ErrorCode.ACCOUNT_BANNED)
   }
 
-  const { token, jti, expiresAt } = await signJwt(user.id, user.role)
+  const { token, tokenId, expiresAt } = await signJwt(user.id, user.role)
   const newRawRefreshToken = generateRawRefreshToken()
 
   await rotateRefreshTokenAndIssueAccessToken({
     previousRefreshTokenId: existingToken.id,
-    newAccessTokenJti: jti,
+    newAccessTokenId: tokenId,
     newAccessTokenExpiresAt: expiresAt,
     newRefreshTokenHash: hashSha256Hex(newRawRefreshToken),
     newRefreshTokenExpiresAt: computeRefreshTokenExpiresAt(),
@@ -125,14 +125,14 @@ export async function refreshAccessToken(rawToken: string): Promise<ServiceResul
 }
 
 export async function logoutUser(payload: JwtPayload, userId: string, refreshToken?: string): Promise<ServiceResult<{ message: string }>> {
-  if (!payload.jti) {
+  if (!payload.tokenId) {
     return serviceError(ErrorCode.LOGOUT_FAILED)
   }
 
   const refreshTokenHash = refreshToken ? hashSha256Hex(refreshToken) : undefined
 
   try {
-    await revokeTokenAndUpdateActivity(payload.jti, userId, refreshTokenHash)
+    await revokeTokenAndUpdateActivity(payload.tokenId, userId, refreshTokenHash)
     return { data: { message: 'Logged out successfully' }, httpStatus: HttpStatus.OK }
   } catch {
     return serviceError(ErrorCode.LOGOUT_FAILED)
