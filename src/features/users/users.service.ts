@@ -8,11 +8,21 @@ import { findUserById, anonymizeUser, updatePasswordHash, insertDeletionAudit } 
 import { deleteAllUserTokens } from '../../db/entities/access-tokens/access-tokens.repository.js'
 import { deleteAllUserRefreshTokens } from '../../db/entities/refresh-tokens/refresh-tokens.repository.js'
 import { updateUserProfile } from './users.repository.js'
-import { toPublicUser } from './users.mapper.js'
+import { toPublicUser, toBaseUser } from './users.mapper.js'
 import type { PublicUser } from './users.mapper.js'
 import type { ServiceResult } from '../../shared/types/service.js'
 import type { UpdateProfileInput } from './endpoints/update-profile.js'
 import type { ChangePasswordInput } from './endpoints/change-password.js'
+import type { ExportFormat } from './endpoints/export-data.js'
+
+const EXPORT_JSON_CONTENT_TYPE = 'application/json'
+const EXPORT_CSV_CONTENT_TYPE = 'text/csv'
+
+interface ExportResult {
+  body: string
+  contentType: string
+  filename: string
+}
 
 export async function getProfile(userId: string): Promise<ServiceResult<{ user: PublicUser }>> {
   const user = await findUserById(userId)
@@ -72,4 +82,59 @@ export async function changePassword(userId: string, input: ChangePasswordInput)
   })
 
   return { data: { message: 'Password changed successfully' }, httpStatus: HttpStatus.OK }
+}
+
+export async function exportUserData(userId: string, format: ExportFormat): Promise<ExportResult> {
+  const user = await findUserById(userId)
+  const profile = user ? toBaseUser(user) : null
+  const exportPayload = { profile }
+
+  if (format === 'csv') {
+    return {
+      body: serializeExportToCsv(exportPayload),
+      contentType: EXPORT_CSV_CONTENT_TYPE,
+      filename: 'keimelion-export.csv',
+    }
+  }
+
+  return {
+    body: JSON.stringify(exportPayload, null, 2),
+    contentType: EXPORT_JSON_CONTENT_TYPE,
+    filename: 'keimelion-export.json',
+  }
+}
+
+interface ExportPayload {
+  profile: PublicUser | null
+}
+
+function serializeExportToCsv(payload: ExportPayload): string {
+  const rows: string[] = []
+
+  rows.push('section,field,value')
+
+  if (payload.profile) {
+    const profileEntries = Object.entries(payload.profile) as [string, unknown][]
+    for (const [field, value] of profileEntries) {
+      rows.push(`profile,${field},${serializeCsvCell(value)}`)
+    }
+  }
+
+  return rows.join('\n')
+}
+
+function toCsvString(value: unknown): string {
+  if (value instanceof Date) return value.toISOString()
+  if (typeof value === 'string') return value
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+  return ''
+}
+
+function serializeCsvCell(value: unknown): string {
+  if (value === null || value === undefined) return ''
+  const stringValue = toCsvString(value)
+  if (stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n')) {
+    return `"${stringValue.replace(/"/g, '""')}"`
+  }
+  return stringValue
 }

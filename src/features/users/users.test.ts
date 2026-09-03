@@ -375,3 +375,69 @@ describe('DELETE /v1/users/me', () => {
     expect(response.status).toBe(401)
   })
 })
+
+describe('GET /v1/users/me/export', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+  })
+
+  it('returns 200 with JSON export when format=json', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+
+    const response = await apiRequest('/v1/users/me/export?format=json', { token })
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get('Content-Type')).toContain('application/json')
+    expect(response.headers.get('Content-Disposition')).toBe('attachment; filename="keimelion-export.json"')
+
+    const body = await response.json() as { profile: { email: string; passwordHash?: string } }
+    expect(body.profile.email).toBe(SAFE_USER.email)
+    expect(body.profile).not.toHaveProperty('passwordHash')
+  })
+
+  it('returns JSON export by default when format param is absent', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+
+    const response = await apiRequest('/v1/users/me/export', { token })
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get('Content-Type')).toContain('application/json')
+    expect(response.headers.get('Content-Disposition')).toBe('attachment; filename="keimelion-export.json"')
+  })
+
+  it('returns 200 with CSV export when format=csv', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+
+    const response = await apiRequest('/v1/users/me/export?format=csv', { token })
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get('Content-Type')).toContain('text/csv')
+    expect(response.headers.get('Content-Disposition')).toBe('attachment; filename="keimelion-export.csv"')
+
+    const text = await response.text()
+    expect(text).toContain('section,field,value')
+    expect(text).toContain('profile,email,user@example.com')
+    expect(text).not.toContain('passwordHash')
+  })
+
+  it('returns 422 when format is unsupported', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+
+    const response = await apiRequest('/v1/users/me/export?format=xml', { token })
+
+    expect(response.status).toBe(422)
+  })
+
+  it('returns 401 when not authenticated', async () => {
+    const response = await apiRequest('/v1/users/me/export')
+    expect(response.status).toBe(401)
+  })
+})
