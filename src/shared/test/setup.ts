@@ -61,8 +61,9 @@ vi.mock('../../db/client.js', () => ({
     })),
     transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) => {
       const tx = {
+        select: vi.fn(() => ({ from: vi.fn(() => ({ where: vi.fn(() => ({ for: vi.fn(() => Promise.resolve([])) })) })) })),
         insert: vi.fn(() => ({ values: vi.fn(() => Promise.resolve([])) })),
-        update: vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn(() => Promise.resolve([])) })) })),
+        update: vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn(() => ({ returning: vi.fn(() => Promise.resolve([])) })) })) })),
         delete: vi.fn(() => ({ where: vi.fn(() => Promise.resolve([])) })),
       }
       return callback(tx)

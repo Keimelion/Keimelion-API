@@ -4,8 +4,9 @@ import { ErrorCode } from '../../shared/enums/error-code.js'
 import { serviceError } from '../../shared/utils/response.js'
 import { pickDefined } from '../../shared/utils/partial-update.js'
 import { hashPassword, verifyPassword } from '../../shared/utils/hash.js'
-import { findUserById, softDeleteUser, updatePasswordHash } from '../../db/entities/users/users.repository.js'
+import { findUserById, findUserByIdForUpdate, anonymizeUser, updatePasswordHash, insertDeletionAudit } from '../../db/entities/users/users.repository.js'
 import { deleteAllUserTokens } from '../../db/entities/access-tokens/access-tokens.repository.js'
+import { deleteAllUserRefreshTokens } from '../../db/entities/refresh-tokens/refresh-tokens.repository.js'
 import { updateUserProfile } from './users.repository.js'
 import { toPublicUser } from './users.mapper.js'
 import type { PublicUser } from './users.mapper.js'
@@ -34,9 +35,23 @@ export async function updateProfile(userId: string, input: UpdateProfileInput): 
 }
 
 export async function deleteAccount(userId: string): Promise<ServiceResult<{ message: string }>> {
-  const deletedUser = await softDeleteUser(userId)
+  const anonymizedEmail = `deleted_${userId}@deleted.keimelion.fr`
 
-  if (!deletedUser) {
+  const userFound = await db.transaction(async (tx) => {
+    const originalUser = await findUserByIdForUpdate(tx, userId)
+
+    if (!originalUser) {
+      return false
+    }
+
+    await anonymizeUser(tx, userId, anonymizedEmail)
+    await insertDeletionAudit(tx, { userId, email: originalUser.email, deletedAt: new Date(), reason: 'user_request' })
+    await deleteAllUserTokens(userId, tx)
+    await deleteAllUserRefreshTokens(userId, tx)
+    return true
+  })
+
+  if (!userFound) {
     return serviceError(ErrorCode.ACCOUNT_DELETION_FAILED)
   }
 

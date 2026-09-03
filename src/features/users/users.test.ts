@@ -295,30 +295,80 @@ describe('POST /v1/users/me/change-password', () => {
   })
 })
 
+function buildDeletionTx() {
+  return {
+    select: vi.fn(() => ({ from: vi.fn(() => ({ where: vi.fn(() => ({ for: vi.fn(() => Promise.resolve([SAFE_USER])) })) })) })),
+    insert: vi.fn(() => ({ values: vi.fn(() => Promise.resolve([])) })),
+    update: vi.fn(() => ({
+      set: vi.fn(() => ({
+        where: vi.fn(() => ({ returning: vi.fn(() => Promise.resolve([{ ...SAFE_USER, deletedAt: new Date() }])) })),
+      })),
+    })),
+    delete: vi.fn(() => ({ where: vi.fn(() => Promise.resolve([])) })),
+  }
+}
+
 describe('DELETE /v1/users/me', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
   })
 
-  it('returns 200 and soft-deletes the account', async () => {
+  it('returns 200 and runs the full RGPD deletion transaction', async () => {
     const token = await generateTestToken(SAFE_USER.id)
-    const deletedUser = { ...SAFE_USER, deletedAt: new Date() }
 
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
-    vi.mocked(db.update).mockReturnValueOnce({
-      set: vi.fn().mockReturnValueOnce({
-        where: vi.fn().mockReturnValueOnce({
-          returning: vi.fn().mockResolvedValueOnce([deletedUser]),
-        }),
-      }),
-    } as never)
+    vi.mocked(db.transaction).mockImplementationOnce((callback) => callback(buildDeletionTx() as never) as never)
 
     const response = await apiRequest('/v1/users/me', { method: 'DELETE', token })
 
     const body = await response.json() as { message: string }
     expect(response.status).toBe(200)
     expect(body.message).toBe('Account deleted successfully')
+    expect(vi.mocked(db.transaction)).toHaveBeenCalledOnce()
+  })
+
+  it('anonymizes PII and records the audit with the original email', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+
+    const tx = buildDeletionTx()
+    vi.mocked(db.transaction).mockImplementationOnce((callback) => callback(tx as never) as never)
+
+    await apiRequest('/v1/users/me', { method: 'DELETE', token })
+
+    const updateResult = tx.update.mock.results[0]
+    expect(updateResult).toBeDefined()
+    const setMock = (updateResult?.value as { set: ReturnType<typeof vi.fn> }).set
+    const setArgs = setMock.mock.calls[0]?.[0] as Record<string, unknown>
+
+    expect(setArgs.email).toMatch(/^deleted_.*@deleted\.keimelion\.fr$/)
+    expect(setArgs.username).toBeNull()
+    expect(setArgs.avatarUrl).toBeNull()
+    expect(setArgs.passwordHash).toBeNull()
+    expect(setArgs.deletedAt).toBeInstanceOf(Date)
+
+    const insertResult = tx.insert.mock.results[0]
+    expect(insertResult).toBeDefined()
+    const valuesMock = (insertResult?.value as { values: ReturnType<typeof vi.fn> }).values
+    const auditArgs = valuesMock.mock.calls[0]?.[0] as Record<string, unknown>
+
+    expect(auditArgs.email).toBe(SAFE_USER.email)
+    expect(auditArgs.reason).toBe('user_request')
+  })
+
+  it('revokes all access tokens and refresh tokens within the transaction', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+
+    const tx = buildDeletionTx()
+    vi.mocked(db.transaction).mockImplementationOnce((callback) => callback(tx as never) as never)
+
+    await apiRequest('/v1/users/me', { method: 'DELETE', token })
+
+    expect(tx.delete).toHaveBeenCalledTimes(2)
   })
 
   it('returns 401 when not authenticated', async () => {
