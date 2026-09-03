@@ -297,7 +297,6 @@ describe('POST /v1/users/me/change-password', () => {
 
 function buildDeletionTx() {
   return {
-    select: vi.fn(() => ({ from: vi.fn(() => ({ where: vi.fn(() => ({ for: vi.fn(() => Promise.resolve([SAFE_USER])) })) })) })),
     insert: vi.fn(() => ({ values: vi.fn(() => Promise.resolve([])) })),
     update: vi.fn(() => ({
       set: vi.fn(() => ({

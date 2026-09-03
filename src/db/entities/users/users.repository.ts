@@ -25,11 +25,6 @@ export function findUserById(id: string): Promise<User | undefined> {
   return db.query.users.findFirst({ where: eq(users.id, id) })
 }
 
-export async function findUserByIdForUpdate(tx: DbTransaction, id: string): Promise<User | undefined> {
-  const [user] = await tx.select().from(users).where(eq(users.id, id)).for('update')
-  return user
-}
-
 export async function anonymizeUser(tx: DbTransaction, userId: string, anonymizedEmail: string): Promise<User | undefined> {
   const [user] = await tx
     .update(users)

@@ -4,7 +4,7 @@ import { ErrorCode } from '../../shared/enums/error-code.js'
 import { serviceError } from '../../shared/utils/response.js'
 import { pickDefined } from '../../shared/utils/partial-update.js'
 import { hashPassword, verifyPassword } from '../../shared/utils/hash.js'
-import { findUserById, findUserByIdForUpdate, anonymizeUser, updatePasswordHash, insertDeletionAudit } from '../../db/entities/users/users.repository.js'
+import { findUserById, anonymizeUser, updatePasswordHash, insertDeletionAudit } from '../../db/entities/users/users.repository.js'
 import { deleteAllUserTokens } from '../../db/entities/access-tokens/access-tokens.repository.js'
 import { deleteAllUserRefreshTokens } from '../../db/entities/refresh-tokens/refresh-tokens.repository.js'
 import { updateUserProfile } from './users.repository.js'
@@ -34,26 +34,15 @@ export async function updateProfile(userId: string, input: UpdateProfileInput): 
   return { data: { user: toPublicUser(updatedUser) }, httpStatus: HttpStatus.OK }
 }
 
-export async function deleteAccount(userId: string): Promise<ServiceResult<{ message: string }>> {
+export async function deleteAccount(userId: string, originalEmail: string): Promise<ServiceResult<{ message: string }>> {
   const anonymizedEmail = `deleted_${userId}@deleted.keimelion.fr`
 
-  const userFound = await db.transaction(async (tx) => {
-    const originalUser = await findUserByIdForUpdate(tx, userId)
-
-    if (!originalUser) {
-      return false
-    }
-
+  await db.transaction(async (tx) => {
     await anonymizeUser(tx, userId, anonymizedEmail)
-    await insertDeletionAudit(tx, { userId, email: originalUser.email, deletedAt: new Date(), reason: 'user_request' })
+    await insertDeletionAudit(tx, { userId, email: originalEmail, deletedAt: new Date(), reason: 'user_request' })
     await deleteAllUserTokens(userId, tx)
     await deleteAllUserRefreshTokens(userId, tx)
-    return true
   })
-
-  if (!userFound) {
-    return serviceError(ErrorCode.ACCOUNT_DELETION_FAILED)
-  }
 
   return { data: { message: 'Account deleted successfully' }, httpStatus: HttpStatus.OK }
 }
