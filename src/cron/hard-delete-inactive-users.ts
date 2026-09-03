@@ -7,42 +7,36 @@ import {
 import type { User } from '../db/entities/users/users.schema.js'
 import type { DeletionReason } from '../shared/enums/deletion-reason.js'
 import { logger } from '../shared/utils/logger.js'
+import { createCronJob } from './create-cron-job.js'
+import type { CronJob } from './create-cron-job.js'
 
-let intervalId: ReturnType<typeof setInterval> | null = null
-let isRunning = false
+let job: CronJob | null = null
 
 export function start(intervalMs: number, graceDays: number): void {
-  intervalId = setInterval(() => {
-    void runHardDelete(graceDays)
-  }, intervalMs)
+  job = createCronJob({
+    name: 'Hard-delete inactive users',
+    run: () => runHardDelete(graceDays),
+  })
+  job.start(intervalMs)
 }
 
 export function stop(): void {
-  if (intervalId !== null) {
-    clearInterval(intervalId)
-    intervalId = null
+  if (job !== null) {
+    job.stop()
+    job = null
   }
 }
 
-async function runHardDelete(graceDays: number): Promise<void> {
-  if (isRunning) return
+async function runHardDelete(graceDays: number): Promise<number> {
+  const eligibleUsers = await findUsersEligibleForHardDelete(graceDays)
+  let deletedCount = 0
 
-  isRunning = true
-  try {
-    const eligibleUsers = await findUsersEligibleForHardDelete(graceDays)
-    let deletedCount = 0
-
-    for (const { user, reason } of eligibleUsers) {
-      const succeeded = await processUser(user, reason)
-      if (succeeded) deletedCount++
-    }
-
-    logger.info({ deletedCount }, 'Hard-delete inactive users completed')
-  } catch (error) {
-    logger.error({ error }, 'Hard-delete inactive users failed')
-  } finally {
-    isRunning = false
+  for (const { user, reason } of eligibleUsers) {
+    const succeeded = await processUser(user, reason)
+    if (succeeded) deletedCount++
   }
+
+  return deletedCount
 }
 
 async function processUser(user: User, reason: DeletionReason): Promise<boolean> {
