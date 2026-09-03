@@ -129,7 +129,7 @@ export async function logoutUser(payload: JwtPayload, userId: string, refreshTok
     return serviceError(ErrorCode.LOGOUT_FAILED)
   }
 
-  const refreshTokenHash = refreshToken === undefined ? undefined : hashSha256Hex(refreshToken)
+  const refreshTokenHash = refreshToken ? hashSha256Hex(refreshToken) : undefined
 
   try {
     await revokeTokenAndUpdateActivity(payload.jti, userId, refreshTokenHash)
