@@ -3,6 +3,8 @@ import { db } from '../../client.js'
 import { refreshTokens } from './refresh-tokens.schema.js'
 import type { RefreshToken } from './refresh-tokens.schema.js'
 
+type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
+
 export async function insertRefreshToken(tokenHash: string, userId: string, expiresAt: Date): Promise<void> {
   await db.insert(refreshTokens).values({ tokenHash, userId, expiresAt })
 }
@@ -17,4 +19,9 @@ export async function deleteExpiredRefreshTokens(): Promise<number> {
     .where(lt(refreshTokens.expiresAt, new Date()))
     .returning({ id: refreshTokens.id })
   return deleted.length
+}
+
+export async function deleteAllUserRefreshTokens(userId: string, tx?: DbTransaction): Promise<void> {
+  const client = tx ?? db
+  await client.delete(refreshTokens).where(eq(refreshTokens.userId, userId))
 }
