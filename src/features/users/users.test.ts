@@ -440,4 +440,35 @@ describe('GET /v1/users/me/export', () => {
     const response = await apiRequest('/v1/users/me/export')
     expect(response.status).toBe(401)
   })
+
+  it('neutralizes CSV formula injection by prefixing dangerous cells with a single quote', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    const maliciousUser = { ...SAFE_USER, username: '=SUM(1+1)', email: '+attack@example.com' }
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(maliciousUser)
+
+    const response = await apiRequest('/v1/users/me/export?format=csv', { token })
+    const text = await response.text()
+
+    expect(response.status).toBe(200)
+    // Formula triggers must be neutralized with a leading single quote
+    expect(text).toContain("profile,username,'=SUM(1+1)")
+    expect(text).toContain("profile,email,'+attack@example.com")
+    expect(text).not.toMatch(/profile,username,=SUM/)
+  })
+
+  it('advertises utf-8 charset on CSV and JSON exports', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+
+    const csvResponse = await apiRequest('/v1/users/me/export?format=csv', { token })
+    expect(csvResponse.headers.get('Content-Type')).toContain('charset=utf-8')
+
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+
+    const jsonResponse = await apiRequest('/v1/users/me/export?format=json', { token })
+    expect(jsonResponse.headers.get('Content-Type')).toContain('charset=utf-8')
+  })
 })

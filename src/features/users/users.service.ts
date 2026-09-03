@@ -15,8 +15,9 @@ import type { UpdateProfileInput } from './endpoints/update-profile.js'
 import type { ChangePasswordInput } from './endpoints/change-password.js'
 import type { ExportFormat } from './endpoints/export-data.js'
 
-const EXPORT_JSON_CONTENT_TYPE = 'application/json'
-const EXPORT_CSV_CONTENT_TYPE = 'text/csv'
+const EXPORT_JSON_CONTENT_TYPE = 'application/json; charset=utf-8'
+const EXPORT_CSV_CONTENT_TYPE = 'text/csv; charset=utf-8'
+const CSV_FORMULA_TRIGGERS = new Set(['=', '+', '-', '@', '\t', '\r'])
 
 interface ExportResult {
   body: string
@@ -132,9 +133,16 @@ function toCsvString(value: unknown): string {
 
 function serializeCsvCell(value: unknown): string {
   if (value === null || value === undefined) return ''
-  const stringValue = toCsvString(value)
+  const stringValue = neutralizeCsvFormula(toCsvString(value))
   if (stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n')) {
     return `"${stringValue.replace(/"/g, '""')}"`
   }
   return stringValue
+}
+
+function neutralizeCsvFormula(value: string): string {
+  if (value.length === 0) return value
+  const firstChar = value.charAt(0)
+  if (CSV_FORMULA_TRIGGERS.has(firstChar)) return `'${value}`
+  return value
 }
