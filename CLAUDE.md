@@ -43,6 +43,18 @@ See `.claude/coding-standards.md` for the full coding standards (early return, n
 - `@typescript-eslint/unbound-method` is disabled for `*.test.ts` files (false positive with `vi.mocked`)
 - Cast `res.json()` responses with `as MyType` — `Response.json()` does not accept a generic
 
+## Data model rules
+
+### RGPD exportability
+Every new DB table linked to `users` — directly (FK `user_id`) **or transitively** (e.g. `list_items` → `lists` → `users`) — must be wired into the RGPD export endpoint `GET /users/me/export` in the **same ticket** that introduces the table. This is a legal obligation (RGPD art. 20 — right to portability), not an optional follow-up.
+
+The ticket that adds such a table must:
+1. Include in its AC the addition of the new section in the export (JSON + CSV)
+2. Add corresponding tests in `src/features/users/users.test.ts`
+3. Confirm no sensitive field (internal tokens, secrets, hashes) leaks in the export mapper
+
+Once the ZIP-of-CSVs streaming architecture (KEI-37) lands, adding an entity = one new CSV file in the ZIP + one new key in the JSON payload.
+
 ## Commands
 
 ```bash
