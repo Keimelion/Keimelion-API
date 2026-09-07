@@ -1,8 +1,19 @@
 import type { User } from '../../../db/entities/users/users.schema.js'
-import { toBaseUser } from '../../users/users.mapper.js'
-import type { BaseUser } from '../../../shared/types/user.js'
 
-export interface AdminUser extends BaseUser {
+export interface AdminUser {
+  id: string
+  email: string
+  username: string | null
+  authProvider: User['authProvider']
+  role: User['role']
+  avatarUrl: string | null
+  isCgvAccepted: boolean
+  cgvAcceptedAt: Date | null
+  isMarketingOptedIn: boolean
+  emailVerifiedAt: Date | null
+  lastActiveAt: Date | null
+  createdAt: Date
+  updatedAt: Date
   bannedAt: Date | null
   banReason: string | null
   deletedAt: Date | null
@@ -10,7 +21,19 @@ export interface AdminUser extends BaseUser {
 
 export function toAdminUser(user: User): AdminUser {
   return {
-    ...toBaseUser(user),
+    id: user.id,
+    email: user.email,
+    username: user.username ?? null,
+    authProvider: user.authProvider,
+    role: user.role,
+    avatarUrl: user.avatarUrl ?? null,
+    isCgvAccepted: user.isCgvAccepted,
+    cgvAcceptedAt: user.cgvAcceptedAt ?? null,
+    isMarketingOptedIn: user.isMarketingOptedIn,
+    emailVerifiedAt: user.emailVerifiedAt ?? null,
+    lastActiveAt: user.lastActiveAt ?? null,
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt,
     bannedAt: user.bannedAt ?? null,
     banReason: user.banReason ?? null,
     deletedAt: user.deletedAt ?? null,
