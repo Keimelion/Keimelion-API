@@ -3,24 +3,22 @@ import { ErrorCode } from '../../../shared/enums/error-code.js'
 import { serviceError } from '../../../shared/utils/response.js'
 import { logger } from '../../../shared/utils/logger.js'
 import { pickDefined } from '../../../shared/utils/partial-update.js'
-import { findAllUsers, countAllUsers, adminUpdateUser } from './admin-users.repository.js'
+import { findAllUsers, countUsers, adminUpdateUser } from './admin-users.repository.js'
 import { findUserById, softDeleteUser } from '../../../db/entities/users/users.repository.js'
 import { toAdminUser } from './admin-users.mapper.js'
 import { AdminAction } from '../admin.enums.js'
 import type { AdminUser } from './admin-users.mapper.js'
 import type { ServiceResult } from '../../../shared/types/service.js'
 import type { PaginatedResponse } from '../../../shared/types/api.js'
-import type { PaginationInput } from '../../../shared/schemas/pagination.js'
+import { buildPaginatedResponse } from '../../../shared/schemas/pagination.js'
+import type { ListUsersInput } from './endpoints/list-users.js'
 import type { AdminUpdateUserInput } from './endpoints/update-user.js'
 
-export async function listUsers(input: PaginationInput): Promise<ServiceResult<PaginatedResponse<AdminUser>>> {
-  const [userRows, total] = await Promise.all([findAllUsers(input), countAllUsers()])
-  const totalPages = Math.ceil(total / input.limit)
+export async function listUsers(input: ListUsersInput): Promise<ServiceResult<PaginatedResponse<AdminUser>>> {
+  const [userRows, total] = await Promise.all([findAllUsers(input, input), countUsers(input)])
+
   return {
-    data: {
-      items: userRows.map(toAdminUser),
-      pagination: { page: input.page, limit: input.limit, total, totalPages },
-    },
+    data: buildPaginatedResponse(userRows.map(toAdminUser), input, total),
     httpStatus: HttpStatus.OK,
   }
 }
