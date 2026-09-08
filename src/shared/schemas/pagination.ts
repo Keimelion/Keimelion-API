@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import type { PaginatedResponse } from '../types/api.js'
 
 export const PAGINATION_DEFAULT_PAGE = 1
 export const PAGINATION_DEFAULT_LIMIT = 20
@@ -10,3 +11,19 @@ export const paginationQuerySchema = z.object({
 })
 
 export type PaginationInput = z.infer<typeof paginationQuerySchema>
+
+export function buildPaginatedResponse<TItem>(
+  items: TItem[],
+  input: PaginationInput,
+  total: number,
+): PaginatedResponse<TItem> {
+  return {
+    items,
+    pagination: {
+      page: input.page,
+      limit: input.limit,
+      total,
+      totalPages: Math.ceil(total / input.limit),
+    },
+  }
+}

@@ -10,18 +10,15 @@ import { AdminAction } from '../admin.enums.js'
 import type { AdminUser } from './admin-users.mapper.js'
 import type { ServiceResult } from '../../../shared/types/service.js'
 import type { PaginatedResponse } from '../../../shared/types/api.js'
+import { buildPaginatedResponse } from '../../../shared/schemas/pagination.js'
 import type { ListUsersInput } from './endpoints/list-users.js'
 import type { AdminUpdateUserInput } from './endpoints/update-user.js'
 
 export async function listUsers(input: ListUsersInput): Promise<ServiceResult<PaginatedResponse<AdminUser>>> {
   const [userRows, total] = await Promise.all([findAllUsers(input, input), countUsers(input)])
-  const totalPages = Math.ceil(total / input.limit)
 
   return {
-    data: {
-      items: userRows.map(toAdminUser),
-      pagination: { page: input.page, limit: input.limit, total, totalPages },
-    },
+    data: buildPaginatedResponse(userRows.map(toAdminUser), input, total),
     httpStatus: HttpStatus.OK,
   }
 }
