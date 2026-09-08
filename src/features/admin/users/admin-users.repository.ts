@@ -1,10 +1,11 @@
 import { db } from '../../../db/client.js'
 import { users } from '../../../db/entities/users/users.schema.js'
-import { and, asc, count, desc, eq, gte, ilike, isNotNull, isNull, lte, type SQL } from 'drizzle-orm'
+import { and, count, eq, gte, ilike, isNotNull, isNull, lte, type SQL } from 'drizzle-orm'
 import type { User } from '../../../db/entities/users/users.schema.js'
 import type { PaginationInput } from '../../../shared/schemas/pagination.js'
 import type { UserRole } from '../../../shared/enums/user-role.js'
 import type { SortInput } from '../../../shared/schemas/sort.js'
+import { buildOrderBy, type SortConfig } from '../../../shared/db/sort.js'
 
 type AdminUpdateUserFields = Partial<Pick<typeof users.$inferInsert, 'avatarUrl' | 'isMarketingOptedIn' | 'role'>>
 
@@ -21,11 +22,15 @@ export interface ListUsersFilters {
   sort?: SortInput<AdminUsersSortField> | undefined
 }
 
-const SORT_FIELD_MAP = {
-  createdAt: users.createdAt,
-  email: users.email,
-  lastActiveAt: users.lastActiveAt,
-} as const
+const USERS_SORT: SortConfig<AdminUsersSortField> = {
+  columns: {
+    createdAt: users.createdAt,
+    email: users.email,
+    lastActiveAt: users.lastActiveAt,
+  },
+  defaultField: 'createdAt',
+  defaultDirection: 'desc',
+}
 
 function escapeIlikePattern(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_')
@@ -80,16 +85,12 @@ export async function countUsers(filters: ListUsersFilters): Promise<number> {
 
 export async function findAllUsers(input: PaginationInput, filters: ListUsersFilters): Promise<User[]> {
   const offset = (input.page - 1) * input.limit
-  const sortField = filters.sort?.field ?? 'createdAt'
-  const sortDirection = filters.sort?.direction ?? 'desc'
-  const column = SORT_FIELD_MAP[sortField]
-  const orderFn = sortDirection === 'asc' ? asc : desc
 
   return db
     .select()
     .from(users)
     .where(buildUsersWhere(filters))
-    .orderBy(orderFn(column))
+    .orderBy(buildOrderBy(USERS_SORT, filters.sort))
     .limit(input.limit)
     .offset(offset)
 }
