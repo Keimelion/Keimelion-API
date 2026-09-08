@@ -1,11 +1,12 @@
 import { db } from '../../../db/client.js'
 import { users } from '../../../db/entities/users/users.schema.js'
-import { and, count, eq, gte, ilike, isNotNull, isNull, lte, type SQL } from 'drizzle-orm'
+import { and, count, eq, gte, lte, type SQL } from 'drizzle-orm'
 import type { User } from '../../../db/entities/users/users.schema.js'
 import type { PaginationInput } from '../../../shared/schemas/pagination.js'
 import type { UserRole } from '../../../shared/enums/user-role.js'
 import type { SortInput } from '../../../shared/schemas/sort.js'
 import { buildOrderBy, type SortConfig } from '../../../shared/db/sort.js'
+import { nullnessFlag, stringContains } from '../../../shared/db/filters.js'
 
 type AdminUpdateUserFields = Partial<Pick<typeof users.$inferInsert, 'avatarUrl' | 'isMarketingOptedIn' | 'role'>>
 
@@ -32,47 +33,16 @@ const USERS_SORT: SortConfig<AdminUsersSortField> = {
   defaultDirection: 'desc',
 }
 
-function escapeIlikePattern(value: string): string {
-  return value.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_')
-}
-
 function buildUsersWhere(filters: ListUsersFilters): SQL | undefined {
-  const conditions: (SQL | undefined)[] = []
-
-  const isDeleted = filters.isDeleted ?? false
-  if (isDeleted) {
-    conditions.push(isNotNull(users.deletedAt))
-  } else {
-    conditions.push(isNull(users.deletedAt))
-  }
-
-  if (filters.email !== undefined) {
-    conditions.push(ilike(users.email, `%${escapeIlikePattern(filters.email)}%`))
-  }
-
-  if (filters.username !== undefined) {
-    conditions.push(ilike(users.username, `%${escapeIlikePattern(filters.username)}%`))
-  }
-
-  if (filters.role !== undefined) {
-    conditions.push(eq(users.role, filters.role))
-  }
-
-  if (filters.isBanned === true) {
-    conditions.push(isNotNull(users.bannedAt))
-  } else if (filters.isBanned === false) {
-    conditions.push(isNull(users.bannedAt))
-  }
-
-  if (filters.createdFrom !== undefined) {
-    conditions.push(gte(users.createdAt, new Date(filters.createdFrom)))
-  }
-
-  if (filters.createdTo !== undefined) {
-    conditions.push(lte(users.createdAt, new Date(filters.createdTo)))
-  }
-
-  return and(...conditions)
+  return and(
+    nullnessFlag(users.deletedAt, filters.isDeleted, false),
+    nullnessFlag(users.bannedAt, filters.isBanned),
+    stringContains(users.email, filters.email),
+    stringContains(users.username, filters.username),
+    filters.role !== undefined ? eq(users.role, filters.role) : undefined,
+    filters.createdFrom !== undefined ? gte(users.createdAt, new Date(filters.createdFrom)) : undefined,
+    filters.createdTo !== undefined ? lte(users.createdAt, new Date(filters.createdTo)) : undefined,
+  )
 }
 
 export async function countUsers(filters: ListUsersFilters): Promise<number> {
