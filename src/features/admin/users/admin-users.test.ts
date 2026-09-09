@@ -2,6 +2,15 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { SignJWT } from 'jose'
 import { db } from '../../../db/client.js'
 import { apiRequest } from '../../../shared/test/api-request.js'
+import { logger } from '../../../shared/utils/logger.js'
+
+vi.mock('../../../shared/utils/logger.js', () => ({
+  logger: {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+}))
 
 const TEST_JWT_SECRET = 'test-secret-key-that-is-at-least-32-chars-long'
 
@@ -693,5 +702,288 @@ describe('DELETE /v1/admin/users/:id', () => {
     const response = await apiRequest(`/v1/admin/users/${TARGET_USER.id}`, { method: 'DELETE', token })
 
     expect(response.status).toBe(403)
+  })
+})
+
+describe('POST /v1/admin/users', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+  })
+
+  function mockInsertUser(): void {
+    vi.mocked(db.insert).mockReturnValueOnce({
+      values: vi.fn().mockReturnValueOnce({
+        returning: vi.fn().mockResolvedValueOnce([TARGET_USER]),
+      }),
+    } as never)
+  }
+
+  it('returns 401 when no authorization header is provided', async () => {
+    const response = await apiRequest('/v1/admin/users', { method: 'POST', body: { email: 'new@example.com', role: 'user' } })
+    expect(response.status).toBe(401)
+  })
+
+  it('returns 403 when user does not have admin role', async () => {
+    const token = await generateTestToken(TARGET_USER.id, 'user')
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(TARGET_USER)
+
+    const response = await apiRequest('/v1/admin/users', {
+      method: 'POST',
+      token,
+      body: { email: 'new@example.com', role: 'user' },
+    })
+
+    expect(response.status).toBe(403)
+  })
+
+  it('returns 422 when role is missing', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
+
+    const response = await apiRequest('/v1/admin/users', {
+      method: 'POST',
+      token,
+      body: { email: 'new@example.com' },
+    })
+
+    expect(response.status).toBe(422)
+  })
+
+  it('returns 422 when role is invalid', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
+
+    const response = await apiRequest('/v1/admin/users', {
+      method: 'POST',
+      token,
+      body: { email: 'new@example.com', role: 'superuser' },
+    })
+
+    expect(response.status).toBe(422)
+  })
+
+  it('returns 422 when email is invalid', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
+
+    const response = await apiRequest('/v1/admin/users', {
+      method: 'POST',
+      token,
+      body: { email: 'not-an-email', role: 'user' },
+    })
+
+    expect(response.status).toBe(422)
+  })
+
+  it('returns 422 when username does not match the regex', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
+
+    const response = await apiRequest('/v1/admin/users', {
+      method: 'POST',
+      token,
+      body: { email: 'new@example.com', username: 'bad username!', role: 'user' },
+    })
+
+    expect(response.status).toBe(422)
+  })
+
+  it('returns 422 when an unknown key is provided (strict schema)', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
+
+    const response = await apiRequest('/v1/admin/users', {
+      method: 'POST',
+      token,
+      body: { email: 'new@example.com', role: 'user', unknownField: 'value' },
+    })
+
+    expect(response.status).toBe(422)
+  })
+
+  it('returns 422 when password key is provided (strict schema rejects it)', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
+
+    const response = await apiRequest('/v1/admin/users', {
+      method: 'POST',
+      token,
+      body: { email: 'new@example.com', role: 'user', password: 'somepassword' },
+    })
+
+    expect(response.status).toBe(422)
+  })
+
+  it('returns 201 with user and passwordSetupToken in non-production', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(undefined)
+    mockInsertUser()
+
+    const response = await apiRequest('/v1/admin/users', {
+      method: 'POST',
+      token,
+      body: { email: 'new@example.com', role: 'moderator' },
+    })
+
+    const body = await response.json() as { user: Record<string, unknown>; passwordSetupToken: string }
+    expect(response.status).toBe(201)
+    expect(body.user).toBeDefined()
+    expect(body.user.email).toBe('user@example.com')
+    expect(body.passwordSetupToken).toBeDefined()
+    expect(typeof body.passwordSetupToken).toBe('string')
+  })
+
+  it('response body does not expose sensitive fields', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(undefined)
+    mockInsertUser()
+
+    const response = await apiRequest('/v1/admin/users', {
+      method: 'POST',
+      token,
+      body: { email: 'new@example.com', role: 'moderator' },
+    })
+
+    const body = await response.json() as { user: Record<string, unknown> }
+    expect(response.status).toBe(201)
+    expect(body.user).not.toHaveProperty('passwordHash')
+    expect(body.user).not.toHaveProperty('passwordResetToken')
+    expect(body.user).not.toHaveProperty('emailVerifyToken')
+  })
+
+  it('logs at warn level for privileged role (moderator)', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(undefined)
+    mockInsertUser()
+
+    await apiRequest('/v1/admin/users', {
+      method: 'POST',
+      token,
+      body: { email: 'new@example.com', role: 'moderator' },
+    })
+
+    expect(vi.mocked(logger.warn)).toHaveBeenCalledOnce()
+    expect(vi.mocked(logger.info)).not.toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'admin_create_user' }),
+    )
+  })
+
+  it('logs at warn level for privileged role (admin)', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(undefined)
+    mockInsertUser()
+
+    await apiRequest('/v1/admin/users', {
+      method: 'POST',
+      token,
+      body: { email: 'new@example.com', role: 'admin' },
+    })
+
+    expect(vi.mocked(logger.warn)).toHaveBeenCalledOnce()
+  })
+
+  it('logs at info level for non-privileged role (user)', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(undefined)
+    mockInsertUser()
+
+    await apiRequest('/v1/admin/users', {
+      method: 'POST',
+      token,
+      body: { email: 'new@example.com', role: 'user' },
+    })
+
+    expect(vi.mocked(logger.warn)).not.toHaveBeenCalled()
+    expect(vi.mocked(logger.info)).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'admin_create_user', role: 'user' }),
+    )
+  })
+
+  it('calls db.insert with expected explicit values', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(undefined)
+
+    const valuesMock = vi.fn().mockReturnValueOnce({
+      returning: vi.fn().mockResolvedValueOnce([TARGET_USER]),
+    })
+    vi.mocked(db.insert).mockReturnValueOnce({ values: valuesMock } as never)
+
+    await apiRequest('/v1/admin/users', {
+      method: 'POST',
+      token,
+      body: { email: 'new@example.com', role: 'user' },
+    })
+
+    expect(valuesMock).toHaveBeenCalledOnce()
+    const insertedFields = valuesMock.mock.calls[0]?.[0] as Record<string, unknown>
+    expect(insertedFields.isCgvAccepted).toBe(false)
+    expect(insertedFields.isMarketingOptedIn).toBe(false)
+    expect(insertedFields.cgvAcceptedAt).toBeNull()
+    expect(insertedFields.emailVerifyToken).toBeNull()
+    expect(insertedFields.emailVerifyTokenExpiresAt).toBeNull()
+    expect(insertedFields.emailVerifiedAt).toBeInstanceOf(Date)
+    expect(insertedFields.authProvider).toBe('email')
+    expect(insertedFields.passwordResetToken).toBeDefined()
+    expect(insertedFields.passwordResetTokenExpiresAt).toBeInstanceOf(Date)
+  })
+
+  it('returns 409 when email already exists (pre-check)', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(TARGET_USER)
+
+    const response = await apiRequest('/v1/admin/users', {
+      method: 'POST',
+      token,
+      body: { email: 'user@example.com', role: 'user' },
+    })
+
+    expect(response.status).toBe(409)
+  })
+
+  it('returns 409 when username already exists (pre-check)', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(undefined)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(TARGET_USER)
+
+    const response = await apiRequest('/v1/admin/users', {
+      method: 'POST',
+      token,
+      body: { email: 'new@example.com', username: 'regularuser', role: 'user' },
+    })
+
+    expect(response.status).toBe(409)
+  })
+
+  it('returns 409 when pg unique violation race occurs on insert', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(undefined)
+
+    class PgUniqueError extends Error {
+      code = '23505'
+    }
+
+    vi.mocked(db.insert).mockReturnValueOnce({
+      values: vi.fn().mockReturnValueOnce({
+        returning: vi.fn().mockRejectedValueOnce(new PgUniqueError('unique violation')),
+      }),
+    } as never)
+
+    const response = await apiRequest('/v1/admin/users', {
+      method: 'POST',
+      token,
+      body: { email: 'new@example.com', role: 'user' },
+    })
+
+    expect(response.status).toBe(409)
   })
 })
