@@ -8,6 +8,15 @@ import type { SortInput } from '../../../shared/schemas/sort.js'
 import { buildOrderBy, type SortConfig } from '../../../shared/db/sort.js'
 import { nullnessFlag, stringContains } from '../../../shared/db/filters.js'
 
+interface AdminInsertUserFields {
+  email: string
+  username: string | null
+  passwordHash: string
+  role: UserRole
+  passwordResetToken: string
+  passwordResetTokenExpiresAt: Date
+}
+
 type AdminUpdateUserFields = Partial<Pick<typeof users.$inferInsert, 'avatarUrl' | 'isMarketingOptedIn' | 'role'>>
 
 export type AdminUsersSortField = 'createdAt' | 'email' | 'lastActiveAt'
@@ -73,6 +82,29 @@ export async function adminUpdateUser(
     .update(users)
     .set(input)
     .where(eq(users.id, id))
+    .returning()
+
+  return user
+}
+
+export async function adminInsertUser(fields: AdminInsertUserFields): Promise<User | undefined> {
+  const [user] = await db
+    .insert(users)
+    .values({
+      email: fields.email,
+      username: fields.username,
+      passwordHash: fields.passwordHash,
+      role: fields.role,
+      authProvider: 'email',
+      isCgvAccepted: false,
+      cgvAcceptedAt: null,
+      isMarketingOptedIn: false,
+      emailVerifiedAt: new Date(),
+      emailVerifyToken: null,
+      emailVerifyTokenExpiresAt: null,
+      passwordResetToken: fields.passwordResetToken,
+      passwordResetTokenExpiresAt: fields.passwordResetTokenExpiresAt,
+    })
     .returning()
 
   return user
