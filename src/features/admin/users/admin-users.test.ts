@@ -815,10 +815,9 @@ describe('POST /v1/admin/users', () => {
     expect(response.status).toBe(422)
   })
 
-  it('returns 201 with user and passwordSetupToken in non-production', async () => {
+  it('returns 201 with user and passwordResetToken in non-production', async () => {
     const token = await generateTestToken(ADMIN_USER.id, 'admin')
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
-    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(undefined)
     mockInsertUser()
 
     const response = await apiRequest('/v1/admin/users', {
@@ -827,18 +826,17 @@ describe('POST /v1/admin/users', () => {
       body: { email: 'new@example.com', role: 'moderator' },
     })
 
-    const body = await response.json() as { user: Record<string, unknown>; passwordSetupToken: string }
+    const body = await response.json() as { user: Record<string, unknown>; passwordResetToken: string }
     expect(response.status).toBe(201)
     expect(body.user).toBeDefined()
     expect(body.user.email).toBe('user@example.com')
-    expect(body.passwordSetupToken).toBeDefined()
-    expect(typeof body.passwordSetupToken).toBe('string')
+    expect(body.passwordResetToken).toBeDefined()
+    expect(typeof body.passwordResetToken).toBe('string')
   })
 
   it('response body does not expose sensitive fields', async () => {
     const token = await generateTestToken(ADMIN_USER.id, 'admin')
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
-    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(undefined)
     mockInsertUser()
 
     const response = await apiRequest('/v1/admin/users', {
@@ -857,7 +855,6 @@ describe('POST /v1/admin/users', () => {
   it('logs at warn level for privileged role (moderator)', async () => {
     const token = await generateTestToken(ADMIN_USER.id, 'admin')
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
-    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(undefined)
     mockInsertUser()
 
     await apiRequest('/v1/admin/users', {
@@ -875,7 +872,6 @@ describe('POST /v1/admin/users', () => {
   it('logs at warn level for privileged role (admin)', async () => {
     const token = await generateTestToken(ADMIN_USER.id, 'admin')
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
-    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(undefined)
     mockInsertUser()
 
     await apiRequest('/v1/admin/users', {
@@ -890,7 +886,6 @@ describe('POST /v1/admin/users', () => {
   it('logs at info level for non-privileged role (user)', async () => {
     const token = await generateTestToken(ADMIN_USER.id, 'admin')
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
-    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(undefined)
     mockInsertUser()
 
     await apiRequest('/v1/admin/users', {
@@ -908,7 +903,6 @@ describe('POST /v1/admin/users', () => {
   it('calls db.insert with expected explicit values', async () => {
     const token = await generateTestToken(ADMIN_USER.id, 'admin')
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
-    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(undefined)
 
     const valuesMock = vi.fn().mockReturnValueOnce({
       returning: vi.fn().mockResolvedValueOnce([TARGET_USER]),
@@ -934,39 +928,9 @@ describe('POST /v1/admin/users', () => {
     expect(insertedFields.passwordResetTokenExpiresAt).toBeInstanceOf(Date)
   })
 
-  it('returns 409 when email already exists (pre-check)', async () => {
+  it('returns 409 when insert hits the unique constraint', async () => {
     const token = await generateTestToken(ADMIN_USER.id, 'admin')
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
-    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(TARGET_USER)
-
-    const response = await apiRequest('/v1/admin/users', {
-      method: 'POST',
-      token,
-      body: { email: 'user@example.com', role: 'user' },
-    })
-
-    expect(response.status).toBe(409)
-  })
-
-  it('returns 409 when username already exists (pre-check)', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
-    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
-    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(undefined)
-    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(TARGET_USER)
-
-    const response = await apiRequest('/v1/admin/users', {
-      method: 'POST',
-      token,
-      body: { email: 'new@example.com', username: 'regularuser', role: 'user' },
-    })
-
-    expect(response.status).toBe(409)
-  })
-
-  it('returns 409 when pg unique violation race occurs on insert', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
-    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
-    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(undefined)
 
     class PgUniqueError extends Error {
       code = '23505'

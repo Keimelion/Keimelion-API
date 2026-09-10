@@ -9,8 +9,7 @@ import { logger } from '../../../shared/utils/logger.js'
 import { hashPassword, hashSha256Hex } from '../../../shared/utils/hash.js'
 import { pickDefined } from '../../../shared/utils/partial-update.js'
 import { findAllUsers, countUsers, adminUpdateUser, adminInsertUser } from './admin-users.repository.js'
-import { findUserById, softDeleteUser, findUserByUsername } from '../../../db/entities/users/users.repository.js'
-import { findUserByEmail } from '../../users/users.repository.js'
+import { findUserById, softDeleteUser } from '../../../db/entities/users/users.repository.js'
 import { toAdminUser } from './admin-users.mapper.js'
 import { AdminAction } from '../admin.enums.js'
 import type { AdminUser } from './admin-users.mapper.js'
@@ -22,32 +21,18 @@ import type { ListUsersInput } from './endpoints/list-users.js'
 import type { AdminUpdateUserInput } from './endpoints/update-user.js'
 import type { AdminCreateUserInput } from './endpoints/create-user.js'
 
-const PASSWORD_SETUP_TOKEN_TTL_MS = 24 * 60 * 60 * 1000
-const SETUP_TOKEN_BYTE_LENGTH = 32
+const ADMIN_PASSWORD_RESET_TOKEN_TTL_MS = 24 * 60 * 60 * 1000
+const PASSWORD_RESET_TOKEN_BYTE_LENGTH = 32
 
 export async function createUser(
   adminId: string,
   input: AdminCreateUserInput,
-): Promise<ServiceResult<{ user: AdminUser; passwordSetupToken?: string }>> {
-  const existingByEmail = await findUserByEmail(input.email)
+): Promise<ServiceResult<{ user: AdminUser; passwordResetToken?: string }>> {
+  const rawPasswordResetToken = randomBytes(PASSWORD_RESET_TOKEN_BYTE_LENGTH).toString('hex')
+  const hashedPasswordResetToken = hashSha256Hex(rawPasswordResetToken)
+  const passwordResetTokenExpiresAt = new Date(Date.now() + ADMIN_PASSWORD_RESET_TOKEN_TTL_MS)
 
-  if (existingByEmail) {
-    return serviceError(ErrorCode.CONFLICT)
-  }
-
-  if (input.username !== null) {
-    const existingByUsername = await findUserByUsername(input.username)
-
-    if (existingByUsername) {
-      return serviceError(ErrorCode.CONFLICT)
-    }
-  }
-
-  const rawSetupToken = randomBytes(SETUP_TOKEN_BYTE_LENGTH).toString('hex')
-  const hashedSetupToken = hashSha256Hex(rawSetupToken)
-  const passwordResetTokenExpiresAt = new Date(Date.now() + PASSWORD_SETUP_TOKEN_TTL_MS)
-
-  const rawPassword = randomBytes(SETUP_TOKEN_BYTE_LENGTH).toString('hex')
+  const rawPassword = randomBytes(PASSWORD_RESET_TOKEN_BYTE_LENGTH).toString('hex')
   const passwordHash = await hashPassword(rawPassword)
 
   let createdUser: AdminUser
@@ -58,7 +43,7 @@ export async function createUser(
       username: input.username,
       passwordHash,
       role: input.role,
-      passwordResetToken: hashedSetupToken,
+      passwordResetToken: hashedPasswordResetToken,
       passwordResetTokenExpiresAt,
     })
 
@@ -75,12 +60,12 @@ export async function createUser(
   }
 
   logAdminUserCreation(adminId, createdUser.id, input.role)
-  sendAdminInvitationEmail(input.email, rawSetupToken)
+  sendAdminInvitationEmail(input.email, rawPasswordResetToken)
 
   return {
     data: {
       user: createdUser,
-      ...(env.NODE_ENV !== NodeEnvs.PRODUCTION ? { passwordSetupToken: rawSetupToken } : {}),
+      ...(env.NODE_ENV !== NodeEnvs.PRODUCTION ? { passwordResetToken: rawPasswordResetToken } : {}),
     },
     httpStatus: HttpStatus.CREATED,
   }
