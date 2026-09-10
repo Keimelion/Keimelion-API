@@ -2,6 +2,8 @@ import { db } from '../../../db/client.js'
 import { users } from '../../../db/entities/users/users.schema.js'
 import { and, count, eq, gte, lte, type SQL } from 'drizzle-orm'
 import type { User } from '../../../db/entities/users/users.schema.js'
+
+type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 import type { PaginationInput } from '../../../shared/schemas/pagination.js'
 import type { UserRole } from '../../../shared/enums/user-role.js'
 import type { SortInput } from '../../../shared/schemas/sort.js'
@@ -77,8 +79,9 @@ export async function findAllUsers(input: PaginationInput, filters: ListUsersFil
 export async function adminUpdateUser(
   id: string,
   input: AdminUpdateUserFields,
+  tx?: DbTransaction,
 ): Promise<User | undefined> {
-  const [user] = await db
+  const [user] = await (tx ?? db)
     .update(users)
     .set(input)
     .where(eq(users.id, id))
