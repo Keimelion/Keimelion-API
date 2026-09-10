@@ -3,10 +3,6 @@ import { db } from '../../db/client.js'
 import { accessTokens } from '../../db/entities/access-tokens/access-tokens.schema.js'
 import { users } from '../../db/entities/users/users.schema.js'
 import { refreshTokens } from '../../db/entities/refresh-tokens/refresh-tokens.schema.js'
-import { deleteAllUserTokens } from '../../db/entities/access-tokens/access-tokens.repository.js'
-import { deleteAllUserRefreshTokens } from '../../db/entities/refresh-tokens/refresh-tokens.repository.js'
-
-type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
 interface RotateRefreshTokenInput {
   previousRefreshTokenId: string
@@ -35,11 +31,6 @@ export async function revokeTokenAndUpdateActivity(tokenId: string, userId: stri
     }
     await tx.update(users).set({ lastActiveAt: new Date() }).where(eq(users.id, userId))
   })
-}
-
-export async function revokeAllUserSessions(userId: string, tx?: DbTransaction): Promise<void> {
-  await deleteAllUserTokens(userId, tx)
-  await deleteAllUserRefreshTokens(userId, tx)
 }
 
 export async function rotateRefreshTokenAndIssueAccessToken(input: RotateRefreshTokenInput): Promise<void> {
