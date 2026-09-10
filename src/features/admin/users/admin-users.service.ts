@@ -8,6 +8,7 @@ import { serviceError } from '../../../shared/utils/response.js'
 import { logger } from '../../../shared/utils/logger.js'
 import { hashPassword, hashSha256Hex } from '../../../shared/utils/hash.js'
 import { pickDefined } from '../../../shared/utils/partial-update.js'
+import { isPgUniqueViolation } from '../../../shared/db/pg-errors.js'
 import { findAllUsers, countUsers, adminUpdateUser, adminInsertUser } from './admin-users.repository.js'
 import { findUserById, softDeleteUser } from '../../../db/entities/users/users.repository.js'
 import { toAdminUser } from './admin-users.mapper.js'
@@ -138,10 +139,6 @@ export async function deleteUser(adminId: string, targetUserId: string): Promise
   return { data: { message: 'User deleted successfully' }, httpStatus: HttpStatus.OK }
 }
 
-function isPgUniqueViolation(error: unknown): boolean {
-  return typeof error === 'object' && error !== null && 'code' in error && error.code === '23505'
-}
-
 function logAdminUserCreation(adminId: string, targetUserId: string, role: UserRole): void {
   const payload = { adminId, targetUserId, action: AdminAction.CREATE_USER, role }
   const isPrivilegedRole = role === UserRoles.MODERATOR || role === UserRoles.ADMIN
@@ -154,11 +151,11 @@ function logAdminUserCreation(adminId: string, targetUserId: string, role: UserR
   logger.info(payload)
 }
 
-function sendAdminInvitationEmail(email: string, rawToken: string): void {
-  const setupUrl = new URL(`/auth/reset-password?token=${rawToken}`, env.APP_URL).href
+function sendAdminInvitationEmail(email: string, rawPasswordResetToken: string): void {
+  const passwordResetUrl = new URL(`/auth/reset-password?token=${rawPasswordResetToken}`, env.APP_URL).href
 
   if (env.NODE_ENV !== NodeEnvs.PRODUCTION) {
-    logger.info({ email, setupUrl }, 'Admin invitation URL (dev/test)')
+    logger.info({ email, passwordResetUrl }, 'Admin invitation URL (dev/test)')
     return
   }
 
