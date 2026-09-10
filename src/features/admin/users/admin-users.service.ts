@@ -12,8 +12,7 @@ import { pickDefined } from '../../../shared/utils/partial-update.js'
 import { isPgUniqueViolation } from '../../../shared/db/pg-errors.js'
 import { findAllUsers, countUsers, adminUpdateUser, adminInsertUser } from './admin-users.repository.js'
 import { findUserById, softDeleteUser } from '../../../db/entities/users/users.repository.js'
-import { deleteAllUserTokens } from '../../../db/entities/access-tokens/access-tokens.repository.js'
-import { deleteAllUserRefreshTokens } from '../../../db/entities/refresh-tokens/refresh-tokens.repository.js'
+import { revokeAllUserSessions } from '../../../db/entities/users/user-sessions.repository.js'
 import { toAdminUser } from './admin-users.mapper.js'
 import { AdminAction } from '../admin.enums.js'
 import type { AdminUser } from './admin-users.mapper.js'
@@ -118,8 +117,7 @@ export async function updateUser(
     if (!result) return
     updatedUser = toAdminUser(result)
     if (shouldRevoke) {
-      await deleteAllUserTokens(targetUserId, tx)
-      await deleteAllUserRefreshTokens(targetUserId, tx)
+      await revokeAllUserSessions(targetUserId, tx)
     }
   })
 

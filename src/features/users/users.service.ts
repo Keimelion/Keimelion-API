@@ -6,7 +6,7 @@ import { pickDefined } from '../../shared/utils/partial-update.js'
 import { hashPassword, verifyPassword } from '../../shared/utils/hash.js'
 import { findUserById, anonymizeUser, updatePasswordHash, insertDeletionAudit } from '../../db/entities/users/users.repository.js'
 import { deleteAllUserTokens } from '../../db/entities/access-tokens/access-tokens.repository.js'
-import { deleteAllUserRefreshTokens } from '../../db/entities/refresh-tokens/refresh-tokens.repository.js'
+import { revokeAllUserSessions } from '../../db/entities/users/user-sessions.repository.js'
 import { updateUserProfile } from './users.repository.js'
 import { toPublicUser, toBaseUser } from './users.mapper.js'
 import type { PublicUser } from './users.mapper.js'
@@ -51,8 +51,7 @@ export async function deleteAccount(userId: string, originalEmail: string): Prom
   await db.transaction(async (tx) => {
     await anonymizeUser(tx, userId, anonymizedEmail)
     await insertDeletionAudit(tx, { userId, email: originalEmail, deletedAt: new Date(), reason: 'user_request' })
-    await deleteAllUserTokens(userId, tx)
-    await deleteAllUserRefreshTokens(userId, tx)
+    await revokeAllUserSessions(userId, tx)
   })
 
   return { data: { message: 'Account deleted successfully' }, httpStatus: HttpStatus.OK }
