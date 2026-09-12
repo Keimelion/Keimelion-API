@@ -5,6 +5,7 @@ import { createRateLimiter } from '../../../../shared/utils/rate-limiter.js'
 import { validationErrorHandler } from '../../../../shared/utils/validation.js'
 import { USER_ROLE_VALUES } from '../../../../shared/enums/user-role.js'
 import { HonoContextKey } from '../../../../shared/enums/context-key.js'
+import { adminOnly } from '../../../../shared/middlewares/admin-only.js'
 import type { AppVariables } from '../../../../shared/types/app.js'
 import { USERNAME_REGEX } from '../../../users/users.constants.js'
 import { createUser } from '../admin-users.service.js'
@@ -30,6 +31,7 @@ export type AdminCreateUserInput = z.infer<typeof adminCreateUserSchema>
 export function mountCreateUser(router: Hono<{ Variables: AppVariables }>): void {
   router.post(
     '/',
+    ...adminOnly,
     createRateLimiter(ADMIN_CREATE_USER_RATE_LIMIT, ADMIN_CREATE_USER_RATE_LIMIT_WINDOW_MS),
     zValidator('json', adminCreateUserSchema, validationErrorHandler),
     async (context) => {

@@ -6,6 +6,7 @@ import type { AppVariables } from '../../../../shared/types/app.js'
 import { uuidParamSchema } from '../../../../shared/schemas/params.js'
 import { validationErrorHandler } from '../../../../shared/utils/validation.js'
 import { USER_ROLE_VALUES } from '../../../../shared/enums/user-role.js'
+import { adminOnly } from '../../../../shared/middlewares/admin-only.js'
 import { updateUser } from '../admin-users.service.js'
 
 const adminUpdateUserSchema = z.object({
@@ -19,6 +20,7 @@ export type AdminUpdateUserInput = z.infer<typeof adminUpdateUserSchema>
 export function mountUpdateUser(router: Hono<{ Variables: AppVariables }>): void {
   router.patch(
     '/:id',
+    ...adminOnly,
     zValidator('param', uuidParamSchema, validationErrorHandler),
     zValidator('json', adminUpdateUserSchema, validationErrorHandler),
     async (context) => {

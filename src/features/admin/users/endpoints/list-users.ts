@@ -5,6 +5,7 @@ import type { AppVariables } from '../../../../shared/types/app.js'
 import { paginationQuerySchema } from '../../../../shared/schemas/pagination.js'
 import { sortQuerySchema } from '../../../../shared/schemas/sort.js'
 import { validationErrorHandler } from '../../../../shared/utils/validation.js'
+import { adminOnly } from '../../../../shared/middlewares/admin-only.js'
 import { listUsers } from '../admin-users.service.js'
 import { USER_ROLE_VALUES } from '../../../../shared/enums/user-role.js'
 
@@ -39,7 +40,7 @@ const listUsersQuerySchema = paginationQuerySchema
 export type ListUsersInput = z.infer<typeof listUsersQuerySchema>
 
 export function mountListUsers(router: Hono<{ Variables: AppVariables }>): void {
-  router.get('/', zValidator('query', listUsersQuerySchema, validationErrorHandler), async (context) => {
+  router.get('/', ...adminOnly, zValidator('query', listUsersQuerySchema, validationErrorHandler), async (context) => {
     const query = context.req.valid('query')
     const { data, httpStatus } = await listUsers(query)
     return context.json(data, httpStatus as 200)

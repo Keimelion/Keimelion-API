@@ -5,6 +5,7 @@ import { createRateLimiter } from '../../../shared/utils/rate-limiter.js'
 import { validationErrorHandler } from '../../../shared/utils/validation.js'
 import { passwordSchema } from '../../../shared/schemas/password.js'
 import { HonoContextKey } from '../../../shared/enums/context-key.js'
+import { authMiddleware } from '../../../shared/middlewares/auth.js'
 import { changePassword } from '../users.service.js'
 import type { AppVariables } from '../../../shared/types/app.js'
 
@@ -23,6 +24,7 @@ export type ChangePasswordInput = z.infer<typeof changePasswordSchema>
 export function mountChangePassword(router: Hono<{ Variables: AppVariables }>): void {
   router.post(
     '/me/change-password',
+    authMiddleware,
     createRateLimiter(5),
     zValidator('json', changePasswordSchema, validationErrorHandler),
     async (context) => {
