@@ -75,15 +75,8 @@ async function generateTestToken(userId: string, role = 'user'): Promise<string>
     .sign(secret)
 }
 
-function mockSelectChain(rows: unknown[]): void {
-  const chain = {
-    from: vi.fn().mockReturnThis(),
-    where: vi.fn().mockReturnThis(),
-    orderBy: vi.fn().mockReturnThis(),
-    limit: vi.fn().mockReturnThis(),
-    offset: vi.fn().mockResolvedValueOnce(rows),
-  }
-  vi.mocked(db.select).mockReturnValueOnce(chain as never)
+function mockListUsers(rows: unknown[]): void {
+  vi.mocked(db.query.users.findMany).mockResolvedValueOnce(rows as never)
 }
 
 function mockCountChain(total: number): void {
@@ -103,7 +96,7 @@ describe('GET /v1/admin/users', () => {
   it('returns 200 with paginated users list when admin is authenticated', async () => {
     const token = await generateTestToken(ADMIN_USER.id, 'admin')
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
-    mockSelectChain([ADMIN_USER, TARGET_USER])
+    mockListUsers([ADMIN_USER, TARGET_USER])
     mockCountChain(2)
 
     const response = await apiRequest('/v1/admin/users', { token })
@@ -118,7 +111,7 @@ describe('GET /v1/admin/users', () => {
   it('hides soft-deleted users by default', async () => {
     const token = await generateTestToken(ADMIN_USER.id, 'admin')
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
-    mockSelectChain([ADMIN_USER])
+    mockListUsers([ADMIN_USER])
     mockCountChain(1)
 
     const response = await apiRequest('/v1/admin/users', { token })
@@ -133,7 +126,7 @@ describe('GET /v1/admin/users', () => {
     const token = await generateTestToken(ADMIN_USER.id, 'admin')
     const deletedUser = { ...TARGET_USER, deletedAt: new Date('2024-06-01') }
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
-    mockSelectChain([deletedUser])
+    mockListUsers([deletedUser])
     mockCountChain(1)
 
     const response = await apiRequest('/v1/admin/users?isDeleted=true', { token })
@@ -146,7 +139,7 @@ describe('GET /v1/admin/users', () => {
   it('returns empty result set when no users match filters', async () => {
     const token = await generateTestToken(ADMIN_USER.id, 'admin')
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
-    mockSelectChain([])
+    mockListUsers([])
     mockCountChain(0)
 
     const response = await apiRequest('/v1/admin/users?email=nomatch', { token })
@@ -161,7 +154,7 @@ describe('GET /v1/admin/users', () => {
   it('filters by email substring', async () => {
     const token = await generateTestToken(ADMIN_USER.id, 'admin')
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
-    mockSelectChain([ADMIN_USER])
+    mockListUsers([ADMIN_USER])
     mockCountChain(1)
 
     const response = await apiRequest('/v1/admin/users?email=admin', { token })
@@ -174,7 +167,7 @@ describe('GET /v1/admin/users', () => {
   it('filters by username substring', async () => {
     const token = await generateTestToken(ADMIN_USER.id, 'admin')
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
-    mockSelectChain([TARGET_USER])
+    mockListUsers([TARGET_USER])
     mockCountChain(1)
 
     const response = await apiRequest('/v1/admin/users?username=regular', { token })
@@ -187,7 +180,7 @@ describe('GET /v1/admin/users', () => {
   it('filters by role', async () => {
     const token = await generateTestToken(ADMIN_USER.id, 'admin')
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
-    mockSelectChain([ADMIN_USER])
+    mockListUsers([ADMIN_USER])
     mockCountChain(1)
 
     const response = await apiRequest('/v1/admin/users?role=admin', { token })
@@ -201,7 +194,7 @@ describe('GET /v1/admin/users', () => {
     const token = await generateTestToken(ADMIN_USER.id, 'admin')
     const bannedUser = { ...TARGET_USER, bannedAt: new Date('2024-03-01') }
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
-    mockSelectChain([bannedUser])
+    mockListUsers([bannedUser])
     mockCountChain(1)
 
     const response = await apiRequest('/v1/admin/users?isBanned=true', { token })
@@ -214,7 +207,7 @@ describe('GET /v1/admin/users', () => {
   it('filters by isBanned=false returns only non-banned users', async () => {
     const token = await generateTestToken(ADMIN_USER.id, 'admin')
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
-    mockSelectChain([ADMIN_USER, TARGET_USER])
+    mockListUsers([ADMIN_USER, TARGET_USER])
     mockCountChain(2)
 
     const response = await apiRequest('/v1/admin/users?isBanned=false', { token })
@@ -227,7 +220,7 @@ describe('GET /v1/admin/users', () => {
   it('applies createdFrom and createdTo date filters', async () => {
     const token = await generateTestToken(ADMIN_USER.id, 'admin')
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
-    mockSelectChain([ADMIN_USER])
+    mockListUsers([ADMIN_USER])
     mockCountChain(1)
 
     const response = await apiRequest('/v1/admin/users?createdFrom=2024-01-01T00:00:00Z&createdTo=2024-12-31T23:59:59Z', { token })
@@ -238,7 +231,7 @@ describe('GET /v1/admin/users', () => {
   it('applies sort param and returns 200', async () => {
     const token = await generateTestToken(ADMIN_USER.id, 'admin')
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
-    mockSelectChain([ADMIN_USER, TARGET_USER])
+    mockListUsers([ADMIN_USER, TARGET_USER])
     mockCountChain(2)
 
     const response = await apiRequest('/v1/admin/users?sort=email:asc', { token })
@@ -249,7 +242,7 @@ describe('GET /v1/admin/users', () => {
   it('applies combined filters', async () => {
     const token = await generateTestToken(ADMIN_USER.id, 'admin')
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
-    mockSelectChain([ADMIN_USER])
+    mockListUsers([ADMIN_USER])
     mockCountChain(1)
 
     const response = await apiRequest('/v1/admin/users?role=admin&isBanned=false&sort=email:asc&page=1&limit=50', { token })
@@ -263,7 +256,7 @@ describe('GET /v1/admin/users', () => {
   it('total reflects filtered count (regression guard)', async () => {
     const token = await generateTestToken(ADMIN_USER.id, 'admin')
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
-    mockSelectChain([ADMIN_USER])
+    mockListUsers([ADMIN_USER])
     mockCountChain(1)
 
     const response = await apiRequest('/v1/admin/users?role=admin', { token })
@@ -276,7 +269,7 @@ describe('GET /v1/admin/users', () => {
   it('sensitive fields are never present in admin user response', async () => {
     const token = await generateTestToken(ADMIN_USER.id, 'admin')
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
-    mockSelectChain([ADMIN_USER])
+    mockListUsers([ADMIN_USER])
     mockCountChain(1)
 
     const response = await apiRequest('/v1/admin/users', { token })

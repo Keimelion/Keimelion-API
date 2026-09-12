@@ -41,6 +41,9 @@ vi.mock('../../db/client.js', () => ({
       refreshTokens: {
         findFirst: vi.fn(),
       },
+      occasionTypes: {
+        findMany: vi.fn(),
+      },
     },
     insert: vi.fn(() => ({
       values: vi.fn(() => ({

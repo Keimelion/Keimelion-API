@@ -43,13 +43,8 @@ const OCCASION_TYPE_INACTIVE = {
   updatedAt: new Date('2025-01-01'),
 }
 
-function mockSelectChain(rows: unknown[]): void {
-  const chain = {
-    from: vi.fn().mockReturnThis(),
-    where: vi.fn().mockReturnThis(),
-    orderBy: vi.fn().mockResolvedValueOnce(rows),
-  }
-  vi.mocked(db.select).mockReturnValueOnce(chain as never)
+function mockFindMany(rows: unknown[]): void {
+  vi.mocked(db.query.occasionTypes.findMany).mockResolvedValueOnce(rows as never)
 }
 
 describe('GET /v1/occasion-types', () => {
@@ -58,7 +53,7 @@ describe('GET /v1/occasion-types', () => {
   })
 
   it('returns 200 with active occasion types', async () => {
-    mockSelectChain([OCCASION_TYPE_MARIAGE, OCCASION_TYPE_NAISSANCE])
+    mockFindMany([OCCASION_TYPE_MARIAGE, OCCASION_TYPE_NAISSANCE])
 
     const { app } = await import('../../app.js')
     const response = await app.request('/v1/occasion-types')
@@ -69,7 +64,7 @@ describe('GET /v1/occasion-types', () => {
   })
 
   it('returns occasion types with expected shape: id, slug, label, emoji only', async () => {
-    mockSelectChain([OCCASION_TYPE_MARIAGE])
+    mockFindMany([OCCASION_TYPE_MARIAGE])
 
     const { app } = await import('../../app.js')
     const response = await app.request('/v1/occasion-types')
@@ -89,7 +84,7 @@ describe('GET /v1/occasion-types', () => {
   })
 
   it('does not include inactive occasion types in the response', async () => {
-    mockSelectChain([OCCASION_TYPE_MARIAGE, OCCASION_TYPE_NAISSANCE])
+    mockFindMany([OCCASION_TYPE_MARIAGE, OCCASION_TYPE_NAISSANCE])
 
     const { app } = await import('../../app.js')
     const response = await app.request('/v1/occasion-types')
@@ -101,7 +96,7 @@ describe('GET /v1/occasion-types', () => {
   })
 
   it('returns items sorted by sort_order ascending', async () => {
-    mockSelectChain([OCCASION_TYPE_MARIAGE, OCCASION_TYPE_NAISSANCE])
+    mockFindMany([OCCASION_TYPE_MARIAGE, OCCASION_TYPE_NAISSANCE])
 
     const { app } = await import('../../app.js')
     const response = await app.request('/v1/occasion-types')
@@ -113,7 +108,7 @@ describe('GET /v1/occasion-types', () => {
   })
 
   it('returns an empty array when no active occasion types exist', async () => {
-    mockSelectChain([])
+    mockFindMany([])
 
     const { app } = await import('../../app.js')
     const response = await app.request('/v1/occasion-types')
@@ -126,7 +121,7 @@ describe('GET /v1/occasion-types', () => {
 
   it('returns null emoji for occasion types that have no emoji', async () => {
     const occasionWithoutEmoji = { ...OCCASION_TYPE_MARIAGE, emoji: null }
-    mockSelectChain([occasionWithoutEmoji])
+    mockFindMany([occasionWithoutEmoji])
 
     const { app } = await import('../../app.js')
     const response = await app.request('/v1/occasion-types')
@@ -137,7 +132,7 @@ describe('GET /v1/occasion-types', () => {
   })
 
   it('does not require an Authorization token', async () => {
-    mockSelectChain([OCCASION_TYPE_MARIAGE])
+    mockFindMany([OCCASION_TYPE_MARIAGE])
 
     const { app } = await import('../../app.js')
     const response = await app.request('/v1/occasion-types')
@@ -146,12 +141,7 @@ describe('GET /v1/occasion-types', () => {
   })
 
   it('returns 500 when the database throws', async () => {
-    const chain = {
-      from: vi.fn().mockReturnThis(),
-      where: vi.fn().mockReturnThis(),
-      orderBy: vi.fn().mockRejectedValueOnce(new Error('DB failure')),
-    }
-    vi.mocked(db.select).mockReturnValueOnce(chain as never)
+    vi.mocked(db.query.occasionTypes.findMany).mockRejectedValueOnce(new Error('DB failure'))
 
     const { app } = await import('../../app.js')
     const response = await app.request('/v1/occasion-types')

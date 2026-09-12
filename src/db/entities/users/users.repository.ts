@@ -49,27 +49,21 @@ export async function softDeleteUser(userId: string): Promise<User | undefined> 
 }
 
 export async function findUsersEligibleForHardDelete(graceDays: number): Promise<EligibleUser[]> {
-  const softDeleted = await db
-    .select()
-    .from(users)
-    .where(
-      and(
-        isNotNull(users.deletedAt),
-        sql`${users.deletedAt} < now() - make_interval(days => ${graceDays})`,
-      ),
-    )
-    .limit(HARD_DELETE_BATCH_SIZE)
+  const softDeleted = await db.query.users.findMany({
+    where: and(
+      isNotNull(users.deletedAt),
+      sql`${users.deletedAt} < now() - make_interval(days => ${graceDays})`,
+    ),
+    limit: HARD_DELETE_BATCH_SIZE,
+  })
 
-  const inactive = await db
-    .select()
-    .from(users)
-    .where(
-      and(
-        isNull(users.deletedAt),
-        sql`COALESCE(${users.lastActiveAt}, ${users.createdAt}) < now() - interval '24 months'`,
-      ),
-    )
-    .limit(HARD_DELETE_BATCH_SIZE)
+  const inactive = await db.query.users.findMany({
+    where: and(
+      isNull(users.deletedAt),
+      sql`COALESCE(${users.lastActiveAt}, ${users.createdAt}) < now() - interval '24 months'`,
+    ),
+    limit: HARD_DELETE_BATCH_SIZE,
+  })
 
   const softDeletedEntries: EligibleUser[] = softDeleted.map((user) => ({
     user,
