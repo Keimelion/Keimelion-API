@@ -1,12 +1,11 @@
-import type { Hono } from 'hono'
-import { HonoContextKey } from '../../../shared/enums/context-key.js'
-import type { AppVariables } from '../../../shared/types/app.js'
+import { authMiddleware, getAuthUser } from '../../../shared/middlewares/auth.js'
+import { jsonResult } from '../../../shared/utils/response.js'
+import type { FeatureRouter } from '../../../shared/types/app.js'
 import { getProfile } from '../users.service.js'
 
-export function mountGetProfile(router: Hono<{ Variables: AppVariables }>): void {
-  router.get('/me', async (context) => {
-    const user = context.get(HonoContextKey.USER)
-    const { data, httpStatus } = await getProfile(user.id)
-    return context.json(data, httpStatus as 200)
+export function mountGetProfile(router: FeatureRouter): void {
+  router.get('/me', authMiddleware, async (context) => {
+    const user = getAuthUser(context)
+    return jsonResult(context, await getProfile(user.id))
   })
 }

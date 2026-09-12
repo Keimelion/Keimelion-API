@@ -1,27 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { SignJWT } from 'jose'
 import { db } from '../../db/client.js'
 import { env } from '../../config/env.js'
 import { NodeEnvs } from '../../shared/enums/node-env.js'
 import { apiRequest } from '../../shared/test/api-request.js'
+import { generateTestToken, makeAccessTokenEntry } from '../../shared/test/auth.js'
 
-const TEST_JWT_SECRET = 'test-secret-key-that-is-at-least-32-chars-long'
-const TEST_JTI = '00000000-0000-0000-0000-000000000099'
 const TEST_REFRESH_TOKEN_HASH = 'a'.repeat(64)
-
-async function generateTestToken(userId: string, options: { includeJti?: boolean; expired?: boolean } = {}): Promise<string> {
-  const { includeJti = true, expired = false } = options
-  const secret = new TextEncoder().encode(TEST_JWT_SECRET)
-  const now = Math.floor(Date.now() / 1000)
-  const builder = new SignJWT({ sub: userId, role: 'user' })
-    .setProtectedHeader({ alg: 'HS256' })
-    .setIssuedAt(expired ? now - 7200 : now)
-    .setExpirationTime(expired ? now - 3600 : now + 3600)
-  if (includeJti) {
-    builder.setJti(TEST_JTI)
-  }
-  return builder.sign(secret)
-}
 
 const VALID_USER = {
   id: '00000000-0000-0000-0000-000000000001',
@@ -47,7 +31,7 @@ const VALID_USER = {
   updatedAt: new Date('2024-01-01'),
 }
 
-const ACCESS_TOKEN_ENTRY = { tokenId: TEST_JTI, userId: VALID_USER.id, expiresAt: new Date(Date.now() + 60 * 60 * 1000) }
+const ACCESS_TOKEN_ENTRY = makeAccessTokenEntry(VALID_USER.id)
 
 const VALID_REFRESH_TOKEN_ROW = {
   id: '00000000-0000-0000-0000-000000000010',

@@ -1,11 +1,11 @@
 import { db } from '../client.js'
-import { seedUsers } from '../entities/users/users.fixture.js'
-import { seedOccasionTypes } from '../entities/occasion-types/occasion-types.fixture.js'
+import { SEEDERS } from './seeders.js'
 
 async function seed(): Promise<void> {
   console.log('Seeding...')
-  await seedOccasionTypes(db)
-  await seedUsers(db)
+  for (const run of SEEDERS) {
+    await run(db)
+  }
   console.log('Done.')
   process.exit(0)
 }

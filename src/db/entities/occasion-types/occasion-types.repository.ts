@@ -4,9 +4,8 @@ import { occasionTypes } from './occasion-types.schema.js'
 import type { OccasionType } from './occasion-types.schema.js'
 
 export function listActiveOccasionTypes(): Promise<OccasionType[]> {
-  return db
-    .select()
-    .from(occasionTypes)
-    .where(eq(occasionTypes.isActive, true))
-    .orderBy(asc(occasionTypes.sortOrder))
+  return db.query.occasionTypes.findMany({
+    where: eq(occasionTypes.isActive, true),
+    orderBy: asc(occasionTypes.sortOrder),
+  })
 }

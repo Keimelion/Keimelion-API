@@ -1,7 +1,9 @@
+import type { Context } from 'hono'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import type { ErrorCode } from '../enums/error-code.js'
 import { HttpStatus } from '../enums/http.js'
 import type { ApiError } from '../types/api.js'
+import type { ServiceResult } from '../types/service.js'
 
 export const errorMap: Record<ErrorCode, { status: ContentfulStatusCode; message: string }> = {
   BAD_REQUEST:             { status: HttpStatus.BAD_REQUEST,           message: 'Bad request' },
@@ -33,4 +35,8 @@ export function sendError(code: ErrorCode, metadata: Record<string, unknown> = {
 export function serviceError(code: ErrorCode, metadata: Record<string, unknown> = {}): { data: ApiError; httpStatus: number } {
   const { status, message } = errorMap[code]
   return { data: { message, code, metadata }, httpStatus: status }
+}
+
+export function jsonResult<T>(context: Context, result: ServiceResult<T>): Response {
+  return context.json(result.data, result.httpStatus as ContentfulStatusCode)
 }

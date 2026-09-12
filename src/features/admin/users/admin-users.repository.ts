@@ -64,16 +64,15 @@ export async function countUsers(filters: ListUsersFilters): Promise<number> {
   return row?.count ?? 0
 }
 
-export async function findAllUsers(input: PaginationInput, filters: ListUsersFilters): Promise<User[]> {
+export function findAllUsers(input: PaginationInput, filters: ListUsersFilters): Promise<User[]> {
   const offset = (input.page - 1) * input.limit
 
-  return db
-    .select()
-    .from(users)
-    .where(buildUsersWhere(filters))
-    .orderBy(buildOrderBy(USERS_SORT, filters.sort))
-    .limit(input.limit)
-    .offset(offset)
+  return db.query.users.findMany({
+    where: buildUsersWhere(filters),
+    orderBy: buildOrderBy(USERS_SORT, filters.sort),
+    limit: input.limit,
+    offset,
+  })
 }
 
 export async function adminUpdateUser(
