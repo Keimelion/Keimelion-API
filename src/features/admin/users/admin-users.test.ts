@@ -500,13 +500,19 @@ describe('PATCH /v1/admin/users/:id', () => {
     const updatedUser = { ...TARGET_USER, role: 'moderator' as const }
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(TARGET_USER)
-    vi.mocked(db.update).mockReturnValueOnce({
-      set: vi.fn().mockReturnValueOnce({
-        where: vi.fn().mockReturnValueOnce({
-          returning: vi.fn().mockResolvedValueOnce([updatedUser]),
+    vi.mocked(db.transaction).mockImplementationOnce(async (callback) => {
+      const tx = {
+        update: vi.fn().mockReturnValueOnce({
+          set: vi.fn().mockReturnValueOnce({
+            where: vi.fn().mockReturnValueOnce({
+              returning: vi.fn().mockResolvedValueOnce([updatedUser]),
+            }),
+          }),
         }),
-      }),
-    } as never)
+        delete: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
+      }
+      return callback(tx as never)
+    })
 
     const response = await apiRequest(`/v1/admin/users/${TARGET_USER.id}`, {
       method: 'PATCH',
@@ -576,13 +582,19 @@ describe('PATCH /v1/admin/users/:id', () => {
     const token = await generateTestToken(ADMIN_USER.id, 'admin')
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(TARGET_USER)
-    vi.mocked(db.update).mockReturnValueOnce({
-      set: vi.fn().mockReturnValueOnce({
-        where: vi.fn().mockReturnValueOnce({
-          returning: vi.fn().mockResolvedValueOnce([]),
+    vi.mocked(db.transaction).mockImplementationOnce(async (callback) => {
+      const tx = {
+        update: vi.fn().mockReturnValueOnce({
+          set: vi.fn().mockReturnValueOnce({
+            where: vi.fn().mockReturnValueOnce({
+              returning: vi.fn().mockResolvedValueOnce([]),
+            }),
+          }),
         }),
-      }),
-    } as never)
+        delete: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
+      }
+      return callback(tx as never)
+    })
 
     const response = await apiRequest(`/v1/admin/users/${TARGET_USER.id}`, {
       method: 'PATCH',
@@ -617,7 +629,13 @@ describe('PATCH /v1/admin/users/:id', () => {
 
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(TARGET_USER)
-    vi.mocked(db.update).mockReturnValueOnce({ set: setMock } as never)
+    vi.mocked(db.transaction).mockImplementationOnce(async (callback) => {
+      const tx = {
+        update: vi.fn().mockReturnValueOnce({ set: setMock }),
+        delete: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
+      }
+      return callback(tx as never)
+    })
 
     const response = await apiRequest(`/v1/admin/users/${TARGET_USER.id}`, {
       method: 'PATCH',
@@ -638,6 +656,102 @@ describe('PATCH /v1/admin/users/:id', () => {
     expect(setArgs).not.toHaveProperty('passwordHash')
     expect(setArgs).not.toHaveProperty('email')
     expect(setArgs).not.toHaveProperty('bannedAt')
+  })
+
+  it('revokes both token types when role changes', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const updatedUser = { ...TARGET_USER, role: 'moderator' as const }
+    let capturedTx: { delete: ReturnType<typeof vi.fn> } | undefined
+
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(TARGET_USER)
+    vi.mocked(db.transaction).mockImplementationOnce(async (callback) => {
+      const tx = {
+        update: vi.fn().mockReturnValueOnce({
+          set: vi.fn().mockReturnValueOnce({
+            where: vi.fn().mockReturnValueOnce({
+              returning: vi.fn().mockResolvedValueOnce([updatedUser]),
+            }),
+          }),
+        }),
+        delete: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
+      }
+      capturedTx = tx
+      return callback(tx as never)
+    })
+
+    const response = await apiRequest(`/v1/admin/users/${TARGET_USER.id}`, {
+      method: 'PATCH',
+      token,
+      body: { role: 'moderator' },
+    })
+
+    expect(response.status).toBe(200)
+    expect(capturedTx?.delete).toHaveBeenCalledTimes(2)
+  })
+
+  it('skips token revocation when provided role equals current role', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const sameRoleUser = { ...TARGET_USER, role: 'user' as const }
+    let capturedTx: { delete: ReturnType<typeof vi.fn> } | undefined
+
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(TARGET_USER)
+    vi.mocked(db.transaction).mockImplementationOnce(async (callback) => {
+      const tx = {
+        update: vi.fn().mockReturnValueOnce({
+          set: vi.fn().mockReturnValueOnce({
+            where: vi.fn().mockReturnValueOnce({
+              returning: vi.fn().mockResolvedValueOnce([sameRoleUser]),
+            }),
+          }),
+        }),
+        delete: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
+      }
+      capturedTx = tx
+      return callback(tx as never)
+    })
+
+    const response = await apiRequest(`/v1/admin/users/${TARGET_USER.id}`, {
+      method: 'PATCH',
+      token,
+      body: { role: 'user' },
+    })
+
+    expect(response.status).toBe(200)
+    expect(capturedTx?.delete).not.toHaveBeenCalled()
+  })
+
+  it('skips token revocation when update does not include role', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const updatedUser = { ...TARGET_USER, avatarUrl: 'https://example.com/avatar.png' }
+    let capturedTx: { delete: ReturnType<typeof vi.fn> } | undefined
+
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(TARGET_USER)
+    vi.mocked(db.transaction).mockImplementationOnce(async (callback) => {
+      const tx = {
+        update: vi.fn().mockReturnValueOnce({
+          set: vi.fn().mockReturnValueOnce({
+            where: vi.fn().mockReturnValueOnce({
+              returning: vi.fn().mockResolvedValueOnce([updatedUser]),
+            }),
+          }),
+        }),
+        delete: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
+      }
+      capturedTx = tx
+      return callback(tx as never)
+    })
+
+    const response = await apiRequest(`/v1/admin/users/${TARGET_USER.id}`, {
+      method: 'PATCH',
+      token,
+      body: { avatarUrl: 'https://example.com/avatar.png' },
+    })
+
+    expect(response.status).toBe(200)
+    expect(capturedTx?.delete).not.toHaveBeenCalled()
   })
 })
 

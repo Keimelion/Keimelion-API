@@ -1,4 +1,5 @@
 import { randomBytes } from 'crypto'
+import { db } from '../../../db/client.js'
 import { env } from '../../../config/env.js'
 import { HttpStatus } from '../../../shared/enums/http.js'
 import { ErrorCode } from '../../../shared/enums/error-code.js'
@@ -11,6 +12,7 @@ import { pickDefined } from '../../../shared/utils/partial-update.js'
 import { isPgUniqueViolation } from '../../../shared/db/pg-errors.js'
 import { findAllUsers, countUsers, adminUpdateUser, adminInsertUser } from './admin-users.repository.js'
 import { findUserById, softDeleteUser } from '../../../db/entities/users/users.repository.js'
+import { revokeAllUserSessions } from '../../../shared/db/user-sessions.js'
 import { toAdminUser } from './admin-users.mapper.js'
 import { AdminAction } from '../admin.enums.js'
 import type { AdminUser } from './admin-users.mapper.js'
@@ -106,15 +108,32 @@ export async function updateUser(
     return serviceError(ErrorCode.NOT_FOUND)
   }
 
-  const updatedUser = await adminUpdateUser(targetUserId, pickDefined(input))
+  const shouldRevoke = input.role !== undefined && input.role !== targetUser.role
+
+  let updatedUser: AdminUser | undefined
+
+  await db.transaction(async (tx) => {
+    const result = await adminUpdateUser(targetUserId, pickDefined(input), tx)
+    if (!result) return
+    updatedUser = toAdminUser(result)
+    if (shouldRevoke) {
+      await revokeAllUserSessions(targetUserId, tx)
+    }
+  })
 
   if (!updatedUser) {
     return serviceError(ErrorCode.USER_UPDATE_FAILED)
   }
 
-  logger.info({ adminId, targetUserId, action: AdminAction.UPDATE_USER })
+  logger.info({
+    adminId,
+    targetUserId,
+    action: AdminAction.UPDATE_USER,
+    tokensRevoked: shouldRevoke,
+    ...(shouldRevoke && { roleChanged: { from: targetUser.role, to: input.role } }),
+  })
 
-  return { data: { user: toAdminUser(updatedUser) }, httpStatus: HttpStatus.OK }
+  return { data: { user: updatedUser }, httpStatus: HttpStatus.OK }
 }
 
 export async function deleteUser(adminId: string, targetUserId: string): Promise<ServiceResult<{ message: string }>> {
