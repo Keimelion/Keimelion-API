@@ -1,8 +1,9 @@
 import { pgTable, timestamp, uuid, varchar } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
+import { timestamps, uuidPrimaryKey } from '../../../shared/db/columns.js'
 
 export const userDeletionAudit = pgTable('user_deletion_audit', {
-  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  id: uuidPrimaryKey(),
   userId: uuid('user_id').notNull(),
   email: varchar('email', { length: 255 }).notNull(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
@@ -10,8 +11,7 @@ export const userDeletionAudit = pgTable('user_deletion_audit', {
     .notNull()
     .default(sql`now()`),
   reason: varchar('reason', { length: 30 }).notNull(),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().default(sql`now()`),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().default(sql`now()`),
+  ...timestamps(),
 })
 
 export type UserDeletionAudit = typeof userDeletionAudit.$inferSelect

@@ -6,10 +6,20 @@ import * as usersSchema from '../entities/users/users.schema.js'
 import * as accessTokensSchema from '../entities/access-tokens/access-tokens.schema.js'
 import * as userDeletionAuditSchema from '../entities/user-deletion-audit/user-deletion-audit.schema.js'
 import * as refreshTokensSchema from '../entities/refresh-tokens/refresh-tokens.schema.js'
+import * as occasionTypesSchema from '../entities/occasion-types/occasion-types.schema.js'
 import { seedUsers } from '../entities/users/users.fixture.js'
+import { seedOccasionTypes } from '../entities/occasion-types/occasion-types.fixture.js'
 
 const client = postgres(env.DATABASE_URL)
-const db = drizzle(client, { schema: { ...usersSchema, ...accessTokensSchema, ...userDeletionAuditSchema, ...refreshTokensSchema } })
+const db = drizzle(client, {
+  schema: {
+    ...usersSchema,
+    ...accessTokensSchema,
+    ...userDeletionAuditSchema,
+    ...refreshTokensSchema,
+    ...occasionTypesSchema,
+  },
+})
 
 try {
   console.log('Dropping schema...')
@@ -21,6 +31,7 @@ try {
   await migrate(db, { migrationsFolder: 'src/db/migrations' })
 
   console.log('Seeding...')
+  await seedOccasionTypes(db)
   await seedUsers(db)
 
   console.log('Done.')

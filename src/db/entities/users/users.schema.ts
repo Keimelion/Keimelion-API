@@ -1,13 +1,13 @@
 import { boolean, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid, varchar } from 'drizzle-orm/pg-core'
-import { sql } from 'drizzle-orm'
 import { USER_ROLE_VALUES } from '../../../shared/enums/user-role.js'
 import { AUTH_PROVIDER_VALUES } from '../../../shared/enums/auth-provider.js'
+import { timestamps, uuidPrimaryKey } from '../../../shared/db/columns.js'
 
 export const userRoleEnum = pgEnum('user_role', USER_ROLE_VALUES)
 export const authProviderEnum = pgEnum('auth_provider', AUTH_PROVIDER_VALUES)
 
 export const users = pgTable('users', {
-  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  id: uuidPrimaryKey(),
   email: text('email').notNull().unique(),
   username: varchar('username', { length: 100 }).unique(),
   passwordHash: text('password_hash'),
@@ -26,8 +26,7 @@ export const users = pgTable('users', {
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
   bannedAt: timestamp('banned_at', { withTimezone: true }),
   banReason: text('ban_reason'),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().default(sql`now()`),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().default(sql`now()`).$onUpdateFn(() => new Date()),
+  ...timestamps(),
 },
 (table) => [uniqueIndex('users_password_reset_token_idx').on(table.passwordResetToken)]
 )
