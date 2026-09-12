@@ -1,12 +1,12 @@
-import type { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import { HonoContextKey } from '../../../../shared/enums/context-key.js'
-import type { AppVariables } from '../../../../shared/types/app.js'
+import { getAuthUser } from '../../../../shared/middlewares/auth.js'
+import type { FeatureRouter } from '../../../../shared/types/app.js'
 import { uuidParamSchema } from '../../../../shared/schemas/params.js'
 import { validationErrorHandler } from '../../../../shared/utils/validation.js'
 import { USER_ROLE_VALUES } from '../../../../shared/enums/user-role.js'
 import { adminOnly } from '../../../../shared/middlewares/admin-only.js'
+import { jsonResult } from '../../../../shared/utils/response.js'
 import { updateUser } from '../admin-users.service.js'
 
 const adminUpdateUserSchema = z.object({
@@ -17,18 +17,17 @@ const adminUpdateUserSchema = z.object({
 
 export type AdminUpdateUserInput = z.infer<typeof adminUpdateUserSchema>
 
-export function mountUpdateUser(router: Hono<{ Variables: AppVariables }>): void {
+export function mountUpdateUser(router: FeatureRouter): void {
   router.patch(
     '/:id',
     ...adminOnly,
     zValidator('param', uuidParamSchema, validationErrorHandler),
     zValidator('json', adminUpdateUserSchema, validationErrorHandler),
     async (context) => {
-      const admin = context.get(HonoContextKey.USER)
+      const admin = getAuthUser(context)
       const { id } = context.req.valid('param')
       const input = context.req.valid('json')
-      const { data, httpStatus } = await updateUser(admin.id, id, input)
-      return context.json(data, httpStatus as 200)
+      return jsonResult(context, await updateUser(admin.id, id, input))
     },
   )
 }

@@ -1,4 +1,4 @@
-import type { MiddlewareHandler } from 'hono'
+import type { Context, MiddlewareHandler } from 'hono'
 import { ErrorCode } from '../enums/error-code.js'
 import { sendError } from '../utils/response.js'
 import { verifyJwt } from '../../features/auth/jwt.service.js'
@@ -7,7 +7,16 @@ import { findUserById, updateLastActiveAt } from '../../db/entities/users/users.
 import { isTokenActive } from '../../db/entities/access-tokens/access-tokens.repository.js'
 import { HonoContextKey } from '../enums/context-key.js'
 import type { AppVariables } from '../types/app.js'
+import type { User } from '../../db/entities/users/users.schema.js'
 import { logger } from '../utils/logger.js'
+
+export function getAuthUser(context: Context<{ Variables: AppVariables }>): User {
+  return context.get(HonoContextKey.USER)
+}
+
+export function getJwtPayload(context: Context<{ Variables: AppVariables }>): JwtPayload {
+  return context.get(HonoContextKey.JWT_PAYLOAD)
+}
 
 export const authMiddleware: MiddlewareHandler<{ Variables: AppVariables }> = async (context, next) => {
   const payload = await resolveTokenPayload(context.req.header('Authorization'))

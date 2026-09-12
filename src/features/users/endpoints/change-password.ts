@@ -1,13 +1,12 @@
-import type { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { createRateLimiter } from '../../../shared/utils/rate-limiter.js'
 import { validationErrorHandler } from '../../../shared/utils/validation.js'
 import { passwordSchema } from '../../../shared/schemas/password.js'
-import { HonoContextKey } from '../../../shared/enums/context-key.js'
-import { authMiddleware } from '../../../shared/middlewares/auth.js'
+import { authMiddleware, getAuthUser } from '../../../shared/middlewares/auth.js'
+import { jsonResult } from '../../../shared/utils/response.js'
 import { changePassword } from '../users.service.js'
-import type { AppVariables } from '../../../shared/types/app.js'
+import type { FeatureRouter } from '../../../shared/types/app.js'
 
 const changePasswordSchema = z
   .object({
@@ -21,17 +20,16 @@ const changePasswordSchema = z
 
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>
 
-export function mountChangePassword(router: Hono<{ Variables: AppVariables }>): void {
+export function mountChangePassword(router: FeatureRouter): void {
   router.post(
     '/me/change-password',
     authMiddleware,
     createRateLimiter(5),
     zValidator('json', changePasswordSchema, validationErrorHandler),
     async (context) => {
-      const user = context.get(HonoContextKey.USER)
+      const user = getAuthUser(context)
       const input = context.req.valid('json')
-      const { data, httpStatus } = await changePassword(user.id, input)
-      return context.json(data, httpStatus as 200)
+      return jsonResult(context, await changePassword(user.id, input))
     },
   )
 }

@@ -1,9 +1,9 @@
-import type { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { validationErrorHandler } from '../../../shared/utils/validation.js'
+import { jsonResult } from '../../../shared/utils/response.js'
 import { verifyEmail } from '../auth.service.js'
-import type { AppVariables } from '../../../shared/types/app.js'
+import type { FeatureRouter } from '../../../shared/types/app.js'
 
 const verifyEmailSchema = z.object({
   token: z.string().uuid(),
@@ -11,10 +11,9 @@ const verifyEmailSchema = z.object({
 
 export type VerifyEmailInput = z.infer<typeof verifyEmailSchema>
 
-export function mountVerifyEmail(router: Hono<{ Variables: AppVariables }>): void {
+export function mountVerifyEmail(router: FeatureRouter): void {
   router.post('/verify-email', zValidator('json', verifyEmailSchema, validationErrorHandler), async (context) => {
     const input = context.req.valid('json')
-    const { data, httpStatus } = await verifyEmail(input)
-    return context.json(data, httpStatus as 200)
+    return jsonResult(context, await verifyEmail(input))
   })
 }
