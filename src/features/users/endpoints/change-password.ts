@@ -1,6 +1,6 @@
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import { createRateLimiter } from '../../../shared/utils/rate-limiter.js'
+import { RATE_LIMITS } from '../../../shared/utils/rate-limiter.js'
 import { validationErrorHandler } from '../../../shared/utils/validation.js'
 import { passwordSchema } from '../../../shared/schemas/password.js'
 import { authMiddleware, getAuthUser } from '../../../shared/middlewares/auth.js'
@@ -24,7 +24,7 @@ export function mountChangePassword(router: FeatureRouter): void {
   router.post(
     '/me/change-password',
     authMiddleware,
-    createRateLimiter(5),
+    RATE_LIMITS.STRICT(),
     zValidator('json', changePasswordSchema, validationErrorHandler),
     async (context) => {
       const user = getAuthUser(context)

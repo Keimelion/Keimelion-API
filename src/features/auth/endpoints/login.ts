@@ -1,6 +1,6 @@
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import { createRateLimiter } from '../../../shared/utils/rate-limiter.js'
+import { RATE_LIMITS } from '../../../shared/utils/rate-limiter.js'
 import { validationErrorHandler } from '../../../shared/utils/validation.js'
 import { jsonResult } from '../../../shared/utils/response.js'
 import { loginUser } from '../auth.service.js'
@@ -14,7 +14,7 @@ const loginSchema = z.object({
 export type LoginInput = z.infer<typeof loginSchema>
 
 export function mountLogin(router: FeatureRouter): void {
-  router.post('/login', createRateLimiter(5), zValidator('json', loginSchema, validationErrorHandler), async (context) => {
+  router.post('/login', RATE_LIMITS.STRICT(), zValidator('json', loginSchema, validationErrorHandler), async (context) => {
     const input = context.req.valid('json')
     return jsonResult(context, await loginUser(input))
   })

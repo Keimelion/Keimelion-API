@@ -1,6 +1,6 @@
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import { createRateLimiter } from '../../../shared/utils/rate-limiter.js'
+import { RATE_LIMITS } from '../../../shared/utils/rate-limiter.js'
 import { authMiddleware, getAuthUser, getJwtPayload } from '../../../shared/middlewares/auth.js'
 import { validationErrorHandler } from '../../../shared/utils/validation.js'
 import { jsonResult } from '../../../shared/utils/response.js'
@@ -16,7 +16,7 @@ export type LogoutInput = z.infer<typeof logoutSchema>
 export function mountLogout(router: FeatureRouter): void {
   router.post(
     '/logout',
-    createRateLimiter(5),
+    RATE_LIMITS.STRICT(),
     authMiddleware,
     zValidator('json', logoutSchema, validationErrorHandler),
     async (context) => {

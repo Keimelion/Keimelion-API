@@ -1,6 +1,6 @@
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import { createRateLimiter } from '../../../../shared/utils/rate-limiter.js'
+import { RATE_LIMITS } from '../../../../shared/utils/rate-limiter.js'
 import { validationErrorHandler } from '../../../../shared/utils/validation.js'
 import { USER_ROLE_VALUES } from '../../../../shared/enums/user-role.js'
 import { getAuthUser } from '../../../../shared/middlewares/auth.js'
@@ -9,9 +9,6 @@ import { jsonResult } from '../../../../shared/utils/response.js'
 import type { FeatureRouter } from '../../../../shared/types/app.js'
 import { USERNAME_REGEX } from '../../../users/users.constants.js'
 import { createUser } from '../admin-users.service.js'
-
-const ADMIN_CREATE_USER_RATE_LIMIT = 20
-const ADMIN_CREATE_USER_RATE_LIMIT_WINDOW_MS = 60_000
 
 const adminCreateUserSchema = z
   .object({
@@ -32,7 +29,7 @@ export function mountCreateUser(router: FeatureRouter): void {
   router.post(
     '/',
     ...adminOnly,
-    createRateLimiter(ADMIN_CREATE_USER_RATE_LIMIT, ADMIN_CREATE_USER_RATE_LIMIT_WINDOW_MS),
+    RATE_LIMITS.STANDARD(),
     zValidator('json', adminCreateUserSchema, validationErrorHandler),
     async (context) => {
       const admin = getAuthUser(context)

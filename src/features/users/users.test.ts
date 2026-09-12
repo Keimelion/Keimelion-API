@@ -1,9 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { SignJWT } from 'jose'
 import { db } from '../../db/client.js'
 import { apiRequest } from '../../shared/test/api-request.js'
-
-const TEST_JWT_SECRET = 'test-secret-key-that-is-at-least-32-chars-long'
+import { generateTestToken, makeAccessTokenEntry } from '../../shared/test/auth.js'
 
 const SAFE_USER = {
   id: '00000000-0000-0000-0000-000000000001',
@@ -29,18 +27,7 @@ const SAFE_USER = {
   updatedAt: new Date('2024-01-01'),
 }
 
-const TEST_JTI = '00000000-0000-0000-0000-000000000099'
-const ACCESS_TOKEN_ENTRY = { tokenId: TEST_JTI, userId: SAFE_USER.id, expiresAt: new Date(Date.now() + 60 * 60 * 1000) }
-
-async function generateTestToken(userId: string, role = 'user'): Promise<string> {
-  const secret = new TextEncoder().encode(TEST_JWT_SECRET)
-  return new SignJWT({ sub: userId, role })
-    .setProtectedHeader({ alg: 'HS256' })
-    .setIssuedAt()
-    .setExpirationTime('1h')
-    .setJti(TEST_JTI)
-    .sign(secret)
-}
+const ACCESS_TOKEN_ENTRY = makeAccessTokenEntry(SAFE_USER.id)
 
 describe('GET /v1/users/me', () => {
   beforeEach(() => {

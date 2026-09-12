@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { SignJWT } from 'jose'
 import { db } from '../../../db/client.js'
 import { apiRequest } from '../../../shared/test/api-request.js'
+import { generateTestToken, makeAccessTokenEntry } from '../../../shared/test/auth.js'
 import { logger } from '../../../shared/utils/logger.js'
 
 vi.mock('../../../shared/utils/logger.js', () => ({
@@ -11,8 +11,6 @@ vi.mock('../../../shared/utils/logger.js', () => ({
     error: vi.fn(),
   },
 }))
-
-const TEST_JWT_SECRET = 'test-secret-key-that-is-at-least-32-chars-long'
 
 const ADMIN_USER = {
   id: '00000000-0000-0000-0000-000000000001',
@@ -62,18 +60,7 @@ const TARGET_USER = {
   updatedAt: new Date('2024-01-01'),
 }
 
-const TEST_JTI = '00000000-0000-0000-0000-000000000099'
-const ACCESS_TOKEN_ENTRY = { tokenId: TEST_JTI, userId: ADMIN_USER.id, expiresAt: new Date(Date.now() + 60 * 60 * 1000) }
-
-async function generateTestToken(userId: string, role = 'user'): Promise<string> {
-  const secret = new TextEncoder().encode(TEST_JWT_SECRET)
-  return new SignJWT({ sub: userId, role })
-    .setProtectedHeader({ alg: 'HS256' })
-    .setIssuedAt()
-    .setExpirationTime('1h')
-    .setJti(TEST_JTI)
-    .sign(secret)
-}
+const ACCESS_TOKEN_ENTRY = makeAccessTokenEntry(ADMIN_USER.id)
 
 function mockListUsers(rows: unknown[]): void {
   vi.mocked(db.query.users.findMany).mockResolvedValueOnce(rows as never)
@@ -94,7 +81,7 @@ describe('GET /v1/admin/users', () => {
   })
 
   it('returns 200 with paginated users list when admin is authenticated', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     mockListUsers([ADMIN_USER, TARGET_USER])
     mockCountChain(2)
@@ -109,7 +96,7 @@ describe('GET /v1/admin/users', () => {
   })
 
   it('hides soft-deleted users by default', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     mockListUsers([ADMIN_USER])
     mockCountChain(1)
@@ -123,7 +110,7 @@ describe('GET /v1/admin/users', () => {
   })
 
   it('returns soft-deleted users when isDeleted=true', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     const deletedUser = { ...TARGET_USER, deletedAt: new Date('2024-06-01') }
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     mockListUsers([deletedUser])
@@ -137,7 +124,7 @@ describe('GET /v1/admin/users', () => {
   })
 
   it('returns empty result set when no users match filters', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     mockListUsers([])
     mockCountChain(0)
@@ -152,7 +139,7 @@ describe('GET /v1/admin/users', () => {
   })
 
   it('filters by email substring', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     mockListUsers([ADMIN_USER])
     mockCountChain(1)
@@ -165,7 +152,7 @@ describe('GET /v1/admin/users', () => {
   })
 
   it('filters by username substring', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     mockListUsers([TARGET_USER])
     mockCountChain(1)
@@ -178,7 +165,7 @@ describe('GET /v1/admin/users', () => {
   })
 
   it('filters by role', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     mockListUsers([ADMIN_USER])
     mockCountChain(1)
@@ -191,7 +178,7 @@ describe('GET /v1/admin/users', () => {
   })
 
   it('filters by isBanned=true returns only banned users', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     const bannedUser = { ...TARGET_USER, bannedAt: new Date('2024-03-01') }
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     mockListUsers([bannedUser])
@@ -205,7 +192,7 @@ describe('GET /v1/admin/users', () => {
   })
 
   it('filters by isBanned=false returns only non-banned users', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     mockListUsers([ADMIN_USER, TARGET_USER])
     mockCountChain(2)
@@ -218,7 +205,7 @@ describe('GET /v1/admin/users', () => {
   })
 
   it('applies createdFrom and createdTo date filters', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     mockListUsers([ADMIN_USER])
     mockCountChain(1)
@@ -229,7 +216,7 @@ describe('GET /v1/admin/users', () => {
   })
 
   it('applies sort param and returns 200', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     mockListUsers([ADMIN_USER, TARGET_USER])
     mockCountChain(2)
@@ -240,7 +227,7 @@ describe('GET /v1/admin/users', () => {
   })
 
   it('applies combined filters', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     mockListUsers([ADMIN_USER])
     mockCountChain(1)
@@ -254,7 +241,7 @@ describe('GET /v1/admin/users', () => {
   })
 
   it('total reflects filtered count (regression guard)', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     mockListUsers([ADMIN_USER])
     mockCountChain(1)
@@ -267,7 +254,7 @@ describe('GET /v1/admin/users', () => {
   })
 
   it('sensitive fields are never present in admin user response', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     mockListUsers([ADMIN_USER])
     mockCountChain(1)
@@ -285,7 +272,7 @@ describe('GET /v1/admin/users', () => {
   })
 
   it('returns 422 when page is less than 1', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
 
     const response = await apiRequest('/v1/admin/users?page=0', { token })
@@ -294,7 +281,7 @@ describe('GET /v1/admin/users', () => {
   })
 
   it('returns 422 when limit exceeds 100', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
 
     const response = await apiRequest('/v1/admin/users?limit=101', { token })
@@ -303,7 +290,7 @@ describe('GET /v1/admin/users', () => {
   })
 
   it('returns 422 when page is not an integer', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
 
     const response = await apiRequest('/v1/admin/users?page=1.5', { token })
@@ -312,7 +299,7 @@ describe('GET /v1/admin/users', () => {
   })
 
   it('returns 422 when sort field is not in whitelist', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
 
     const response = await apiRequest('/v1/admin/users?sort=passwordHash:asc', { token })
@@ -321,7 +308,7 @@ describe('GET /v1/admin/users', () => {
   })
 
   it('returns 422 when sort is missing direction', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
 
     const response = await apiRequest('/v1/admin/users?sort=createdAt', { token })
@@ -330,7 +317,7 @@ describe('GET /v1/admin/users', () => {
   })
 
   it('returns 422 when sort direction is invalid', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
 
     const response = await apiRequest('/v1/admin/users?sort=createdAt:sideways', { token })
@@ -339,7 +326,7 @@ describe('GET /v1/admin/users', () => {
   })
 
   it('returns 422 when role is invalid', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
 
     const response = await apiRequest('/v1/admin/users?role=superuser', { token })
@@ -348,7 +335,7 @@ describe('GET /v1/admin/users', () => {
   })
 
   it('returns 422 when isBanned uses non-literal value', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
 
     const response = await apiRequest('/v1/admin/users?isBanned=1', { token })
@@ -357,7 +344,7 @@ describe('GET /v1/admin/users', () => {
   })
 
   it('returns 422 when isBanned=yes', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
 
     const response = await apiRequest('/v1/admin/users?isBanned=yes', { token })
@@ -366,7 +353,7 @@ describe('GET /v1/admin/users', () => {
   })
 
   it('returns 422 when email is empty string', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
 
     const response = await apiRequest('/v1/admin/users?email=', { token })
@@ -375,7 +362,7 @@ describe('GET /v1/admin/users', () => {
   })
 
   it('returns 422 when email exceeds 320 characters', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     const longEmail = 'a'.repeat(321)
 
@@ -385,7 +372,7 @@ describe('GET /v1/admin/users', () => {
   })
 
   it('returns 422 when createdFrom is not a valid date', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
 
     const response = await apiRequest('/v1/admin/users?createdFrom=not-a-date', { token })
@@ -394,7 +381,7 @@ describe('GET /v1/admin/users', () => {
   })
 
   it('returns 422 when createdFrom is after createdTo', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
 
     const response = await apiRequest('/v1/admin/users?createdFrom=2024-12-31T00:00:00Z&createdTo=2024-01-01T00:00:00Z', { token })
@@ -403,7 +390,7 @@ describe('GET /v1/admin/users', () => {
   })
 
   it('returns 403 when user does not have admin role', async () => {
-    const token = await generateTestToken(TARGET_USER.id, 'user')
+    const token = await generateTestToken(TARGET_USER.id)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(TARGET_USER)
 
     const response = await apiRequest('/v1/admin/users', { token })
@@ -429,7 +416,7 @@ describe('GET /v1/admin/users/:id', () => {
   })
 
   it('returns 200 with admin user when id is valid', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(TARGET_USER)
 
@@ -441,7 +428,7 @@ describe('GET /v1/admin/users/:id', () => {
   })
 
   it('returns 200 including soft-deleted user', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     const deletedUser = { ...TARGET_USER, deletedAt: new Date('2024-06-01') }
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(deletedUser)
@@ -454,7 +441,7 @@ describe('GET /v1/admin/users/:id', () => {
   })
 
   it('returns 422 when id is not a UUID', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
 
     const response = await apiRequest('/v1/admin/users/not-a-uuid', { token })
@@ -463,7 +450,7 @@ describe('GET /v1/admin/users/:id', () => {
   })
 
   it('returns 404 when user is not found', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(undefined)
 
@@ -473,7 +460,7 @@ describe('GET /v1/admin/users/:id', () => {
   })
 
   it('returns 403 when user does not have admin role', async () => {
-    const token = await generateTestToken(TARGET_USER.id, 'user')
+    const token = await generateTestToken(TARGET_USER.id)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(TARGET_USER)
 
     const response = await apiRequest(`/v1/admin/users/${TARGET_USER.id}`, { token })
@@ -489,7 +476,7 @@ describe('PATCH /v1/admin/users/:id', () => {
   })
 
   it('returns 200 with updated user when body is valid', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     const updatedUser = { ...TARGET_USER, role: 'moderator' as const }
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(TARGET_USER)
@@ -519,7 +506,7 @@ describe('PATCH /v1/admin/users/:id', () => {
   })
 
   it('returns 422 when avatar_url is not a valid URL', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
 
     const response = await apiRequest(`/v1/admin/users/${TARGET_USER.id}`, {
@@ -532,7 +519,7 @@ describe('PATCH /v1/admin/users/:id', () => {
   })
 
   it('returns 422 when role is not a valid enum value', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
 
     const response = await apiRequest(`/v1/admin/users/${TARGET_USER.id}`, {
@@ -545,7 +532,7 @@ describe('PATCH /v1/admin/users/:id', () => {
   })
 
   it('returns 404 when target user is not found', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(undefined)
 
@@ -559,7 +546,7 @@ describe('PATCH /v1/admin/users/:id', () => {
   })
 
   it('returns 403 when admin tries to update themselves', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
 
     const response = await apiRequest(`/v1/admin/users/${ADMIN_USER.id}`, {
@@ -572,7 +559,7 @@ describe('PATCH /v1/admin/users/:id', () => {
   })
 
   it('returns 500 when update query returns empty result', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(TARGET_USER)
     vi.mocked(db.transaction).mockImplementationOnce(async (callback) => {
@@ -599,7 +586,7 @@ describe('PATCH /v1/admin/users/:id', () => {
   })
 
   it('returns 403 when user does not have admin role', async () => {
-    const token = await generateTestToken(TARGET_USER.id, 'user')
+    const token = await generateTestToken(TARGET_USER.id)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(TARGET_USER)
 
     const response = await apiRequest(`/v1/admin/users/${TARGET_USER.id}`, {
@@ -612,7 +599,7 @@ describe('PATCH /v1/admin/users/:id', () => {
   })
 
   it('silently strips password fields from the body — password is never touched', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     const updatedUser = { ...TARGET_USER, role: 'moderator' as const }
     const setMock = vi.fn().mockReturnValueOnce({
       where: vi.fn().mockReturnValueOnce({
@@ -652,7 +639,7 @@ describe('PATCH /v1/admin/users/:id', () => {
   })
 
   it('revokes both token types when role changes', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     const updatedUser = { ...TARGET_USER, role: 'moderator' as const }
     let capturedTx: { delete: ReturnType<typeof vi.fn> } | undefined
 
@@ -684,7 +671,7 @@ describe('PATCH /v1/admin/users/:id', () => {
   })
 
   it('skips token revocation when provided role equals current role', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     const sameRoleUser = { ...TARGET_USER, role: 'user' as const }
     let capturedTx: { delete: ReturnType<typeof vi.fn> } | undefined
 
@@ -716,7 +703,7 @@ describe('PATCH /v1/admin/users/:id', () => {
   })
 
   it('skips token revocation when update does not include role', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     const updatedUser = { ...TARGET_USER, avatarUrl: 'https://example.com/avatar.png' }
     let capturedTx: { delete: ReturnType<typeof vi.fn> } | undefined
 
@@ -755,7 +742,7 @@ describe('DELETE /v1/admin/users/:id', () => {
   })
 
   it('returns 200 and soft-deletes the user', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     const deletedUser = { ...TARGET_USER, deletedAt: new Date() }
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(TARGET_USER)
@@ -775,7 +762,7 @@ describe('DELETE /v1/admin/users/:id', () => {
   })
 
   it('returns 422 when id is not a UUID', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
 
     const response = await apiRequest('/v1/admin/users/not-a-uuid', { method: 'DELETE', token })
@@ -784,7 +771,7 @@ describe('DELETE /v1/admin/users/:id', () => {
   })
 
   it('returns 404 when target user is not found', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(undefined)
 
@@ -794,7 +781,7 @@ describe('DELETE /v1/admin/users/:id', () => {
   })
 
   it('returns 403 when admin tries to delete themselves', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
 
     const response = await apiRequest(`/v1/admin/users/${ADMIN_USER.id}`, { method: 'DELETE', token })
@@ -803,7 +790,7 @@ describe('DELETE /v1/admin/users/:id', () => {
   })
 
   it('returns 403 when user does not have admin role', async () => {
-    const token = await generateTestToken(TARGET_USER.id, 'user')
+    const token = await generateTestToken(TARGET_USER.id)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(TARGET_USER)
 
     const response = await apiRequest(`/v1/admin/users/${TARGET_USER.id}`, { method: 'DELETE', token })
@@ -832,7 +819,7 @@ describe('POST /v1/admin/users', () => {
   })
 
   it('returns 403 when user does not have admin role', async () => {
-    const token = await generateTestToken(TARGET_USER.id, 'user')
+    const token = await generateTestToken(TARGET_USER.id)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(TARGET_USER)
 
     const response = await apiRequest('/v1/admin/users', {
@@ -845,7 +832,7 @@ describe('POST /v1/admin/users', () => {
   })
 
   it('returns 422 when role is missing', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
 
     const response = await apiRequest('/v1/admin/users', {
@@ -858,7 +845,7 @@ describe('POST /v1/admin/users', () => {
   })
 
   it('returns 422 when role is invalid', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
 
     const response = await apiRequest('/v1/admin/users', {
@@ -871,7 +858,7 @@ describe('POST /v1/admin/users', () => {
   })
 
   it('returns 422 when email is invalid', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
 
     const response = await apiRequest('/v1/admin/users', {
@@ -884,7 +871,7 @@ describe('POST /v1/admin/users', () => {
   })
 
   it('returns 422 when username does not match the regex', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
 
     const response = await apiRequest('/v1/admin/users', {
@@ -897,7 +884,7 @@ describe('POST /v1/admin/users', () => {
   })
 
   it('returns 422 when an unknown key is provided (strict schema)', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
 
     const response = await apiRequest('/v1/admin/users', {
@@ -910,7 +897,7 @@ describe('POST /v1/admin/users', () => {
   })
 
   it('returns 422 when password key is provided (strict schema rejects it)', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
 
     const response = await apiRequest('/v1/admin/users', {
@@ -923,7 +910,7 @@ describe('POST /v1/admin/users', () => {
   })
 
   it('returns 201 with user and passwordResetToken in non-production', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     mockInsertUser()
 
@@ -942,7 +929,7 @@ describe('POST /v1/admin/users', () => {
   })
 
   it('response body does not expose sensitive fields', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     mockInsertUser()
 
@@ -960,7 +947,7 @@ describe('POST /v1/admin/users', () => {
   })
 
   it('logs at warn level for privileged role (moderator)', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     mockInsertUser()
 
@@ -977,7 +964,7 @@ describe('POST /v1/admin/users', () => {
   })
 
   it('logs at warn level for privileged role (admin)', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     mockInsertUser()
 
@@ -991,7 +978,7 @@ describe('POST /v1/admin/users', () => {
   })
 
   it('logs at info level for non-privileged role (user)', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     mockInsertUser()
 
@@ -1008,7 +995,7 @@ describe('POST /v1/admin/users', () => {
   })
 
   it('calls db.insert with expected explicit values', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
 
     const valuesMock = vi.fn().mockReturnValueOnce({
@@ -1036,7 +1023,7 @@ describe('POST /v1/admin/users', () => {
   })
 
   it('returns 409 when insert hits the unique constraint', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, 'admin')
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
 
     class PgUniqueError extends Error {
