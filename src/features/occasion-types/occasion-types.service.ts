@@ -3,9 +3,10 @@ import { listActiveOccasionTypes } from '../../db/entities/occasion-types/occasi
 import { toPublicOccasionType } from './occasion-types.mapper.js'
 import type { ServiceResult } from '../../shared/types/service.js'
 import type { PublicOccasionType } from './occasion-types.mapper.js'
+import type { Locale } from '../../shared/enums/locale.js'
 
-export async function listOccasionTypes(): Promise<ServiceResult<PublicOccasionType[]>> {
-  const rows = await listActiveOccasionTypes()
+export async function listOccasionTypes(locale: Locale): Promise<ServiceResult<PublicOccasionType[]>> {
+  const rows = await listActiveOccasionTypes(locale)
   return {
     data: rows.map(toPublicOccasionType),
     httpStatus: HttpStatus.OK,

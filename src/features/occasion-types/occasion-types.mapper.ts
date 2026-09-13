@@ -1,4 +1,4 @@
-import type { OccasionType } from '../../db/entities/occasion-types/occasion-types.schema.js'
+import type { OccasionTypeWithLabel } from '../../db/entities/occasion-types/occasion-types.repository.js'
 
 export interface PublicOccasionType {
   id: string
@@ -7,7 +7,7 @@ export interface PublicOccasionType {
   emoji: string | null
 }
 
-export function toPublicOccasionType(row: OccasionType): PublicOccasionType {
+export function toPublicOccasionType(row: OccasionTypeWithLabel): PublicOccasionType {
   return {
     id: row.id,
     slug: row.slug,

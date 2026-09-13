@@ -1,9 +1,11 @@
-import type { Hono } from 'hono'
 import { jsonResult } from '../../../shared/utils/response.js'
 import { listOccasionTypes } from '../occasion-types.service.js'
+import { getLocale } from '../../../shared/middlewares/resolve-locale.js'
+import type { FeatureRouter } from '../../../shared/types/app.js'
 
-export function mountListOccasionTypes(router: Hono): void {
+export function mountListOccasionTypes(router: FeatureRouter): void {
   router.get('/', async (context) => {
-    return jsonResult(context, await listOccasionTypes())
+    const locale = getLocale(context)
+    return jsonResult(context, await listOccasionTypes(locale))
   })
 }
