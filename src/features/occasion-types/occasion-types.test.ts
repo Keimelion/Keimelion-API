@@ -12,7 +12,7 @@ vi.mock('../../shared/utils/logger.js', () => ({
 
 const OCCASION_TYPE_MARIAGE_FR = {
   id: '00000000-0000-0000-0000-000000000001',
-  slug: 'mariage',
+  slug: 'wedding',
   label: 'Mariage',
   emoji: '💍',
   sortOrder: 10,
@@ -21,7 +21,7 @@ const OCCASION_TYPE_MARIAGE_FR = {
 
 const OCCASION_TYPE_MARIAGE_EN = {
   id: '00000000-0000-0000-0000-000000000001',
-  slug: 'mariage',
+  slug: 'wedding',
   label: 'Wedding',
   emoji: '💍',
   sortOrder: 10,
@@ -30,7 +30,7 @@ const OCCASION_TYPE_MARIAGE_EN = {
 
 const OCCASION_TYPE_NAISSANCE_FR = {
   id: '00000000-0000-0000-0000-000000000002',
-  slug: 'naissance',
+  slug: 'birth',
   label: 'Naissance',
   emoji: '👶',
   sortOrder: 20,
@@ -130,8 +130,8 @@ describe('GET /v1/occasion-types', () => {
     const body = (await response.json()) as PublicOccasionType[]
 
     expect(response.status).toBe(200)
-    expect(body[0]?.slug).toBe('mariage')
-    expect(body[1]?.slug).toBe('naissance')
+    expect(body[0]?.slug).toBe('wedding')
+    expect(body[1]?.slug).toBe('birth')
   })
 
   it('returns an empty array when no active occasion types exist', async () => {
@@ -215,8 +215,8 @@ describe('GET /v1/occasion-types', () => {
     expect(body[0]?.label).toBe('Wedding')
   })
 
-  it('falls back to French when Accept-Language is an unsupported locale (de)', async () => {
-    mockSelectRows([OCCASION_TYPE_MARIAGE_FR])
+  it('falls back to English when Accept-Language is an unsupported locale (de)', async () => {
+    mockSelectRows([OCCASION_TYPE_MARIAGE_EN])
 
     const { app } = await import('../../app.js')
     const response = await app.request('/v1/occasion-types', {
@@ -225,31 +225,31 @@ describe('GET /v1/occasion-types', () => {
     const body = (await response.json()) as PublicOccasionType[]
 
     expect(response.status).toBe(200)
-    expect(body[0]?.label).toBe('Mariage')
+    expect(body[0]?.label).toBe('Wedding')
   })
 
-  it('falls back to French when no Accept-Language header is present', async () => {
-    mockSelectRows([OCCASION_TYPE_MARIAGE_FR])
+  it('falls back to English when no Accept-Language header is present', async () => {
+    mockSelectRows([OCCASION_TYPE_MARIAGE_EN])
 
     const { app } = await import('../../app.js')
     const response = await app.request('/v1/occasion-types')
     const body = (await response.json()) as PublicOccasionType[]
 
     expect(response.status).toBe(200)
-    expect(body[0]?.label).toBe('Mariage')
+    expect(body[0]?.label).toBe('Wedding')
   })
 
-  it('returns French label as fallback when only FR translation exists and EN is requested', async () => {
-    const onlyFrTranslation = { ...OCCASION_TYPE_MARIAGE_FR, label: 'Mariage' }
-    mockSelectRows([onlyFrTranslation])
+  it('returns English label as fallback when only EN translation exists and FR is requested', async () => {
+    const onlyEnTranslation = { ...OCCASION_TYPE_MARIAGE_EN, label: 'Wedding' }
+    mockSelectRows([onlyEnTranslation])
 
     const { app } = await import('../../app.js')
     const response = await app.request('/v1/occasion-types', {
-      headers: { 'Accept-Language': 'en' },
+      headers: { 'Accept-Language': 'fr' },
     })
     const body = (await response.json()) as PublicOccasionType[]
 
     expect(response.status).toBe(200)
-    expect(body[0]?.label).toBe('Mariage')
+    expect(body[0]?.label).toBe('Wedding')
   })
 })

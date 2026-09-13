@@ -17,6 +17,12 @@ INSERT INTO "occasion_type_translations" ("occasion_type_id", "locale", "label")
 SELECT "id", 'fr', "label"
 FROM "occasion_types";
 
+UPDATE "occasion_types" SET "slug" = 'wedding' WHERE "slug" = 'mariage';
+UPDATE "occasion_types" SET "slug" = 'birth' WHERE "slug" = 'naissance';
+UPDATE "occasion_types" SET "slug" = 'birthday' WHERE "slug" = 'anniversaire';
+UPDATE "occasion_types" SET "slug" = 'first-apartment' WHERE "slug" = 'premier-appartement';
+UPDATE "occasion_types" SET "slug" = 'other' WHERE "slug" = 'autre';
+
 ALTER TABLE "occasion_types" DROP COLUMN "label";
 
 COMMIT;
