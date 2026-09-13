@@ -5,6 +5,7 @@ import { env } from './config/env.js'
 import { requestIdMiddleware } from './shared/middlewares/request-id.js'
 import { rateLimitMiddleware } from './shared/middlewares/rate-limit.js'
 import { loggerMiddleware } from './shared/middlewares/logger.js'
+import { resolveLocaleMiddleware } from './shared/middlewares/resolve-locale.js'
 import { mountRoutes } from './features/index.js'
 import { ErrorCode } from './shared/enums/error-code.js'
 import { HttpMethod, HttpHeader } from './shared/enums/http.js'
@@ -28,7 +29,10 @@ app.use('*', rateLimitMiddleware)
 // 4. Structured request logger
 app.use('*', loggerMiddleware)
 
-// 5. CORS
+// 5. Locale resolution — sets locale on context for all request handlers
+app.use('*', resolveLocaleMiddleware)
+
+// 6. CORS
 app.use(
   '*',
   cors({

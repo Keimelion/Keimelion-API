@@ -24,12 +24,23 @@ vi.mock('../../config/env.js', () => ({
   },
 }))
 
+const buildSelectChain = (resolvedValue: unknown[] = []) => {
+  const chain = {
+    orderBy: vi.fn(() => Promise.resolve(resolvedValue)),
+    where: vi.fn(),
+    leftJoin: vi.fn(),
+    from: vi.fn(),
+  }
+  chain.where.mockReturnValue(chain)
+  chain.leftJoin.mockReturnValue(chain)
+  chain.from.mockReturnValue(chain)
+  return chain
+}
+
 vi.mock('../../db/client.js', () => ({
   db: {
     execute: vi.fn(),
-    select: vi.fn(() => ({
-      from: vi.fn(() => Promise.resolve([])),
-    })),
+    select: vi.fn(() => buildSelectChain()),
     query: {
       users: {
         findFirst: vi.fn(),
@@ -43,11 +54,18 @@ vi.mock('../../db/client.js', () => ({
       },
       occasionTypes: {
         findMany: vi.fn(),
+        findFirst: vi.fn(),
+      },
+      occasionTypeTranslations: {
+        findMany: vi.fn(),
       },
     },
     insert: vi.fn(() => ({
       values: vi.fn(() => ({
         returning: vi.fn(),
+        onConflictDoNothing: vi.fn(() => ({
+          returning: vi.fn(),
+        })),
       })),
     })),
     update: vi.fn(() => ({

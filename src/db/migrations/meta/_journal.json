@@ -50,6 +50,13 @@
       "when": 1789213533683,
       "tag": "0006_add-occasion-types",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1789300179508,
+      "tag": "0007_add_occasion_type_translations",
+      "breakpoints": true
     }
   ]
 }
