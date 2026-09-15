@@ -8,16 +8,17 @@ import { adminOnly } from '../../../../shared/middlewares/admin-only.js'
 import { jsonResult } from '../../../../shared/utils/response.js'
 import type { FeatureRouter } from '../../../../shared/types/app.js'
 import { createOccasionType } from '../admin-occasion-types.service.js'
-
-const SLUG_REGEX = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
-const MIN_SLUG_LENGTH = 2
-const MAX_SLUG_LENGTH = 60
-const MIN_LABEL_LENGTH = 1
-const MAX_LABEL_LENGTH = 100
-const MIN_EMOJI_LENGTH = 1
-const MAX_EMOJI_LENGTH = 10
-const MIN_SORT_ORDER = 0
-const MAX_SORT_ORDER = 32767
+import {
+  SLUG_REGEX,
+  MIN_SLUG_LENGTH,
+  MAX_SLUG_LENGTH,
+  MIN_EMOJI_LENGTH,
+  MAX_EMOJI_LENGTH,
+  MIN_SORT_ORDER,
+  MAX_SORT_ORDER,
+  MIN_LABEL_LENGTH,
+  MAX_LABEL_LENGTH,
+} from '../../../../db/entities/occasion-types/occasion-types.constants.js'
 
 const adminCreateOccasionTypeSchema = z
   .object({

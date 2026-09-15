@@ -8,15 +8,18 @@ import { jsonResult } from '../../../../shared/utils/response.js'
 import { uuidParamSchema } from '../../../../shared/schemas/params.js'
 import type { FeatureRouter } from '../../../../shared/types/app.js'
 import { updateOccasionTypeById } from '../admin-occasion-types.service.js'
-
-const MIN_SORT_ORDER = 0
-const MAX_SORT_ORDER = 32767
-const MIN_LABEL_LENGTH = 1
-const MAX_LABEL_LENGTH = 100
+import {
+  MIN_EMOJI_LENGTH,
+  MAX_EMOJI_LENGTH,
+  MIN_SORT_ORDER,
+  MAX_SORT_ORDER,
+  MIN_LABEL_LENGTH,
+  MAX_LABEL_LENGTH,
+} from '../../../../db/entities/occasion-types/occasion-types.constants.js'
 
 const adminUpdateOccasionTypeSchema = z
   .object({
-    emoji: z.string().trim().min(1).max(10).nullable().optional(),
+    emoji: z.string().trim().min(MIN_EMOJI_LENGTH).max(MAX_EMOJI_LENGTH).nullable().optional(),
     sortOrder: z.number().int().min(MIN_SORT_ORDER).max(MAX_SORT_ORDER).optional(),
     isActive: z.boolean().optional(),
     translations: z
