@@ -1,18 +1,13 @@
 import type { OccasionType, OccasionTypeTranslation } from '../../../db/entities/occasion-types/occasion-types.schema.js'
+import type { BaseOccasionType } from '../../../shared/types/occasion-type.js'
+import { toBaseOccasionType } from '../../occasion-types/occasion-types.mapper.js'
 
 export interface AdminOccasionTypeTranslation {
   locale: string
   label: string
 }
 
-export interface AdminOccasionType {
-  id: string
-  slug: string
-  emoji: string | null
-  sortOrder: number
-  isActive: boolean
-  createdAt: Date
-  updatedAt: Date
+export interface AdminOccasionType extends BaseOccasionType {
   translations: AdminOccasionTypeTranslation[]
 }
 
@@ -21,13 +16,7 @@ export function toAdminOccasionType(
   translations: OccasionTypeTranslation[],
 ): AdminOccasionType {
   return {
-    id: row.id,
-    slug: row.slug,
-    emoji: row.emoji ?? null,
-    sortOrder: row.sortOrder,
-    isActive: row.isActive,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
+    ...toBaseOccasionType(row),
     translations: translations.map((translation) => ({
       locale: translation.locale,
       label: translation.label,
