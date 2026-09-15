@@ -1,4 +1,4 @@
-import { and, asc, count, eq, sql } from 'drizzle-orm'
+import { and, asc, count, eq, inArray, sql } from 'drizzle-orm'
 import { db } from '../../client.js'
 import { occasionTypes, occasionTypeTranslations } from './occasion-types.schema.js'
 import { DEFAULT_LOCALE } from '../../../shared/enums/locale.js'
@@ -77,6 +77,15 @@ export async function findTranslationsForOccasionType(
 ): Promise<OccasionTypeTranslation[]> {
   return db.query.occasionTypeTranslations.findMany({
     where: eq(occasionTypeTranslations.occasionTypeId, occasionTypeId),
+  })
+}
+
+export async function findTranslationsForOccasionTypes(
+  occasionTypeIds: string[],
+): Promise<OccasionTypeTranslation[]> {
+  if (occasionTypeIds.length === 0) return []
+  return db.query.occasionTypeTranslations.findMany({
+    where: inArray(occasionTypeTranslations.occasionTypeId, occasionTypeIds),
   })
 }
 

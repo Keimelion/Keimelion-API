@@ -298,7 +298,6 @@ describe('GET /v1/admin/occasion-types', () => {
     vi.mocked(db.query.occasionTypes.findMany).mockResolvedValueOnce([OCCASION_TYPE_ROW, inactiveRow] as never)
     mockCountChain(2)
     mockFindTranslations(OCCASION_TYPE_TRANSLATIONS)
-    mockFindTranslations([])
 
     const response = await apiRequest('/v1/admin/occasion-types', { token })
 

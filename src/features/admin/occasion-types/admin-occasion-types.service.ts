@@ -11,6 +11,7 @@ import {
   findAllOccasionTypes,
   countOccasionTypes,
   findTranslationsForOccasionType,
+  findTranslationsForOccasionTypes,
   insertOccasionType,
   updateOccasionType,
   upsertOccasionTypeTranslation,
@@ -23,6 +24,7 @@ import type { AdminOccasionType } from './admin-occasion-types.mapper.js'
 import type { ServiceResult } from '../../../shared/types/service.js'
 import type { PaginatedResponse } from '../../../shared/types/api.js'
 import type { PaginationInput } from '../../../shared/schemas/pagination.js'
+import type { OccasionTypeTranslation } from '../../../db/entities/occasion-types/occasion-types.schema.js'
 import type { AdminCreateOccasionTypeInput } from './endpoints/create.js'
 import type { AdminUpdateOccasionTypeInput } from './endpoints/update.js'
 
@@ -71,15 +73,20 @@ export async function listOccasionTypes(
 ): Promise<ServiceResult<PaginatedResponse<AdminOccasionType>>> {
   const [rows, total] = await Promise.all([findAllOccasionTypes(input), countOccasionTypes()])
 
-  const occasionTypes = await Promise.all(
-    rows.map(async (row) => {
-      const translations = await findTranslationsForOccasionType(row.id)
-      return toAdminOccasionType(row, translations)
-    }),
+  const translations = await findTranslationsForOccasionTypes(rows.map((row) => row.id))
+  const translationsByOccasionType = new Map<string, OccasionTypeTranslation[]>()
+  for (const translation of translations) {
+    const list = translationsByOccasionType.get(translation.occasionTypeId) ?? []
+    list.push(translation)
+    translationsByOccasionType.set(translation.occasionTypeId, list)
+  }
+
+  const items = rows.map((row) =>
+    toAdminOccasionType(row, translationsByOccasionType.get(row.id) ?? []),
   )
 
   return {
-    data: buildPaginatedResponse(occasionTypes, input, total),
+    data: buildPaginatedResponse(items, input, total),
     httpStatus: HttpStatus.OK,
   }
 }
