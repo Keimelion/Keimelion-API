@@ -1,6 +1,6 @@
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import { LOCALES, DEFAULT_LOCALE } from '../../../../shared/enums/locale.js'
+import { DEFAULT_LOCALE } from '../../../../shared/enums/locale.js'
 import { validationErrorHandler } from '../../../../shared/utils/validation.js'
 import { getAuthUser } from '../../../../shared/middlewares/auth.js'
 import { adminOnly } from '../../../../shared/middlewares/admin-only.js'
@@ -9,30 +9,21 @@ import { uuidParamSchema } from '../../../../shared/schemas/params.js'
 import type { FeatureRouter } from '../../../../shared/types/app.js'
 import { updateOccasionTypeById } from '../admin-occasion-types.service.js'
 import {
-  MIN_EMOJI_LENGTH,
-  MAX_EMOJI_LENGTH,
-  MIN_SORT_ORDER,
-  MAX_SORT_ORDER,
-  MIN_LABEL_LENGTH,
-  MAX_LABEL_LENGTH,
-} from '../../../../db/entities/occasion-types/occasion-types.constants.js'
+  emojiSchema,
+  labelSchema,
+  sortOrderSchema,
+  localeSchema,
+  hasUniqueLocales,
+} from '../../../../db/entities/occasion-types/occasion-types.schemas.js'
 
 const adminUpdateOccasionTypeSchema = z
   .object({
-    emoji: z.string().trim().min(MIN_EMOJI_LENGTH).max(MAX_EMOJI_LENGTH).nullable().optional(),
-    sortOrder: z.number().int().min(MIN_SORT_ORDER).max(MAX_SORT_ORDER).optional(),
+    emoji: emojiSchema.nullable().optional(),
+    sortOrder: sortOrderSchema.optional(),
     isActive: z.boolean().optional(),
     translations: z
-      .array(
-        z.object({
-          locale: z.enum(LOCALES),
-          label: z.string().trim().min(MIN_LABEL_LENGTH).max(MAX_LABEL_LENGTH).nullable(),
-        }),
-      )
-      .refine(
-        (arr) => new Set(arr.map((translation) => translation.locale)).size === arr.length,
-        'Duplicate locale in translations',
-      )
+      .array(z.object({ locale: localeSchema, label: labelSchema.nullable() }))
+      .refine(hasUniqueLocales, 'Duplicate locale in translations')
       .refine(
         (arr) =>
           !arr.some(
