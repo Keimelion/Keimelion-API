@@ -21,7 +21,7 @@ interface AdminInsertUserFields {
 
 type AdminUpdateUserFields = Partial<Pick<typeof users.$inferInsert, 'avatarUrl' | 'isMarketingOptedIn' | 'role'>>
 
-export type AdminUsersSortField = 'createdAt' | 'email' | 'lastActiveAt'
+export type AdminUsersSortField = 'createdAt' | 'email' | 'username' | 'lastActiveAt'
 
 export interface ListUsersFilters {
   email?: string | undefined
@@ -38,6 +38,7 @@ const USERS_SORT: SortConfig<AdminUsersSortField> = {
   columns: {
     createdAt: users.createdAt,
     email: users.email,
+    username: users.username,
     lastActiveAt: users.lastActiveAt,
   },
   defaultField: 'createdAt',

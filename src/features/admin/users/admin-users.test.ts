@@ -226,6 +226,17 @@ describe('GET /v1/admin/users', () => {
     expect(response.status).toBe(200)
   })
 
+  it('applies sort=username:asc and returns 200', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
+    mockListUsers([ADMIN_USER, TARGET_USER])
+    mockCountChain(2)
+
+    const response = await apiRequest('/v1/admin/users?sort=username:asc', { token })
+
+    expect(response.status).toBe(200)
+  })
+
   it('applies combined filters', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
