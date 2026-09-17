@@ -9,7 +9,7 @@ import { jsonResult } from '../../../../shared/utils/response.js'
 import { listUsers } from '../admin-users.service.js'
 import { USER_ROLE_VALUES } from '../../../../shared/enums/user-role.js'
 
-const ADMIN_USERS_SORT_FIELDS = ['createdAt', 'email', 'lastActiveAt'] as const
+const ADMIN_USERS_SORT_FIELDS = ['createdAt', 'email', 'username', 'lastActiveAt'] as const
 
 const MAX_FILTER_STRING_LENGTH = 320
 
