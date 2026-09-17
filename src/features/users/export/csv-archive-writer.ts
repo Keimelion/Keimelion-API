@@ -9,12 +9,13 @@ export async function buildExportZipStream(
   entities: ExportEntityDescriptor[],
 ): Promise<ReadableStream<Uint8Array>> {
   const archive = new ZipArchive({ zlib: { level: 9 } })
+  const entityNames = entities.map((entity) => entity.filename)
 
   archive.on('error', (error) => {
-    logger.error({ error }, 'Export archive stream error')
+    logger.error({ error, userId, entities: entityNames }, 'Export archive stream error')
   })
   archive.on('warning', (error) => {
-    logger.warn({ error }, 'Export archive stream warning')
+    logger.warn({ error, userId, entities: entityNames }, 'Export archive stream warning')
   })
 
   for (const entity of entities) {
@@ -23,7 +24,7 @@ export async function buildExportZipStream(
   }
 
   archive.finalize().catch((error: unknown) => {
-    logger.error({ error }, 'Export archive finalize failed')
+    logger.error({ error, userId, entities: entityNames }, 'Export archive finalize failed')
   })
 
   return Readable.toWeb(archive) as ReadableStream<Uint8Array>
