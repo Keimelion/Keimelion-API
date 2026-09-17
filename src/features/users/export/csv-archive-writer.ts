@@ -1,7 +1,33 @@
 import { Readable } from 'stream'
 import { ZipArchive } from 'archiver'
 import { Stringifier } from 'csv-stringify'
+import { logger } from '../../../shared/utils/logger.js'
 import type { ExportEntityDescriptor } from './export-entities.js'
+
+export async function buildExportZipStream(
+  userId: string,
+  entities: ExportEntityDescriptor[],
+): Promise<ReadableStream<Uint8Array>> {
+  const archive = new ZipArchive({ zlib: { level: 9 } })
+
+  archive.on('error', (error) => {
+    logger.error({ error }, 'Export archive stream error')
+  })
+  archive.on('warning', (error) => {
+    logger.warn({ error }, 'Export archive stream warning')
+  })
+
+  for (const entity of entities) {
+    const csvStream = await buildEntityCsvStream(entity, userId)
+    archive.append(csvStream, { name: entity.filename })
+  }
+
+  archive.finalize().catch((error: unknown) => {
+    logger.error({ error }, 'Export archive finalize failed')
+  })
+
+  return Readable.toWeb(archive) as ReadableStream<Uint8Array>
+}
 
 async function buildEntityCsvStream(
   entity: ExportEntityDescriptor,
@@ -13,25 +39,7 @@ async function buildEntityCsvStream(
     columns: entity.columns,
     escape_formulas: true,
   })
-  for (const row of rows) {
-    stringifier.write(row)
-  }
+  rows.forEach((row) => stringifier.write(row))
   stringifier.end()
   return stringifier
-}
-
-export async function buildExportZipStream(
-  userId: string,
-  entities: ExportEntityDescriptor[],
-): Promise<ReadableStream<Uint8Array>> {
-  const archive = new ZipArchive({ zlib: { level: 9 } })
-
-  for (const entity of entities) {
-    const csvStream = await buildEntityCsvStream(entity, userId)
-    archive.append(csvStream, { name: entity.filename })
-  }
-
-  await archive.finalize()
-
-  return Readable.toWeb(archive) as ReadableStream<Uint8Array>
 }
