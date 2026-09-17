@@ -1,3 +1,4 @@
+import { stream } from 'hono/streaming'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { authMiddleware, getAuthUser } from '../../../shared/middlewares/auth.js'
@@ -15,10 +16,19 @@ export function mountExportData(router: FeatureRouter): void {
   router.get('/me/export', authMiddleware, zValidator('query', exportQuerySchema, validationErrorHandler), async (context) => {
     const user = getAuthUser(context)
     const { format } = context.req.valid('query')
-    const { body, contentType, filename } = await exportUserData(user.id, format)
+    const result = await exportUserData(user.id, format)
 
-    context.header('Content-Disposition', `attachment; filename="${filename}"`)
-    context.header('Content-Type', contentType)
-    return context.body(body)
+    context.header('Content-Disposition', `attachment; filename="${result.filename}"`)
+    context.header('Content-Type', result.contentType)
+
+    if (result.kind === 'zip') {
+      return stream(context, async (streamApi) => {
+        await streamApi.pipe(result.stream)
+      })
+    }
+
+    return stream(context, async (streamApi) => {
+      await streamApi.write(JSON.stringify(result.payload, null, 2))
+    })
   })
 }
