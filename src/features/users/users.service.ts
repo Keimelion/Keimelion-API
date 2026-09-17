@@ -9,6 +9,8 @@ import { deleteAllUserTokens } from '../../db/entities/access-tokens/access-toke
 import { revokeAllUserSessions } from '../../shared/db/user-sessions.js'
 import { updateUserProfile } from './users.repository.js'
 import { toPublicUser, toBaseUser } from './users.mapper.js'
+import { buildExportZipStream } from './export/csv-archive-writer.js'
+import { EXPORT_ENTITY_REGISTRY } from './export/export-entities.js'
 import type { PublicUser } from './users.mapper.js'
 import type { ServiceResult } from '../../shared/types/service.js'
 import type { UpdateProfileInput } from './endpoints/update-profile.js'
@@ -16,14 +18,25 @@ import type { ChangePasswordInput } from './endpoints/change-password.js'
 import type { ExportFormat } from './endpoints/export-data.js'
 
 const EXPORT_JSON_CONTENT_TYPE = 'application/json; charset=utf-8'
-const EXPORT_CSV_CONTENT_TYPE = 'text/csv; charset=utf-8'
-const CSV_FORMULA_TRIGGERS = new Set(['=', '+', '-', '@', '\t', '\r'])
+const EXPORT_ZIP_CONTENT_TYPE = 'application/zip'
+const EXPORT_ZIP_FILENAME = 'keimelion-export.zip'
+const EXPORT_JSON_FILENAME = 'keimelion-export.json'
 
-interface ExportResult {
-  body: string
+interface JsonExportResult {
+  kind: 'json'
+  payload: Record<string, unknown>
   contentType: string
   filename: string
 }
+
+interface ZipExportResult {
+  kind: 'zip'
+  stream: ReadableStream<Uint8Array>
+  contentType: string
+  filename: string
+}
+
+export type ExportResult = JsonExportResult | ZipExportResult
 
 export async function getProfile(userId: string): Promise<ServiceResult<{ user: PublicUser }>> {
   const user = await findUserById(userId)
@@ -85,63 +98,23 @@ export async function changePassword(userId: string, input: ChangePasswordInput)
 }
 
 export async function exportUserData(userId: string, format: ExportFormat): Promise<ExportResult> {
+  if (format === 'csv') {
+    const zipStream = await buildExportZipStream(userId, EXPORT_ENTITY_REGISTRY)
+    return {
+      kind: 'zip',
+      stream: zipStream,
+      contentType: EXPORT_ZIP_CONTENT_TYPE,
+      filename: EXPORT_ZIP_FILENAME,
+    }
+  }
+
   const user = await findUserById(userId)
   const profile = user ? toBaseUser(user) : null
-  const exportPayload = { profile }
-
-  if (format === 'csv') {
-    return {
-      body: serializeExportToCsv(exportPayload),
-      contentType: EXPORT_CSV_CONTENT_TYPE,
-      filename: 'keimelion-export.csv',
-    }
-  }
 
   return {
-    body: JSON.stringify(exportPayload, null, 2),
+    kind: 'json',
+    payload: { profile },
     contentType: EXPORT_JSON_CONTENT_TYPE,
-    filename: 'keimelion-export.json',
+    filename: EXPORT_JSON_FILENAME,
   }
-}
-
-interface ExportPayload {
-  profile: PublicUser | null
-}
-
-function serializeExportToCsv(payload: ExportPayload): string {
-  const rows: string[] = []
-
-  rows.push('section,field,value')
-
-  if (payload.profile) {
-    const profileEntries = Object.entries(payload.profile) as [string, unknown][]
-    for (const [field, value] of profileEntries) {
-      rows.push(`profile,${field},${serializeCsvCell(value)}`)
-    }
-  }
-
-  return rows.join('\n')
-}
-
-function toCsvString(value: unknown): string {
-  if (value instanceof Date) return value.toISOString()
-  if (typeof value === 'string') return value
-  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
-  return ''
-}
-
-function serializeCsvCell(value: unknown): string {
-  if (value === null || value === undefined) return ''
-  const stringValue = neutralizeCsvFormula(toCsvString(value))
-  if (stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n')) {
-    return `"${stringValue.replace(/"/g, '""')}"`
-  }
-  return stringValue
-}
-
-function neutralizeCsvFormula(value: string): string {
-  if (value.length === 0) return value
-  const firstChar = value.charAt(0)
-  if (CSV_FORMULA_TRIGGERS.has(firstChar)) return `'${value}`
-  return value
 }

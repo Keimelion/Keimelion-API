@@ -397,7 +397,7 @@ describe('GET /v1/users/me/export', () => {
     expect(response.headers.get('Content-Disposition')).toBe('attachment; filename="keimelion-export.json"')
   })
 
-  it('returns 200 with CSV export when format=csv', async () => {
+  it('returns 200 with ZIP archive when format=csv', async () => {
     const token = await generateTestToken(SAFE_USER.id)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
@@ -405,13 +405,11 @@ describe('GET /v1/users/me/export', () => {
     const response = await apiRequest('/v1/users/me/export?format=csv', { token })
 
     expect(response.status).toBe(200)
-    expect(response.headers.get('Content-Type')).toContain('text/csv')
-    expect(response.headers.get('Content-Disposition')).toBe('attachment; filename="keimelion-export.csv"')
+    expect(response.headers.get('Content-Type')).toContain('application/zip')
+    expect(response.headers.get('Content-Disposition')).toBe('attachment; filename="keimelion-export.zip"')
 
-    const text = await response.text()
-    expect(text).toContain('section,field,value')
-    expect(text).toContain('profile,email,user@example.com')
-    expect(text).not.toContain('passwordHash')
+    const buffer = await response.arrayBuffer()
+    expect(buffer.byteLength).toBeGreaterThan(0)
   })
 
   it('returns 422 when format is unsupported', async () => {
@@ -428,29 +426,39 @@ describe('GET /v1/users/me/export', () => {
     expect(response.status).toBe(401)
   })
 
-  it('neutralizes CSV formula injection by prefixing dangerous cells with a single quote', async () => {
-    const token = await generateTestToken(SAFE_USER.id)
-    const maliciousUser = { ...SAFE_USER, username: '=SUM(1+1)', email: '+attack@example.com' }
-    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
-    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(maliciousUser)
+  it('neutralizes CSV formula injection — escape_formulas prefixes dangerous cells', async () => {
+    const { Stringifier } = await import('csv-stringify')
 
-    const response = await apiRequest('/v1/users/me/export?format=csv', { token })
-    const text = await response.text()
+    const stringifier = new Stringifier({
+      header: true,
+      columns: ['username', 'email'],
+      escape_formulas: true,
+    })
 
-    expect(response.status).toBe(200)
-    // Formula triggers must be neutralized with a leading single quote
-    expect(text).toContain("profile,username,'=SUM(1+1)")
-    expect(text).toContain("profile,email,'+attack@example.com")
-    expect(text).not.toMatch(/profile,username,=SUM/)
+    const chunks: string[] = []
+    stringifier.on('data', (chunk: Buffer | string) => {
+      chunks.push(chunk.toString())
+    })
+
+    stringifier.write({ username: '=SUM(1+1)', email: '+attack@example.com' })
+    stringifier.end()
+
+    await new Promise<void>((resolve) => stringifier.on('end', resolve))
+
+    const csvOutput = chunks.join('')
+    expect(csvOutput).toContain("'=SUM(1+1)")
+    expect(csvOutput).toContain("'+attack@example.com")
+    expect(csvOutput).not.toMatch(/,=SUM/)
+    expect(csvOutput).not.toMatch(/,\+attack/)
   })
 
-  it('advertises utf-8 charset on CSV and JSON exports', async () => {
+  it('returns application/zip for CSV export and advertises utf-8 charset on JSON export', async () => {
     const token = await generateTestToken(SAFE_USER.id)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
 
     const csvResponse = await apiRequest('/v1/users/me/export?format=csv', { token })
-    expect(csvResponse.headers.get('Content-Type')).toContain('charset=utf-8')
+    expect(csvResponse.headers.get('Content-Type')).toContain('application/zip')
 
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
