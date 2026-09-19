@@ -3,6 +3,8 @@ import { db } from '../../client.js'
 import { listItems } from './list-items.schema.js'
 import type { ListItem } from './list-items.schema.js'
 
+type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
+
 interface InsertListItemInput {
   listId: string
   itemId: string
@@ -13,8 +15,9 @@ interface InsertListItemInput {
 
 type UpdateListItemFields = Partial<Pick<typeof listItems.$inferInsert, 'quantityDesired' | 'creatorNote' | 'sortOrder'>>
 
-export async function insertListItem(input: InsertListItemInput): Promise<ListItem | undefined> {
-  const [listItem] = await db.insert(listItems).values(input).returning()
+export async function insertListItem(input: InsertListItemInput, tx?: DbTransaction): Promise<ListItem | undefined> {
+  const client = tx ?? db
+  const [listItem] = await client.insert(listItems).values(input).returning()
   return listItem
 }
 

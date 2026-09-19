@@ -9,7 +9,7 @@ import type { FeatureRouter } from '../../../shared/types/app.js'
 import { addItemFromUrl } from '../lists.service.js'
 
 const addItemFromUrlSchema = z.object({
-  url: z.string().url(),
+  url: z.string().url().regex(/^https?:\/\//i, 'URL must use http or https'),
 }).strict()
 
 export type AddItemFromUrlInput = z.infer<typeof addItemFromUrlSchema>

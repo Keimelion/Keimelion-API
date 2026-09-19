@@ -1,13 +1,17 @@
+import { db } from '../../db/client.js'
 import { HttpStatus } from '../../shared/enums/http.js'
 import { ErrorCode } from '../../shared/enums/error-code.js'
+import { ItemStatuses } from '../../shared/enums/item-status.js'
 import { serviceError } from '../../shared/utils/response.js'
 import { scrapeOgData } from '../../shared/utils/og-scraper.js'
 import { insertItem } from '../../db/entities/items/items.repository.js'
 import { insertItemSource } from '../../db/entities/item-sources/item-sources.repository.js'
 import { insertListItem } from '../../db/entities/list-items/list-items.repository.js'
-import { findListById } from '../../db/entities/lists/lists.repository.js'
-import { findListOwner } from '../../db/entities/list-collaborators/list-collaborators.repository.js'
+import { requireListOwnership } from './list-ownership.js'
 import { toBaseItem, toBaseListItem, toBaseItemSource } from './lists.mapper.js'
+import type { Item } from '../../db/entities/items/items.schema.js'
+import type { ItemSource } from '../../db/entities/item-sources/item-sources.schema.js'
+import type { ListItem } from '../../db/entities/list-items/list-items.schema.js'
 import type { ListItemResponse } from './lists.mapper.js'
 import type { ServiceResult } from '../../shared/types/service.js'
 import type { AddItemInput } from './endpoints/add-item.js'
@@ -15,65 +19,30 @@ import type { AddItemFromUrlInput } from './endpoints/add-item-from-url.js'
 
 const DEFAULT_LOCALE = 'fr'
 const DEFAULT_MODERATION_STATUS = 'approved'
-const DEFAULT_ITEM_STATUS = 'available'
 const DEFAULT_QUANTITY_DESIRED = 1
+const DEFAULT_CURRENCY = 'EUR'
 const OG_ADDED_VIA = 'url'
+
+type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
+
+interface CreatedListItemRecord {
+  item: Item
+  source: ItemSource | null
+  listItem: ListItem
+}
 
 export async function addItemToList(
   listId: string,
   userId: string,
   input: AddItemInput,
 ): Promise<ServiceResult<{ listItem: ListItemResponse }>> {
-  const ownershipResult = await resolveListOwnership(listId, userId)
-  if (ownershipResult) return ownershipResult
+  const ownershipError = await requireListOwnership(listId, userId)
+  if (ownershipError) return ownershipError
 
-  const item = await insertItem({
-    name: input.name,
-    description: input.description ?? null,
-    imageUrl: input.imageUrl ?? null,
-    locale: DEFAULT_LOCALE,
-    createdByUserId: userId,
-    moderationStatus: DEFAULT_MODERATION_STATUS,
-  })
+  const record = await db.transaction((tx) => createManualListItem(tx, listId, userId, input))
+  if (!record) return serviceError(ErrorCode.INTERNAL_ERROR)
 
-  if (!item) {
-    return serviceError(ErrorCode.INTERNAL_ERROR)
-  }
-
-  const source = input.price !== undefined
-    ? await insertItemSource({
-        itemId: item.id,
-        shopName: null,
-        sourceUrl: null,
-        price: String(input.price),
-        currency: 'EUR',
-        isPrimary: true,
-        addedVia: null,
-      })
-    : undefined
-
-  const listItem = await insertListItem({
-    listId,
-    itemId: item.id,
-    quantityDesired: input.quantityDesired ?? DEFAULT_QUANTITY_DESIRED,
-    creatorNote: input.creatorNote ?? null,
-    itemStatus: DEFAULT_ITEM_STATUS,
-  })
-
-  if (!listItem) {
-    return serviceError(ErrorCode.INTERNAL_ERROR)
-  }
-
-  return {
-    data: {
-      listItem: {
-        ...toBaseListItem(listItem),
-        item: toBaseItem(item),
-        source: source ? toBaseItemSource(source) : null,
-      },
-    },
-    httpStatus: HttpStatus.CREATED,
-  }
+  return { data: { listItem: buildListItemResponse(record) }, httpStatus: HttpStatus.CREATED }
 }
 
 export async function addItemFromUrl(
@@ -81,70 +50,97 @@ export async function addItemFromUrl(
   userId: string,
   input: AddItemFromUrlInput,
 ): Promise<ServiceResult<{ listItem: ListItemResponse }>> {
-  const ownershipResult = await resolveListOwnership(listId, userId)
-  if (ownershipResult) return ownershipResult
+  const ownershipError = await requireListOwnership(listId, userId)
+  if (ownershipError) return ownershipError
 
   const ogData = await scrapeOgData(input.url)
+  const record = await db.transaction((tx) => createUrlListItem(tx, listId, userId, input.url, ogData))
+  if (!record) return serviceError(ErrorCode.INTERNAL_ERROR)
 
+  return { data: { listItem: buildListItemResponse(record) }, httpStatus: HttpStatus.CREATED }
+}
+
+async function createManualListItem(
+  tx: DbTransaction,
+  listId: string,
+  userId: string,
+  input: AddItemInput,
+): Promise<CreatedListItemRecord | null> {
   const item = await insertItem({
-    name: ogData.title ?? input.url,
+    name: input.name,
+    description: input.description ?? null,
+    imageUrl: input.imageUrl ?? null,
+    locale: DEFAULT_LOCALE,
+    createdByUserId: userId,
+    moderationStatus: DEFAULT_MODERATION_STATUS,
+  }, tx)
+  if (!item) return null
+
+  const source = input.price === undefined ? null : (await insertItemSource({
+    itemId: item.id,
+    shopName: null,
+    sourceUrl: null,
+    price: String(input.price),
+    currency: DEFAULT_CURRENCY,
+    isPrimary: true,
+    addedVia: null,
+  }, tx)) ?? null
+
+  const listItem = await insertListItem({
+    listId,
+    itemId: item.id,
+    quantityDesired: input.quantityDesired ?? DEFAULT_QUANTITY_DESIRED,
+    creatorNote: input.creatorNote ?? null,
+    itemStatus: ItemStatuses.AVAILABLE,
+  }, tx)
+  if (!listItem) return null
+
+  return { item, source, listItem }
+}
+
+async function createUrlListItem(
+  tx: DbTransaction,
+  listId: string,
+  userId: string,
+  url: string,
+  ogData: { title: string | null; image: string | null; price: string | null },
+): Promise<CreatedListItemRecord | null> {
+  const item = await insertItem({
+    name: ogData.title ?? url,
     description: null,
     imageUrl: ogData.image,
     locale: DEFAULT_LOCALE,
     createdByUserId: userId,
     moderationStatus: DEFAULT_MODERATION_STATUS,
-  })
+  }, tx)
+  if (!item) return null
 
-  if (!item) {
-    return serviceError(ErrorCode.INTERNAL_ERROR)
-  }
-
-  const source = await insertItemSource({
+  const source = (await insertItemSource({
     itemId: item.id,
     shopName: null,
-    sourceUrl: input.url,
+    sourceUrl: url,
     price: ogData.price,
-    currency: 'EUR',
+    currency: DEFAULT_CURRENCY,
     isPrimary: true,
     addedVia: OG_ADDED_VIA,
-  })
+  }, tx)) ?? null
 
   const listItem = await insertListItem({
     listId,
     itemId: item.id,
     quantityDesired: DEFAULT_QUANTITY_DESIRED,
     creatorNote: null,
-    itemStatus: DEFAULT_ITEM_STATUS,
-  })
+    itemStatus: ItemStatuses.AVAILABLE,
+  }, tx)
+  if (!listItem) return null
 
-  if (!listItem) {
-    return serviceError(ErrorCode.INTERNAL_ERROR)
-  }
-
-  return {
-    data: {
-      listItem: {
-        ...toBaseListItem(listItem),
-        item: toBaseItem(item),
-        source: source ? toBaseItemSource(source) : null,
-      },
-    },
-    httpStatus: HttpStatus.CREATED,
-  }
+  return { item, source, listItem }
 }
 
-async function resolveListOwnership(listId: string, userId: string): Promise<ServiceResult<never> | null> {
-  const list = await findListById(listId)
-
-  if (!list || list.deletedAt) {
-    return serviceError(ErrorCode.NOT_FOUND)
+function buildListItemResponse(record: CreatedListItemRecord): ListItemResponse {
+  return {
+    ...toBaseListItem(record.listItem),
+    item: toBaseItem(record.item),
+    source: record.source ? toBaseItemSource(record.source) : null,
   }
-
-  const owner = await findListOwner(listId, userId)
-
-  if (!owner) {
-    return serviceError(ErrorCode.FORBIDDEN)
-  }
-
-  return null
 }

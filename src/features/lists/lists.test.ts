@@ -104,20 +104,19 @@ function mockListAndOwner(): void {
   vi.mocked(db.query.listCollaborators.findFirst).mockResolvedValueOnce(MOCK_COLLABORATOR as never)
 }
 
-function mockItemInsert(): void {
-  vi.mocked(db.insert).mockReturnValueOnce({
-    values: vi.fn().mockReturnValueOnce({
-      returning: vi.fn().mockResolvedValueOnce([MOCK_ITEM]),
-    }),
-  } as never)
-}
-
-function mockListItemInsert(): void {
-  vi.mocked(db.insert).mockReturnValueOnce({
-    values: vi.fn().mockReturnValueOnce({
-      returning: vi.fn().mockResolvedValueOnce([MOCK_LIST_ITEM]),
-    }),
-  } as never)
+function mockTransactionInserts(rows: unknown[]): void {
+  const queue = [...rows]
+  vi.mocked(db.transaction).mockImplementationOnce(async (callback) => {
+    const insertResults = queue
+    const tx = {
+      insert: vi.fn(() => ({
+        values: vi.fn(() => ({
+          returning: vi.fn().mockResolvedValue(insertResults.length ? [insertResults.shift()] : []),
+        })),
+      })),
+    }
+    return (callback as (tx: unknown) => Promise<unknown>)(tx)
+  })
 }
 
 describe('POST /v1/lists/:id/items', () => {
@@ -129,8 +128,7 @@ describe('POST /v1/lists/:id/items', () => {
     const token = await generateTestToken(AUTH_USER.id)
     mockAuthChain()
     mockListAndOwner()
-    mockItemInsert()
-    mockListItemInsert()
+    mockTransactionInserts([MOCK_ITEM, MOCK_LIST_ITEM])
 
     const response = await apiRequest(`/v1/lists/${LIST_ID}/items`, {
       method: 'POST',
@@ -236,29 +234,23 @@ describe('POST /v1/lists/:id/items/from-url', () => {
     const token = await generateTestToken(AUTH_USER.id)
     mockAuthChain()
     mockListAndOwner()
-    mockItemInsert()
 
-    vi.mocked(db.insert).mockReturnValueOnce({
-      values: vi.fn().mockReturnValueOnce({
-        returning: vi.fn().mockResolvedValueOnce([{
-          id: '00000000-0000-0000-0000-000000000050',
-          itemId: ITEM_ID,
-          shopName: null,
-          sourceUrl: 'https://example.com/product',
-          price: null,
-          currency: 'EUR',
-          affiliatePartner: null,
-          affiliateUrl: null,
-          isDomainTrusted: false,
-          isPrimary: true,
-          addedVia: 'url',
-          createdAt: new Date('2024-01-01'),
-          updatedAt: new Date('2024-01-01'),
-        }]),
-      }),
-    } as never)
-
-    mockListItemInsert()
+    const mockItemSource = {
+      id: '00000000-0000-0000-0000-000000000050',
+      itemId: ITEM_ID,
+      shopName: null,
+      sourceUrl: 'https://example.com/product',
+      price: null,
+      currency: 'EUR',
+      affiliatePartner: null,
+      affiliateUrl: null,
+      isDomainTrusted: false,
+      isPrimary: true,
+      addedVia: 'url',
+      createdAt: new Date('2024-01-01'),
+      updatedAt: new Date('2024-01-01'),
+    }
+    mockTransactionInserts([MOCK_ITEM, mockItemSource, MOCK_LIST_ITEM])
 
     const response = await apiRequest(`/v1/lists/${LIST_ID}/items/from-url`, {
       method: 'POST',
@@ -277,33 +269,22 @@ describe('POST /v1/lists/:id/items/from-url', () => {
     mockListAndOwner()
 
     const unreachableItem = { ...MOCK_ITEM, name: 'https://unreachable.example.com/product' }
-    vi.mocked(db.insert).mockReturnValueOnce({
-      values: vi.fn().mockReturnValueOnce({
-        returning: vi.fn().mockResolvedValueOnce([unreachableItem]),
-      }),
-    } as never)
-
-    vi.mocked(db.insert).mockReturnValueOnce({
-      values: vi.fn().mockReturnValueOnce({
-        returning: vi.fn().mockResolvedValueOnce([{
-          id: '00000000-0000-0000-0000-000000000050',
-          itemId: ITEM_ID,
-          shopName: null,
-          sourceUrl: 'https://unreachable.example.com/product',
-          price: null,
-          currency: 'EUR',
-          affiliatePartner: null,
-          affiliateUrl: null,
-          isDomainTrusted: false,
-          isPrimary: true,
-          addedVia: 'url',
-          createdAt: new Date('2024-01-01'),
-          updatedAt: new Date('2024-01-01'),
-        }]),
-      }),
-    } as never)
-
-    mockListItemInsert()
+    const unreachableSource = {
+      id: '00000000-0000-0000-0000-000000000050',
+      itemId: ITEM_ID,
+      shopName: null,
+      sourceUrl: 'https://unreachable.example.com/product',
+      price: null,
+      currency: 'EUR',
+      affiliatePartner: null,
+      affiliateUrl: null,
+      isDomainTrusted: false,
+      isPrimary: true,
+      addedVia: 'url',
+      createdAt: new Date('2024-01-01'),
+      updatedAt: new Date('2024-01-01'),
+    }
+    mockTransactionInserts([unreachableItem, unreachableSource, MOCK_LIST_ITEM])
 
     const response = await apiRequest(`/v1/lists/${LIST_ID}/items/from-url`, {
       method: 'POST',

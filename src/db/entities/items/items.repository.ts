@@ -3,6 +3,8 @@ import { db } from '../../client.js'
 import { items } from './items.schema.js'
 import type { Item } from './items.schema.js'
 
+type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
+
 interface InsertItemInput {
   name: string
   description: string | null
@@ -12,8 +14,9 @@ interface InsertItemInput {
   moderationStatus: string
 }
 
-export async function insertItem(input: InsertItemInput): Promise<Item | undefined> {
-  const [item] = await db.insert(items).values(input).returning()
+export async function insertItem(input: InsertItemInput, tx?: DbTransaction): Promise<Item | undefined> {
+  const client = tx ?? db
+  const [item] = await client.insert(items).values(input).returning()
   return item
 }
 

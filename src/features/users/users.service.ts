@@ -7,7 +7,7 @@ import { hashPassword, verifyPassword } from '../../shared/utils/hash.js'
 import { findUserById, anonymizeUser, updatePasswordHash, insertDeletionAudit } from '../../db/entities/users/users.repository.js'
 import { deleteAllUserTokens } from '../../db/entities/access-tokens/access-tokens.repository.js'
 import { revokeAllUserSessions } from '../../shared/db/user-sessions.js'
-import { findItemsByCreator, findItemSourcesByCreator, findListItemsByUser } from '../../db/entities/items/items.export-repository.js'
+import { findItemsByCreator, findItemSourcesByCreator, findListItemsForContributor } from './export/rgpd-export.repository.js'
 import { updateUserProfile } from './users.repository.js'
 import { toPublicUser, toBaseUser } from './users.mapper.js'
 import { toBaseItem, toBaseItemSource, toBaseListItem } from '../lists/lists.mapper.js'
@@ -116,7 +116,7 @@ export async function exportUserData(userId: string, format: ExportFormat): Prom
   const [rawItems, rawItemSources, rawListItems] = await Promise.all([
     findItemsByCreator(userId),
     findItemSourcesByCreator(userId),
-    findListItemsByUser(userId),
+    findListItemsForContributor(userId),
   ])
 
   return {

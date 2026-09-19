@@ -1,7 +1,7 @@
 import type { BaseUser } from '../../../shared/types/user.js'
 import type { BaseItem, BaseItemSource, BaseListItem } from '../../../shared/types/item.js'
 import { findUserById } from '../../../db/entities/users/users.repository.js'
-import { findItemsByCreator, findItemSourcesByCreator, findListItemsByUser } from '../../../db/entities/items/items.export-repository.js'
+import { findItemsByCreator, findItemSourcesByCreator, findListItemsForContributor } from './rgpd-export.repository.js'
 import { toBaseUser } from '../users.mapper.js'
 import { toBaseItem, toBaseItemSource, toBaseListItem } from '../../lists/lists.mapper.js'
 
@@ -184,7 +184,7 @@ const listItemsEntityDescriptor: ExportEntityDescriptor = {
   filename: 'list-items.csv',
   columns: LIST_ITEMS_COLUMNS,
   fetchRows: async (userId: string) => {
-    const userListItems = await findListItemsByUser(userId)
+    const userListItems = await findListItemsForContributor(userId)
     return userListItems.map((listItem) => baseListItemToRow(toBaseListItem(listItem)))
   },
 }
