@@ -3,15 +3,11 @@ CREATE TYPE "public"."list_status" AS ENUM('active', 'archived', 'deleted');--> 
 CREATE TABLE "item_sources" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"item_id" uuid NOT NULL,
-	"shop_name" varchar(100),
 	"source_url" text,
 	"price" numeric(10, 2),
 	"currency" char(3) DEFAULT 'EUR' NOT NULL,
-	"affiliate_partner" varchar(50),
-	"affiliate_url" text,
 	"is_domain_trusted" boolean DEFAULT false NOT NULL,
 	"is_primary" boolean DEFAULT false NOT NULL,
-	"added_via" varchar(20),
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
@@ -21,11 +17,8 @@ CREATE TABLE "items" (
 	"name" varchar(300) NOT NULL,
 	"description" text,
 	"image_url" text,
-	"locale" char(5) DEFAULT 'fr' NOT NULL,
 	"created_by_user_id" uuid,
 	"moderation_status" varchar(20) DEFAULT 'approved' NOT NULL,
-	"add_count" integer DEFAULT 0 NOT NULL,
-	"reserve_count" integer DEFAULT 0 NOT NULL,
 	"deleted_at" timestamp with time zone,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
@@ -40,8 +33,8 @@ CREATE TABLE "list_collaborators" (
 	"invite_status" varchar(20) DEFAULT 'pending' NOT NULL,
 	"invite_token" uuid,
 	"invite_token_expires_at" timestamp with time zone,
-	"invited_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"accepted_at" timestamp with time zone,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "list_collaborators_invite_token_unique" UNIQUE("invite_token")
 );
@@ -64,20 +57,11 @@ CREATE TABLE "lists" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"occasion_type_id" uuid,
 	"title" varchar(200) NOT NULL,
-	"slug" varchar(200) NOT NULL,
 	"description" text,
-	"event_date" timestamp,
 	"list_status" "list_status" DEFAULT 'active' NOT NULL,
-	"is_gallery_public" boolean DEFAULT false NOT NULL,
-	"is_template" boolean DEFAULT false NOT NULL,
-	"template_source_id" uuid,
-	"view_count" integer DEFAULT 0 NOT NULL,
-	"import_count" integer DEFAULT 0 NOT NULL,
-	"archived_at" timestamp with time zone,
 	"deleted_at" timestamp with time zone,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "lists_slug_unique" UNIQUE("slug")
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 ALTER TABLE "item_sources" ADD CONSTRAINT "item_sources_item_id_items_id_fk" FOREIGN KEY ("item_id") REFERENCES "public"."items"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint

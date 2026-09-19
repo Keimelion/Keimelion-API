@@ -15,7 +15,6 @@ import type { ListItemResponse } from './lists.mapper.js'
 import type { ServiceResult } from '../../shared/types/service.js'
 import type { AddItemInput } from './endpoints/add-item.js'
 
-const DEFAULT_LOCALE = 'fr'
 const DEFAULT_MODERATION_STATUS = 'approved'
 const DEFAULT_QUANTITY_DESIRED = 1
 const DEFAULT_CURRENCY = 'EUR'
@@ -52,7 +51,6 @@ async function createManualListItem(
     name: input.name,
     description: input.description ?? null,
     imageUrl: input.imageUrl ?? null,
-    locale: DEFAULT_LOCALE,
     createdByUserId: userId,
     moderationStatus: DEFAULT_MODERATION_STATUS,
   }, tx)
@@ -60,12 +58,10 @@ async function createManualListItem(
 
   const source = input.price === undefined ? null : (await insertItemSource({
     itemId: item.id,
-    shopName: null,
     sourceUrl: null,
     price: String(input.price),
     currency: DEFAULT_CURRENCY,
     isPrimary: true,
-    addedVia: null,
   }, tx)) ?? null
 
   const listItem = await insertListItem({

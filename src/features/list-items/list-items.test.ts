@@ -35,16 +35,8 @@ const MOCK_LIST = {
   id: LIST_ID,
   occasionTypeId: null,
   title: 'My Wishlist',
-  slug: 'my-wishlist',
   description: null,
-  eventDate: null,
   listStatus: 'active' as const,
-  isGalleryPublic: false,
-  isTemplate: false,
-  templateSourceId: null,
-  viewCount: 0,
-  importCount: 0,
-  archivedAt: null,
   deletedAt: null,
   createdAt: new Date('2024-01-01'),
   updatedAt: new Date('2024-01-01'),
@@ -59,9 +51,15 @@ const MOCK_COLLABORATOR = {
   inviteStatus: 'accepted',
   inviteToken: null,
   inviteTokenExpiresAt: null,
-  invitedAt: new Date('2024-01-01'),
   acceptedAt: new Date('2024-01-01'),
+  createdAt: new Date('2024-01-01'),
   updatedAt: new Date('2024-01-01'),
+}
+
+const MOCK_EDITOR_COLLABORATOR = {
+  ...MOCK_COLLABORATOR,
+  id: '00000000-0000-0000-0000-000000000041',
+  collabRole: 'editor' as const,
 }
 
 const MOCK_LIST_ITEM = {
@@ -143,7 +141,34 @@ describe('PATCH /v1/list-items/:id', () => {
     expect(response.status).toBe(200)
   })
 
-  it('returns 403 when user is not owner of the list', async () => {
+  it('returns 200 when user is an editor of the list', async () => {
+    const token = await generateTestToken(AUTH_USER.id)
+    mockAuthChain()
+    vi.mocked(db.query.listItems.findFirst).mockResolvedValueOnce(MOCK_LIST_ITEM as never)
+    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(MOCK_LIST as never)
+    vi.mocked(db.query.listCollaborators.findFirst).mockResolvedValueOnce(MOCK_EDITOR_COLLABORATOR as never)
+
+    const updatedListItem = { ...MOCK_LIST_ITEM, quantityDesired: 5 }
+    vi.mocked(db.update).mockReturnValueOnce({
+      set: vi.fn().mockReturnValueOnce({
+        where: vi.fn().mockReturnValueOnce({
+          returning: vi.fn().mockResolvedValueOnce([updatedListItem]),
+        }),
+      }),
+    } as never)
+
+    const response = await apiRequest(`/v1/list-items/${LIST_ITEM_ID}`, {
+      method: 'PATCH',
+      token,
+      body: { quantityDesired: 5 },
+    })
+
+    const body = await response.json() as { listItem: { quantityDesired: number } }
+    expect(response.status).toBe(200)
+    expect(body.listItem.quantityDesired).toBe(5)
+  })
+
+  it('returns 403 when user is not a contributor of the list', async () => {
     const token = await generateTestToken(AUTH_USER.id)
     mockAuthChain()
     vi.mocked(db.query.listItems.findFirst).mockResolvedValueOnce(MOCK_LIST_ITEM as never)

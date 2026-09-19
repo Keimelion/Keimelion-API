@@ -14,11 +14,8 @@ export function toBaseItem(item: Item): BaseItem {
     name: item.name,
     description: item.description ?? null,
     imageUrl: item.imageUrl ?? null,
-    locale: item.locale,
     createdByUserId: item.createdByUserId ?? null,
     moderationStatus: item.moderationStatus,
-    addCount: item.addCount,
-    reserveCount: item.reserveCount,
     createdAt: item.createdAt,
     updatedAt: item.updatedAt,
   }
@@ -28,15 +25,11 @@ export function toBaseItemSource(source: ItemSource): BaseItemSource {
   return {
     id: source.id,
     itemId: source.itemId,
-    shopName: source.shopName ?? null,
     sourceUrl: source.sourceUrl ?? null,
     price: source.price ?? null,
     currency: source.currency,
-    affiliatePartner: source.affiliatePartner ?? null,
-    affiliateUrl: source.affiliateUrl ?? null,
     isDomainTrusted: source.isDomainTrusted,
     isPrimary: source.isPrimary,
-    addedVia: source.addedVia ?? null,
     createdAt: source.createdAt,
     updatedAt: source.updatedAt,
   }

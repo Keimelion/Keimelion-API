@@ -1,5 +1,5 @@
 {
-  "id": "28e58bbb-4f67-4c6c-a1b3-7bdaa9bfcf98",
+  "id": "b9b7f55e-c483-4f38-b58f-08498e1619ff",
   "prevId": "1c69b0be-07b5-4a71-bc10-c9972485be52",
   "version": "7",
   "dialect": "postgresql",
@@ -82,12 +82,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "shop_name": {
-          "name": "shop_name",
-          "type": "varchar(100)",
-          "primaryKey": false,
-          "notNull": false
-        },
         "source_url": {
           "name": "source_url",
           "type": "text",
@@ -107,18 +101,6 @@
           "notNull": true,
           "default": "'EUR'"
         },
-        "affiliate_partner": {
-          "name": "affiliate_partner",
-          "type": "varchar(50)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "affiliate_url": {
-          "name": "affiliate_url",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "is_domain_trusted": {
           "name": "is_domain_trusted",
           "type": "boolean",
@@ -132,12 +114,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": false
-        },
-        "added_via": {
-          "name": "added_via",
-          "type": "varchar(20)",
-          "primaryKey": false,
-          "notNull": false
         },
         "created_at": {
           "name": "created_at",
@@ -222,13 +198,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "locale": {
-          "name": "locale",
-          "type": "char(5)",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'fr'"
-        },
         "created_by_user_id": {
           "name": "created_by_user_id",
           "type": "uuid",
@@ -241,20 +210,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'approved'"
-        },
-        "add_count": {
-          "name": "add_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "reserve_count": {
-          "name": "reserve_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
         },
         "deleted_at": {
           "name": "deleted_at",
@@ -355,18 +310,18 @@
           "primaryKey": false,
           "notNull": false
         },
-        "invited_at": {
-          "name": "invited_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
         "accepted_at": {
           "name": "accepted_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
         },
         "updated_at": {
           "name": "updated_at",
@@ -557,21 +512,9 @@
           "primaryKey": false,
           "notNull": true
         },
-        "slug": {
-          "name": "slug",
-          "type": "varchar(200)",
-          "primaryKey": false,
-          "notNull": true
-        },
         "description": {
           "name": "description",
           "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "event_date": {
-          "name": "event_date",
-          "type": "timestamp",
           "primaryKey": false,
           "notNull": false
         },
@@ -582,46 +525,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'active'"
-        },
-        "is_gallery_public": {
-          "name": "is_gallery_public",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "is_template": {
-          "name": "is_template",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "template_source_id": {
-          "name": "template_source_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "view_count": {
-          "name": "view_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "import_count": {
-          "name": "import_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "archived_at": {
-          "name": "archived_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
         },
         "deleted_at": {
           "name": "deleted_at",
@@ -661,15 +564,7 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "lists_slug_unique": {
-          "name": "lists_slug_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "slug"
-          ]
-        }
-      },
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false

@@ -6,12 +6,10 @@ type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
 interface InsertItemSourceInput {
   itemId: string
-  shopName: string | null
   sourceUrl: string | null
   price: string | null
   currency: string
   isPrimary: boolean
-  addedVia: string | null
 }
 
 export async function insertItemSource(input: InsertItemSourceInput, tx?: DbTransaction): Promise<ItemSource | undefined> {

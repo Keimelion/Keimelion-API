@@ -9,7 +9,6 @@ interface InsertItemInput {
   name: string
   description: string | null
   imageUrl: string | null
-  locale: string
   createdByUserId: string | null
   moderationStatus: string
 }
