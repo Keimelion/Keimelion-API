@@ -57,6 +57,13 @@
       "when": 1789300179508,
       "tag": "0007_add_occasion_type_translations",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1789830306270,
+      "tag": "0008_add-items-list-items",
+      "breakpoints": true
     }
   ]
 }
