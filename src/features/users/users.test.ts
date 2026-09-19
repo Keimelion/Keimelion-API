@@ -466,4 +466,69 @@ describe('GET /v1/users/me/export', () => {
     const jsonResponse = await apiRequest('/v1/users/me/export?format=json', { token })
     expect(jsonResponse.headers.get('Content-Type')).toContain('charset=utf-8')
   })
+
+  it('includes items, itemSources, and listItems keys in JSON export', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+
+    const mockItem = {
+      id: '00000000-0000-0000-0000-000000000020',
+      name: 'Test Item',
+      description: null,
+      imageUrl: null,
+      locale: 'fr',
+      createdByUserId: SAFE_USER.id,
+      moderationStatus: 'approved',
+      addCount: 0,
+      reserveCount: 0,
+      deletedAt: null,
+      createdAt: new Date('2024-01-01'),
+      updatedAt: new Date('2024-01-01'),
+    }
+
+    vi.mocked(db.query.items.findMany).mockResolvedValueOnce([mockItem] as never)
+    vi.mocked(db.query.items.findMany).mockResolvedValueOnce([mockItem] as never)
+    vi.mocked(db.query.itemSources.findMany).mockResolvedValueOnce([])
+    vi.mocked(db.query.listCollaborators.findMany).mockResolvedValueOnce([])
+
+    const response = await apiRequest('/v1/users/me/export?format=json', { token })
+
+    expect(response.status).toBe(200)
+    const body = await response.json() as { items: unknown[]; itemSources: unknown[]; listItems: unknown[] }
+    expect(body).toHaveProperty('items')
+    expect(body).toHaveProperty('itemSources')
+    expect(body).toHaveProperty('listItems')
+    expect(Array.isArray(body.items)).toBe(true)
+  })
+
+  it('does not expose sensitive fields in item export — no createdByUserId-linked tokens', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+
+    vi.mocked(db.query.items.findMany).mockResolvedValueOnce([])
+    vi.mocked(db.query.items.findMany).mockResolvedValueOnce([])
+    vi.mocked(db.query.itemSources.findMany).mockResolvedValueOnce([])
+    vi.mocked(db.query.listCollaborators.findMany).mockResolvedValueOnce([])
+
+    const response = await apiRequest('/v1/users/me/export?format=json', { token })
+
+    expect(response.status).toBe(200)
+    const body = await response.json() as { profile: { passwordHash?: string } }
+    expect(body.profile).not.toHaveProperty('passwordHash')
+  })
+
+  it('includes items and list-items in CSV ZIP archive', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+
+    const response = await apiRequest('/v1/users/me/export?format=csv', { token })
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get('Content-Type')).toContain('application/zip')
+    const buffer = await response.arrayBuffer()
+    expect(buffer.byteLength).toBeGreaterThan(0)
+  })
 })

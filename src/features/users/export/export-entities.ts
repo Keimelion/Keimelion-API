@@ -1,6 +1,9 @@
 import type { BaseUser } from '../../../shared/types/user.js'
+import type { BaseItem, BaseItemSource, BaseListItem } from '../../../shared/types/item.js'
 import { findUserById } from '../../../db/entities/users/users.repository.js'
+import { findItemsByCreator, findItemSourcesByCreator, findListItemsByUser } from '../../../db/entities/items/items.export-repository.js'
 import { toBaseUser } from '../users.mapper.js'
+import { toBaseItem, toBaseItemSource, toBaseListItem } from '../../lists/lists.mapper.js'
 
 /**
  * Descriptor for a single entity exported in the RGPD CSV archive.
@@ -49,6 +52,51 @@ function baseUserToRow(user: BaseUser): Record<string, unknown> {
   }
 }
 
+function baseItemToRow(item: BaseItem): Record<string, unknown> {
+  return {
+    id: item.id,
+    name: item.name,
+    description: item.description,
+    imageUrl: item.imageUrl,
+    locale: item.locale,
+    moderationStatus: item.moderationStatus,
+    addCount: item.addCount,
+    reserveCount: item.reserveCount,
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt,
+  }
+}
+
+function baseItemSourceToRow(source: BaseItemSource): Record<string, unknown> {
+  return {
+    id: source.id,
+    itemId: source.itemId,
+    shopName: source.shopName,
+    sourceUrl: source.sourceUrl,
+    price: source.price,
+    currency: source.currency,
+    isPrimary: source.isPrimary,
+    addedVia: source.addedVia,
+    createdAt: source.createdAt,
+    updatedAt: source.updatedAt,
+  }
+}
+
+function baseListItemToRow(listItem: BaseListItem): Record<string, unknown> {
+  return {
+    id: listItem.id,
+    listId: listItem.listId,
+    itemId: listItem.itemId,
+    quantityDesired: listItem.quantityDesired,
+    quantityReservedTotal: listItem.quantityReservedTotal,
+    itemStatus: listItem.itemStatus,
+    sortOrder: listItem.sortOrder,
+    creatorNote: listItem.creatorNote,
+    createdAt: listItem.createdAt,
+    updatedAt: listItem.updatedAt,
+  }
+}
+
 const PROFILE_COLUMNS = [
   'id',
   'email',
@@ -65,6 +113,45 @@ const PROFILE_COLUMNS = [
   'updatedAt',
 ]
 
+const ITEMS_COLUMNS = [
+  'id',
+  'name',
+  'description',
+  'imageUrl',
+  'locale',
+  'moderationStatus',
+  'addCount',
+  'reserveCount',
+  'createdAt',
+  'updatedAt',
+]
+
+const ITEM_SOURCES_COLUMNS = [
+  'id',
+  'itemId',
+  'shopName',
+  'sourceUrl',
+  'price',
+  'currency',
+  'isPrimary',
+  'addedVia',
+  'createdAt',
+  'updatedAt',
+]
+
+const LIST_ITEMS_COLUMNS = [
+  'id',
+  'listId',
+  'itemId',
+  'quantityDesired',
+  'quantityReservedTotal',
+  'itemStatus',
+  'sortOrder',
+  'creatorNote',
+  'createdAt',
+  'updatedAt',
+]
+
 const profileEntityDescriptor: ExportEntityDescriptor = {
   filename: 'profile.csv',
   columns: PROFILE_COLUMNS,
@@ -75,6 +162,36 @@ const profileEntityDescriptor: ExportEntityDescriptor = {
   },
 }
 
+const itemsEntityDescriptor: ExportEntityDescriptor = {
+  filename: 'items.csv',
+  columns: ITEMS_COLUMNS,
+  fetchRows: async (userId: string) => {
+    const userItems = await findItemsByCreator(userId)
+    return userItems.map((item) => baseItemToRow(toBaseItem(item)))
+  },
+}
+
+const itemSourcesEntityDescriptor: ExportEntityDescriptor = {
+  filename: 'item-sources.csv',
+  columns: ITEM_SOURCES_COLUMNS,
+  fetchRows: async (userId: string) => {
+    const sources = await findItemSourcesByCreator(userId)
+    return sources.map((source) => baseItemSourceToRow(toBaseItemSource(source)))
+  },
+}
+
+const listItemsEntityDescriptor: ExportEntityDescriptor = {
+  filename: 'list-items.csv',
+  columns: LIST_ITEMS_COLUMNS,
+  fetchRows: async (userId: string) => {
+    const userListItems = await findListItemsByUser(userId)
+    return userListItems.map((listItem) => baseListItemToRow(toBaseListItem(listItem)))
+  },
+}
+
 export const EXPORT_ENTITY_REGISTRY: ExportEntityDescriptor[] = [
   profileEntityDescriptor,
+  itemsEntityDescriptor,
+  itemSourcesEntityDescriptor,
+  listItemsEntityDescriptor,
 ]
