@@ -3,7 +3,6 @@ import { HttpStatus } from '../../shared/enums/http.js'
 import { ErrorCode } from '../../shared/enums/error-code.js'
 import { ItemStatuses } from '../../shared/enums/item-status.js'
 import { serviceError } from '../../shared/utils/response.js'
-import { scrapeOgData } from '../../shared/utils/og-scraper.js'
 import { insertItem } from '../../db/entities/items/items.repository.js'
 import { insertItemSource } from '../../db/entities/item-sources/item-sources.repository.js'
 import { insertListItem } from '../../db/entities/list-items/list-items.repository.js'
@@ -15,13 +14,11 @@ import type { ListItem } from '../../db/entities/list-items/list-items.schema.js
 import type { ListItemResponse } from './lists.mapper.js'
 import type { ServiceResult } from '../../shared/types/service.js'
 import type { AddItemInput } from './endpoints/add-item.js'
-import type { AddItemFromUrlInput } from './endpoints/add-item-from-url.js'
 
 const DEFAULT_LOCALE = 'fr'
 const DEFAULT_MODERATION_STATUS = 'approved'
 const DEFAULT_QUANTITY_DESIRED = 1
 const DEFAULT_CURRENCY = 'EUR'
-const OG_ADDED_VIA = 'url'
 
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
@@ -40,21 +37,6 @@ export async function addItemToList(
   if (ownershipError) return ownershipError
 
   const record = await db.transaction((tx) => createManualListItem(tx, listId, userId, input))
-  if (!record) return serviceError(ErrorCode.INTERNAL_ERROR)
-
-  return { data: { listItem: buildListItemResponse(record) }, httpStatus: HttpStatus.CREATED }
-}
-
-export async function addItemFromUrl(
-  listId: string,
-  userId: string,
-  input: AddItemFromUrlInput,
-): Promise<ServiceResult<{ listItem: ListItemResponse }>> {
-  const ownershipError = await requireListOwnership(listId, userId)
-  if (ownershipError) return ownershipError
-
-  const ogData = await scrapeOgData(input.url)
-  const record = await db.transaction((tx) => createUrlListItem(tx, listId, userId, input.url, ogData))
   if (!record) return serviceError(ErrorCode.INTERNAL_ERROR)
 
   return { data: { listItem: buildListItemResponse(record) }, httpStatus: HttpStatus.CREATED }
@@ -91,45 +73,6 @@ async function createManualListItem(
     itemId: item.id,
     quantityDesired: input.quantityDesired ?? DEFAULT_QUANTITY_DESIRED,
     creatorNote: input.creatorNote ?? null,
-    itemStatus: ItemStatuses.AVAILABLE,
-  }, tx)
-  if (!listItem) return null
-
-  return { item, source, listItem }
-}
-
-async function createUrlListItem(
-  tx: DbTransaction,
-  listId: string,
-  userId: string,
-  url: string,
-  ogData: { title: string | null; image: string | null; price: string | null },
-): Promise<CreatedListItemRecord | null> {
-  const item = await insertItem({
-    name: ogData.title ?? url,
-    description: null,
-    imageUrl: ogData.image,
-    locale: DEFAULT_LOCALE,
-    createdByUserId: userId,
-    moderationStatus: DEFAULT_MODERATION_STATUS,
-  }, tx)
-  if (!item) return null
-
-  const source = (await insertItemSource({
-    itemId: item.id,
-    shopName: null,
-    sourceUrl: url,
-    price: ogData.price,
-    currency: DEFAULT_CURRENCY,
-    isPrimary: true,
-    addedVia: OG_ADDED_VIA,
-  }, tx)) ?? null
-
-  const listItem = await insertListItem({
-    listId,
-    itemId: item.id,
-    quantityDesired: DEFAULT_QUANTITY_DESIRED,
-    creatorNote: null,
     itemStatus: ItemStatuses.AVAILABLE,
   }, tx)
   if (!listItem) return null
