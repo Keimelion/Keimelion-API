@@ -17,7 +17,7 @@ export async function scrapeOgData(url: string): Promise<OgData> {
   const parsedUrl = safeParseUrl(url)
   if (!parsedUrl) return emptyResult
   if (!ALLOWED_PROTOCOLS.has(parsedUrl.protocol)) return emptyResult
-  if (await isForbiddenHost(parsedUrl.hostname)) return emptyResult
+  if (await isForbiddenHost(stripIpv6Brackets(parsedUrl.hostname))) return emptyResult
 
   try {
     const html = await fetchLimitedHtml(parsedUrl)
@@ -34,6 +34,11 @@ function safeParseUrl(url: string): URL | null {
   } catch {
     return null
   }
+}
+
+function stripIpv6Brackets(hostname: string): string {
+  if (hostname.startsWith('[') && hostname.endsWith(']')) return hostname.slice(1, -1)
+  return hostname
 }
 
 async function isForbiddenHost(hostname: string): Promise<boolean> {
