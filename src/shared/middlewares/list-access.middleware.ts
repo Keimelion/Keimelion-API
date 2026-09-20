@@ -38,38 +38,27 @@ function buildListAccessMiddleware(
   resolveCollaborator: ResolveCollaborator,
 ): MiddlewareHandler<{ Variables: AppVariables }> {
   return async (context, next) => {
-    const collaborator = await resolveListCollaborator(context, options, resolveCollaborator)
-    if (collaborator instanceof Response) return collaborator
+    try {
+      const listId = await resolveListId(context, options)
+      if (!listId) return sendError(ErrorCode.NOT_FOUND)
 
-    context.set(HonoContextKey.LIST_COLLABORATOR, collaborator)
-    return next()
+      const listExistsAndActive = await assertListActive(listId)
+      if (!listExistsAndActive) return sendError(ErrorCode.NOT_FOUND)
+
+      const collaborator = await assertUserHasAccess(context, listId, resolveCollaborator)
+      if (!collaborator) return sendError(ErrorCode.FORBIDDEN)
+
+      context.set(HonoContextKey.LIST_COLLABORATOR, collaborator)
+      await next()
+      return
+    } catch (error: unknown) {
+      logger.error({ error, path: context.req.path }, 'List access middleware failed')
+      return sendError(ErrorCode.INTERNAL_ERROR)
+    }
   }
 }
 
-async function resolveListCollaborator(
-  context: AppContext,
-  options: ListAccessMiddlewareOptions,
-  resolveCollaborator: ResolveCollaborator,
-): Promise<ListCollaborator | Response> {
-  try {
-    const user = getAuthUser(context)
-    const listId = await resolveListIdFromContext(context, options)
-    if (!listId) return sendError(ErrorCode.NOT_FOUND)
-
-    const listExists = await isListActive(listId)
-    if (!listExists) return sendError(ErrorCode.NOT_FOUND)
-
-    const collaborator = await resolveCollaborator(listId, user.id)
-    if (!collaborator) return sendError(ErrorCode.FORBIDDEN)
-
-    return collaborator
-  } catch (error: unknown) {
-    logger.error({ error, path: context.req.path }, 'List access middleware failed')
-    return sendError(ErrorCode.INTERNAL_ERROR)
-  }
-}
-
-async function resolveListIdFromContext(
+async function resolveListId(
   context: AppContext,
   options: ListAccessMiddlewareOptions,
 ): Promise<string | null> {
@@ -78,8 +67,17 @@ async function resolveListIdFromContext(
   return paramValue ?? null
 }
 
-async function isListActive(listId: string): Promise<boolean> {
+async function assertListActive(listId: string): Promise<boolean> {
   const list = await findListById(listId)
   if (!list) return false
   return list.deletedAt === null
+}
+
+function assertUserHasAccess(
+  context: AppContext,
+  listId: string,
+  resolveCollaborator: ResolveCollaborator,
+): Promise<ListCollaborator | undefined> {
+  const user = getAuthUser(context)
+  return resolveCollaborator(listId, user.id)
 }
