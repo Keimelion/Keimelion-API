@@ -59,6 +59,26 @@ vi.mock('../../db/client.js', () => ({
       occasionTypeTranslations: {
         findMany: vi.fn(),
       },
+      lists: {
+        findFirst: vi.fn(),
+        findMany: vi.fn().mockResolvedValue([]),
+      },
+      listCollaborators: {
+        findFirst: vi.fn(),
+        findMany: vi.fn().mockResolvedValue([]),
+      },
+      items: {
+        findFirst: vi.fn(),
+        findMany: vi.fn().mockResolvedValue([]),
+      },
+      itemSources: {
+        findFirst: vi.fn(),
+        findMany: vi.fn().mockResolvedValue([]),
+      },
+      listItems: {
+        findFirst: vi.fn(),
+        findMany: vi.fn().mockResolvedValue([]),
+      },
     },
     insert: vi.fn(() => ({
       values: vi.fn(() => ({
