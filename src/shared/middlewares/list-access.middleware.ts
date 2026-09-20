@@ -1,6 +1,5 @@
 import type { Context, MiddlewareHandler } from 'hono'
 import { ErrorCode } from '../enums/error-code.js'
-import { HonoContextKey } from '../enums/context-key.js'
 import { sendError } from '../utils/response.js'
 import { logger } from '../utils/logger.js'
 import { findListById } from '../../db/entities/lists/lists.repository.js'
@@ -15,10 +14,6 @@ type ResolveCollaborator = (listId: string, userId: string) => Promise<ListColla
 export interface ListAccessMiddlewareOptions {
   paramName: string
   resolveListId?: (context: AppContext) => Promise<string | null>
-}
-
-export function getListCollaborator(context: AppContext): ListCollaborator {
-  return context.get(HonoContextKey.LIST_COLLABORATOR)
 }
 
 export function listOwnershipMiddleware(
@@ -45,10 +40,9 @@ function buildListAccessMiddleware(
       const listExistsAndActive = await assertListActive(listId)
       if (!listExistsAndActive) return sendError(ErrorCode.NOT_FOUND)
 
-      const collaborator = await assertUserHasAccess(context, listId, resolveCollaborator)
-      if (!collaborator) return sendError(ErrorCode.FORBIDDEN)
+      const hasAccess = await assertUserHasAccess(context, listId, resolveCollaborator)
+      if (!hasAccess) return sendError(ErrorCode.FORBIDDEN)
 
-      context.set(HonoContextKey.LIST_COLLABORATOR, collaborator)
       await next()
       return
     } catch (error: unknown) {
