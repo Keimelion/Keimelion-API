@@ -5,4 +5,7 @@ export const AdminAction = {
   CREATE_OCCASION_TYPE: 'admin_create_occasion_type',
   UPDATE_OCCASION_TYPE: 'admin_update_occasion_type',
   DELETE_OCCASION_TYPE: 'admin_delete_occasion_type',
+  CREATE_SHOP: 'admin_create_shop',
+  UPDATE_SHOP: 'admin_update_shop',
+  DELETE_SHOP: 'admin_delete_shop',
 } as const

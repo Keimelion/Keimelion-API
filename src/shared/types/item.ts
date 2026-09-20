@@ -12,6 +12,7 @@ export interface BaseItem {
 export interface BaseItemSource {
   id: string
   itemId: string
+  shopId: string | null
   sourceUrl: string | null
   price: string | null
   currency: string

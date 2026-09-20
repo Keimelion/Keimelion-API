@@ -25,6 +25,7 @@ export function toBaseItemSource(source: ItemSource): BaseItemSource {
   return {
     id: source.id,
     itemId: source.itemId,
+    shopId: source.shopId ?? null,
     sourceUrl: source.sourceUrl ?? null,
     price: source.price ?? null,
     currency: source.currency,
