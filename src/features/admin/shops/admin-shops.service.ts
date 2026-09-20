@@ -12,9 +12,9 @@ import {
   deleteShop,
 } from '../../../db/entities/shops/shops.repository.js'
 import { findAllShops, countShops } from './admin-shops.repository.js'
-import { toAdminShop } from './admin-shops.mapper.js'
+import { toBaseShop } from '../../shops/shops.mapper.js'
 import { AdminAction } from '../admin.enums.js'
-import type { AdminShop } from './admin-shops.mapper.js'
+import type { BaseShop } from '../../../shared/types/shop.js'
 import type { ServiceResult } from '../../../shared/types/service.js'
 import type { PaginatedResponse } from '../../../shared/types/api.js'
 import type { AdminCreateShopInput } from './endpoints/create.js'
@@ -24,8 +24,8 @@ import type { ListShopsInput } from './endpoints/list.js'
 export async function createShop(
   adminId: string,
   input: AdminCreateShopInput,
-): Promise<ServiceResult<{ shop: AdminShop }>> {
-  let createdShop: AdminShop
+): Promise<ServiceResult<{ shop: BaseShop }>> {
+  let createdShop: BaseShop
 
   try {
     const row = await insertShop({
@@ -42,7 +42,7 @@ export async function createShop(
       return serviceError(ErrorCode.INTERNAL_ERROR)
     }
 
-    createdShop = toAdminShop(row)
+    createdShop = toBaseShop(row)
   } catch (error) {
     if (isPgUniqueViolation(error)) {
       return serviceError(ErrorCode.CONFLICT)
@@ -62,7 +62,7 @@ export async function createShop(
 
 export async function listShops(
   input: ListShopsInput,
-): Promise<ServiceResult<PaginatedResponse<AdminShop>>> {
+): Promise<ServiceResult<PaginatedResponse<BaseShop>>> {
   const filters = {
     search: input.search,
     isActive: input.isActive,
@@ -77,7 +77,7 @@ export async function listShops(
   ])
 
   return {
-    data: buildPaginatedResponse(rows.map(toAdminShop), input, total),
+    data: buildPaginatedResponse(rows.map(toBaseShop), input, total),
     httpStatus: HttpStatus.OK,
   }
 }
@@ -86,7 +86,7 @@ export async function updateShopById(
   adminId: string,
   id: string,
   input: AdminUpdateShopInput,
-): Promise<ServiceResult<{ shop: AdminShop }>> {
+): Promise<ServiceResult<{ shop: BaseShop }>> {
   const existingRow = await findShopById(id)
 
   if (!existingRow) {
@@ -111,7 +111,7 @@ export async function updateShopById(
       slug: existingRow.slug,
       changes: {},
     })
-    return { data: { shop: toAdminShop(existingRow) }, httpStatus: HttpStatus.OK }
+    return { data: { shop: toBaseShop(existingRow) }, httpStatus: HttpStatus.OK }
   }
 
   const changes: Record<string, unknown> = {}
@@ -119,14 +119,14 @@ export async function updateShopById(
     changes[key] = { from: existingRow[key as keyof typeof existingRow], to: value }
   }
 
-  let updatedRow: AdminShop | undefined
+  let updatedRow: BaseShop | undefined
 
   try {
     const row = await updateShop(id, fieldPatch)
     if (!row) {
       return serviceError(ErrorCode.INTERNAL_ERROR)
     }
-    updatedRow = toAdminShop(row)
+    updatedRow = toBaseShop(row)
   } catch (error) {
     if (isPgUniqueViolation(error)) {
       return serviceError(ErrorCode.CONFLICT)
