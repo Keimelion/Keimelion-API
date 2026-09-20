@@ -16,7 +16,6 @@ export interface BaseItemSource {
   sourceUrl: string | null
   price: string | null
   currency: string
-  isDomainTrusted: boolean
   isPrimary: boolean
   createdAt: Date
   updatedAt: Date

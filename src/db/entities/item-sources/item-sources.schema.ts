@@ -13,7 +13,6 @@ export const itemSources = pgTable(
     sourceUrl: text('source_url'),
     price: numeric('price', { precision: 10, scale: 2 }),
     currency: char('currency', { length: 3 }).notNull().default('EUR'),
-    isDomainTrusted: boolean('is_domain_trusted').notNull().default(false),
     isPrimary: boolean('is_primary').notNull().default(false),
     ...timestamps(),
   },

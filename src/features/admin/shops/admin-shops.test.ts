@@ -640,6 +640,25 @@ describe('PATCH /v1/admin/shops/:id', () => {
     expect(response.status).toBe(404)
   })
 
+  it('returns 200 without hitting update when patch body is empty', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    mockFindShopById(SHOP_ROW)
+
+    const response = await apiRequest(`/v1/admin/shops/${SHOP_ROW.id}`, {
+      method: 'PATCH',
+      token,
+      body: {},
+    })
+
+    expect(response.status).toBe(200)
+    expect(vi.mocked(db.update)).not.toHaveBeenCalled()
+    expect(vi.mocked(logger.info)).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'admin_update_shop', changes: {} }),
+    )
+  })
+
   it('returns 409 when patching slug to a duplicate', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()

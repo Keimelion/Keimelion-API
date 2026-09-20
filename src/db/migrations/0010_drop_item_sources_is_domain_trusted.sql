@@ -1,0 +1,1 @@
+ALTER TABLE "item_sources" DROP COLUMN "is_domain_trusted";

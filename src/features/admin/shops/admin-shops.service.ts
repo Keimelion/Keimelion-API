@@ -7,12 +7,11 @@ import { isPgUniqueViolation } from '../../../shared/db/pg-errors.js'
 import { buildPaginatedResponse } from '../../../shared/schemas/pagination.js'
 import {
   findShopById,
-  findAllShops,
-  countShops,
   insertShop,
   updateShop,
   deleteShop,
 } from '../../../db/entities/shops/shops.repository.js'
+import { findAllShops, countShops } from './admin-shops.repository.js'
 import { toAdminShop } from './admin-shops.mapper.js'
 import { AdminAction } from '../admin.enums.js'
 import type { AdminShop } from './admin-shops.mapper.js'
@@ -103,6 +102,17 @@ export async function updateShopById(
     sortOrder: input.sortOrder,
     isActive: input.isActive,
   })
+
+  if (Object.keys(fieldPatch).length === 0) {
+    logger.info({
+      adminId,
+      action: AdminAction.UPDATE_SHOP,
+      shopId: id,
+      slug: existingRow.slug,
+      changes: {},
+    })
+    return { data: { shop: toAdminShop(existingRow) }, httpStatus: HttpStatus.OK }
+  }
 
   const changes: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(fieldPatch)) {
