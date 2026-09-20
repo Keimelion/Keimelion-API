@@ -6,7 +6,6 @@ import { serviceError } from '../../shared/utils/response.js'
 import { insertItem } from '../../db/entities/items/items.repository.js'
 import { insertItemSource } from '../../db/entities/item-sources/item-sources.repository.js'
 import { insertListItem } from '../../db/entities/list-items/list-items.repository.js'
-import { requireListOwnership } from './list-ownership.js'
 import { toBaseItem, toBaseListItem, toBaseItemSource } from './lists.mapper.js'
 import type { Item } from '../../db/entities/items/items.schema.js'
 import type { ItemSource } from '../../db/entities/item-sources/item-sources.schema.js'
@@ -32,9 +31,6 @@ export async function addItemToList(
   userId: string,
   input: AddItemInput,
 ): Promise<ServiceResult<{ listItem: ListItemResponse }>> {
-  const ownershipError = await requireListOwnership(listId, userId)
-  if (ownershipError) return ownershipError
-
   const record = await db.transaction((tx) => createManualListItem(tx, listId, userId, input))
   if (!record) return serviceError(ErrorCode.INTERNAL_ERROR)
 
