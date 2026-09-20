@@ -16,12 +16,10 @@ export const ADMIN_SHOPS_SORT_FIELDS = [
   'updatedAt',
 ] as const
 
-const MAX_SEARCH_LENGTH = 120
-
 const booleanStringSchema = z.enum(['true', 'false']).transform((value) => value === 'true')
 
 const listShopsQuerySchema = paginationQuerySchema.extend({
-  search: z.string().trim().min(1).max(MAX_SEARCH_LENGTH).optional(),
+  search: z.string().trim().min(1).max(120).optional(),
   isActive: booleanStringSchema.optional(),
   isAffiliated: booleanStringSchema.optional(),
   hasDomain: booleanStringSchema.optional(),

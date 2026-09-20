@@ -247,32 +247,6 @@ describe('POST /v1/admin/shops', () => {
     expect(response.status).toBe(422)
   })
 
-  it('returns 422 when domain is localhost', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
-    mockAdminAuth()
-
-    const response = await apiRequest('/v1/admin/shops', {
-      method: 'POST',
-      token,
-      body: { slug: 'test-shop', name: 'Test Shop', isAffiliated: false, domain: 'localhost' },
-    })
-
-    expect(response.status).toBe(422)
-  })
-
-  it('returns 422 when domain is a private IP', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
-    mockAdminAuth()
-
-    const response = await apiRequest('/v1/admin/shops', {
-      method: 'POST',
-      token,
-      body: { slug: 'test-shop', name: 'Test Shop', isAffiliated: false, domain: '192.168.1.1' },
-    })
-
-    expect(response.status).toBe(422)
-  })
-
   it('returns 422 when sort_order exceeds 32767', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()

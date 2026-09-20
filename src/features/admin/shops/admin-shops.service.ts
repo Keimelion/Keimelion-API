@@ -14,6 +14,7 @@ import {
 import { findAllShops, countShops } from './admin-shops.repository.js'
 import { toBaseShop } from '../../shops/shops.mapper.js'
 import { AdminAction } from '../admin.enums.js'
+import type { Shop } from '../../../db/entities/shops/shops.schema.js'
 import type { BaseShop } from '../../../shared/types/shop.js'
 import type { ServiceResult } from '../../../shared/types/service.js'
 import type { PaginatedResponse } from '../../../shared/types/api.js'
@@ -21,14 +22,38 @@ import type { AdminCreateShopInput } from './endpoints/create.js'
 import type { AdminUpdateShopInput } from './endpoints/update.js'
 import type { ListShopsInput } from './endpoints/list.js'
 
+type ShopFieldPatch = Partial<Omit<BaseShop, 'id' | 'createdAt' | 'updatedAt'>>
+
+type WriteOutcome = { row: Shop } | { errorCode: ErrorCode }
+
+async function runShopWrite(op: () => Promise<Shop | undefined>): Promise<WriteOutcome> {
+  try {
+    const row = await op()
+    if (!row) return { errorCode: ErrorCode.INTERNAL_ERROR }
+    return { row }
+  } catch (error) {
+    if (isPgUniqueViolation(error)) return { errorCode: ErrorCode.CONFLICT }
+    return { errorCode: ErrorCode.INTERNAL_ERROR }
+  }
+}
+
+function buildShopChanges(
+  existing: Shop,
+  patch: ShopFieldPatch,
+): Record<string, { from: unknown; to: unknown }> {
+  const changes: Record<string, { from: unknown; to: unknown }> = {}
+  for (const [key, value] of Object.entries(patch)) {
+    changes[key] = { from: existing[key as keyof Shop], to: value }
+  }
+  return changes
+}
+
 export async function createShop(
   adminId: string,
   input: AdminCreateShopInput,
 ): Promise<ServiceResult<{ shop: BaseShop }>> {
-  let createdShop: BaseShop
-
-  try {
-    const row = await insertShop({
+  const outcome = await runShopWrite(() =>
+    insertShop({
       slug: input.slug,
       name: input.name,
       domain: input.domain ?? null,
@@ -36,28 +61,14 @@ export async function createShop(
       isAffiliated: input.isAffiliated,
       sortOrder: input.sortOrder,
       isActive: input.isActive,
-    })
+    }),
+  )
 
-    if (!row) {
-      return serviceError(ErrorCode.INTERNAL_ERROR)
-    }
+  if ('errorCode' in outcome) return serviceError(outcome.errorCode)
 
-    createdShop = toBaseShop(row)
-  } catch (error) {
-    if (isPgUniqueViolation(error)) {
-      return serviceError(ErrorCode.CONFLICT)
-    }
-    return serviceError(ErrorCode.INTERNAL_ERROR)
-  }
-
-  logger.info({
-    adminId,
-    action: AdminAction.CREATE_SHOP,
-    shopId: createdShop.id,
-    slug: createdShop.slug,
-  })
-
-  return { data: { shop: createdShop }, httpStatus: HttpStatus.CREATED }
+  const shop = toBaseShop(outcome.row)
+  logger.info({ adminId, action: AdminAction.CREATE_SHOP, shopId: shop.id, slug: shop.slug })
+  return { data: { shop }, httpStatus: HttpStatus.CREATED }
 }
 
 export async function listShops(
@@ -71,10 +82,7 @@ export async function listShops(
     sort: input.sort,
   }
 
-  const [rows, total] = await Promise.all([
-    findAllShops(input, filters),
-    countShops(filters),
-  ])
+  const [rows, total] = await Promise.all([findAllShops(input, filters), countShops(filters)])
 
   return {
     data: buildPaginatedResponse(rows.map(toBaseShop), input, total),
@@ -88,12 +96,9 @@ export async function updateShopById(
   input: AdminUpdateShopInput,
 ): Promise<ServiceResult<{ shop: BaseShop }>> {
   const existingRow = await findShopById(id)
+  if (!existingRow) return serviceError(ErrorCode.NOT_FOUND)
 
-  if (!existingRow) {
-    return serviceError(ErrorCode.NOT_FOUND)
-  }
-
-  const fieldPatch = pickDefined({
+  const fieldPatch: ShopFieldPatch = pickDefined({
     slug: input.slug,
     name: input.name,
     domain: input.domain,
@@ -103,46 +108,18 @@ export async function updateShopById(
     isActive: input.isActive,
   })
 
+  const logBase = { adminId, action: AdminAction.UPDATE_SHOP, shopId: id, slug: existingRow.slug }
+
   if (Object.keys(fieldPatch).length === 0) {
-    logger.info({
-      adminId,
-      action: AdminAction.UPDATE_SHOP,
-      shopId: id,
-      slug: existingRow.slug,
-      changes: {},
-    })
+    logger.info({ ...logBase, changes: {} })
     return { data: { shop: toBaseShop(existingRow) }, httpStatus: HttpStatus.OK }
   }
 
-  const changes: Record<string, unknown> = {}
-  for (const [key, value] of Object.entries(fieldPatch)) {
-    changes[key] = { from: existingRow[key as keyof typeof existingRow], to: value }
-  }
+  const outcome = await runShopWrite(() => updateShop(id, fieldPatch))
+  if ('errorCode' in outcome) return serviceError(outcome.errorCode)
 
-  let updatedRow: BaseShop | undefined
-
-  try {
-    const row = await updateShop(id, fieldPatch)
-    if (!row) {
-      return serviceError(ErrorCode.INTERNAL_ERROR)
-    }
-    updatedRow = toBaseShop(row)
-  } catch (error) {
-    if (isPgUniqueViolation(error)) {
-      return serviceError(ErrorCode.CONFLICT)
-    }
-    return serviceError(ErrorCode.INTERNAL_ERROR)
-  }
-
-  logger.info({
-    adminId,
-    action: AdminAction.UPDATE_SHOP,
-    shopId: id,
-    slug: existingRow.slug,
-    changes,
-  })
-
-  return { data: { shop: updatedRow }, httpStatus: HttpStatus.OK }
+  logger.info({ ...logBase, changes: buildShopChanges(existingRow, fieldPatch) })
+  return { data: { shop: toBaseShop(outcome.row) }, httpStatus: HttpStatus.OK }
 }
 
 export async function deleteShopById(
@@ -150,10 +127,7 @@ export async function deleteShopById(
   id: string,
 ): Promise<ServiceResult<null>> {
   const existingRow = await findShopById(id)
-
-  if (!existingRow) {
-    return serviceError(ErrorCode.NOT_FOUND)
-  }
+  if (!existingRow) return serviceError(ErrorCode.NOT_FOUND)
 
   await deleteShop(id)
 

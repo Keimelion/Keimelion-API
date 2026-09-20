@@ -1,5 +1,5 @@
 {
-  "id": "446c3dc7-4501-4d2a-91c9-1c0c94634f00",
+  "id": "84573db1-6443-4011-804f-4d1d3cf19544",
   "prevId": "b9b7f55e-c483-4f38-b58f-08498e1619ff",
   "version": "7",
   "dialect": "postgresql",
@@ -106,13 +106,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'EUR'"
-        },
-        "is_domain_trusted": {
-          "name": "is_domain_trusted",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
         },
         "is_primary": {
           "name": "is_primary",

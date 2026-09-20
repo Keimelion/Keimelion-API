@@ -3,14 +3,18 @@ import { db } from '../../client.js'
 import { shops } from './shops.schema.js'
 import type { Shop } from './shops.schema.js'
 
-type InsertShopFields = Omit<typeof shops.$inferInsert, 'id' | 'createdAt' | 'updatedAt'>
+interface ShopWriteFields {
+  slug: string
+  name: string
+  domain: string | null
+  logoUrl: string | null
+  isAffiliated: boolean
+  sortOrder: number
+  isActive: boolean
+}
 
-type UpdateShopFields = Partial<
-  Pick<
-    typeof shops.$inferInsert,
-    'slug' | 'name' | 'domain' | 'logoUrl' | 'isAffiliated' | 'sortOrder' | 'isActive'
-  >
->
+type InsertShopFields = ShopWriteFields
+type UpdateShopFields = Partial<ShopWriteFields>
 
 export async function findShopById(id: string): Promise<Shop | undefined> {
   return db.query.shops.findFirst({ where: eq(shops.id, id) })

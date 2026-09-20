@@ -12,6 +12,7 @@ CREATE TABLE "shops" (
 	CONSTRAINT "shops_slug_unique" UNIQUE("slug")
 );
 --> statement-breakpoint
+ALTER TABLE "item_sources" DROP COLUMN "is_domain_trusted";--> statement-breakpoint
 ALTER TABLE "item_sources" ADD COLUMN "shop_id" uuid;--> statement-breakpoint
 CREATE UNIQUE INDEX "shops_domain_unique_idx" ON "shops" USING btree ("domain") WHERE "shops"."domain" is not null;--> statement-breakpoint
 CREATE INDEX "shops_sort_order_idx" ON "shops" USING btree ("sort_order");--> statement-breakpoint
