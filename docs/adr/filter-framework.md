@@ -56,10 +56,13 @@ The existing `src/shared/db/filters.ts` (which contains the `nullnessFlag` and
 ### Whitelist enforcement
 
 The `FilterConfig<TEntity>` for each endpoint explicitly enumerates every `(field, op)`
-pair it allows. The Zod schema builder derives a strict schema from this config,
-so any `(field, op)` pair not in the config is rejected with a 422 before it reaches
-the WHERE builder. No field name from a filter query ever touches the database
-without going through this whitelist first.
+pair it allows. The Zod schema builder derives a strict schema from this config
+by generating one `z.object({ field: literal, operator: literal, value: <per-op shape> })`
+per allowed pair and combining them into a `z.union`. Any `(field, op)` pair not in
+the config — and any value that doesn't match its operator's shape (e.g. `between`
+with a single scalar, `isNull` with `"whatever"`, `in` with a scalar) — is rejected
+with a 422 before it reaches the WHERE builder. No field name from a filter query
+ever touches the database without going through this whitelist first.
 
 Internal fields (`passwordHash`, `emailVerifyToken`, `emailVerifyTokenExpiresAt`,
 `passwordResetToken`, `passwordResetTokenExpiresAt`) must never be present in any
@@ -76,21 +79,22 @@ as-is, and additionally accept the new bracket syntax (`?email[ilike]=`,
 Rationale:
 - Zero breaking change for any existing API consumer or test.
 - The Backoffice can migrate to the bracket syntax at its own pace.
-- Both syntaxes feed into the same `buildGenericWhere` function via
-  `buildUsersGenericFilters()`, so there is no duplicated SQL logic.
 
 ### Backward-compat for `/v1/admin/users` (TBD resolved)
 
-**Decision**: the named-filter Zod schema in `list-users.ts` remains unchanged.
-A new `usersGenericFilterConfig` is introduced in `admin-users.repository.ts`
-alongside a `buildUsersGenericFilters` helper that translates both the named
-query params and any bracket-syntax params into a single `FilterInput[]` array,
-then passes it to `buildGenericWhere`.
+**Decision**: the named-filter Zod schema in `list-users.ts` remains unchanged,
+and the existing `buildUsersWhere` in `admin-users.repository.ts` keeps its
+named-filter branches. In parallel, a new `usersGenericFilterConfig` is added
+to the repository; when the request carries bracket-syntax filters, they are
+parsed, whitelisted through the generic Zod schema, then combined into the
+same `AND` alongside the named filters via `buildGenericWhere`.
 
-The old `buildUsersWhere` function is replaced by `buildUsersGenericFilters` +
-`buildGenericWhere`, so all named filters now route through the generic WHERE
-builder. This makes the migration transparent: existing tests continue to pass,
-and new bracket-syntax tests demonstrate the new capability.
+Named and bracket filters therefore live side by side in the same WHERE
+clause — named filters still map through their dedicated helpers
+(`nullnessFlag`, `stringContains`, direct `eq/gte/lte`), while any new filter
+capability should be added exclusively to the generic framework so it is not
+duplicated on both sides. A follow-up ticket can migrate remaining named
+filters to the generic layer once the Backoffice has moved off them.
 
 ---
 

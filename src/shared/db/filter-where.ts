@@ -7,14 +7,16 @@ export function buildGenericWhere<TEntity>(
   config: FilterConfig<TEntity>,
   filters: FilterInput[],
 ): SQL | undefined {
-  const clauses = filters.map((filter) => buildClause(config, filter)).filter((clause): clause is SQL => clause !== undefined)
+  const clauses = filters.map((filter) => buildClause(config, filter))
   return and(...clauses)
 }
 
-function buildClause<TEntity>(config: FilterConfig<TEntity>, filter: FilterInput): SQL | undefined {
+function buildClause<TEntity>(config: FilterConfig<TEntity>, filter: FilterInput): SQL {
   const fieldConfig = (config as Readonly<Record<string, FilterFieldConfig | undefined>>)[filter.field]
 
-  if (fieldConfig === undefined) return undefined
+  if (fieldConfig === undefined) {
+    throw new Error(`Filter field "${filter.field}" is not declared in FilterConfig`)
+  }
 
   const { column } = fieldConfig
   const operator = filter.operator as FilterOperator
@@ -37,9 +39,8 @@ function buildClause<TEntity>(config: FilterConfig<TEntity>, filter: FilterInput
   }
 }
 
-function buildBetweenClause(column: AnyColumn, value: string | string[]): SQL | undefined {
+function buildBetweenClause(column: AnyColumn, value: string | string[]): SQL {
   const parts = toStringArray(value)
-  if (parts.length !== 2) return undefined
   const [min, max] = parts as [string, string]
   return between(column, min, max)
 }

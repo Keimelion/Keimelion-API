@@ -12,7 +12,6 @@ import { parseFilterQuery } from '../../../../shared/db/filter-parser.js'
 import { buildFilterSchema } from '../../../../shared/db/filter-schema.js'
 import { usersGenericFilterConfig } from '../admin-users.repository.js'
 import { sendError } from '../../../../shared/utils/response.js'
-import { HttpStatus } from '../../../../shared/enums/http.js'
 import { ErrorCode } from '../../../../shared/enums/error-code.js'
 import type { FilterInput } from '../../../../shared/db/filter-parser.js'
 
@@ -60,7 +59,7 @@ export function mountListUsers(router: FeatureRouter): void {
     const filterValidation = genericFilterSchema.safeParse(rawFilters)
 
     if (!filterValidation.success) {
-      return context.json(sendError(ErrorCode.UNPROCESSABLE_ENTITY), HttpStatus.UNPROCESSABLE_ENTITY)
+      return sendError(ErrorCode.UNPROCESSABLE_ENTITY)
     }
 
     return jsonResult(context, await listUsers({ ...query, genericFilters: filterValidation.data }))

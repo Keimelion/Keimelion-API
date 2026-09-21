@@ -1,5 +1,8 @@
 import qs from 'qs'
 
+const MAX_QUERY_PARAMETERS = 100
+const MAX_ARRAY_LENGTH = 50
+
 export interface FilterInput {
   field: string
   operator: string
@@ -8,7 +11,12 @@ export interface FilterInput {
 
 export function parseFilterQuery(rawUrl: string): FilterInput[] {
   const queryString = extractQueryString(rawUrl)
-  const parsed = qs.parse(queryString, { allowDots: false, depth: 2 })
+  const parsed = qs.parse(queryString, {
+    allowDots:      false,
+    depth:          2,
+    parameterLimit: MAX_QUERY_PARAMETERS,
+    arrayLimit:     MAX_ARRAY_LENGTH,
+  })
   return collectFilterInputs(parsed)
 }
 

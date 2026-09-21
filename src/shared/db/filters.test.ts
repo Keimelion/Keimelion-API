@@ -144,6 +144,48 @@ describe('buildFilterSchema — whitelist enforcement', () => {
     const result = testSchema.safeParse(filters)
     expect(result.success).toBe(true)
   })
+
+  it('rejects between with a single scalar value (must be a two-element tuple)', () => {
+    const filters = [{ field: 'score', operator: 'between', value: '10' }]
+    const result = testSchema.safeParse(filters)
+    expect(result.success).toBe(false)
+  })
+
+  it('rejects between with a single-element array', () => {
+    const filters = [{ field: 'score', operator: 'between', value: ['10'] }]
+    const result = testSchema.safeParse(filters)
+    expect(result.success).toBe(false)
+  })
+
+  it('rejects between with three values', () => {
+    const filters = [{ field: 'score', operator: 'between', value: ['10', '20', '30'] }]
+    const result = testSchema.safeParse(filters)
+    expect(result.success).toBe(false)
+  })
+
+  it('rejects isNull with a value other than "true" or "false"', () => {
+    const filters = [{ field: 'bannedAt', operator: 'isNull', value: 'whatever' }]
+    const result = testSchema.safeParse(filters)
+    expect(result.success).toBe(false)
+  })
+
+  it('rejects in with a scalar value (must be an array)', () => {
+    const filters = [{ field: 'role', operator: 'in', value: 'admin' }]
+    const result = testSchema.safeParse(filters)
+    expect(result.success).toBe(false)
+  })
+
+  it('rejects in with an empty array', () => {
+    const filters = [{ field: 'role', operator: 'in', value: [] }]
+    const result = testSchema.safeParse(filters)
+    expect(result.success).toBe(false)
+  })
+
+  it('rejects eq with an array value (must be scalar)', () => {
+    const filters = [{ field: 'email', operator: 'eq', value: ['a', 'b'] }]
+    const result = testSchema.safeParse(filters)
+    expect(result.success).toBe(false)
+  })
 })
 
 describe('buildGenericWhere', () => {
@@ -185,22 +227,15 @@ describe('buildGenericWhere', () => {
     expect(result).toBeDefined()
   })
 
-  it('returns undefined clause for between with wrong number of values', () => {
-    const filters = [{ field: 'score', operator: 'between', value: ['10'] }]
-    const result = buildGenericWhere(testConfig, filters)
-    expect(result).toBeUndefined()
-  })
-
   it('handles in operator with array value', () => {
     const filters = [{ field: 'role', operator: 'in', value: ['admin', 'user'] }]
     const result = buildGenericWhere(testConfig, filters)
     expect(result).toBeDefined()
   })
 
-  it('skips unknown fields silently (already blocked by schema, defensive fallback)', () => {
+  it('throws for an unknown field (schema is expected to catch this upstream)', () => {
     const filters = [{ field: 'unknownField', operator: 'eq', value: 'foo' }]
-    const result = buildGenericWhere(testConfig, filters)
-    expect(result).toBeUndefined()
+    expect(() => buildGenericWhere(testConfig, filters)).toThrow(/unknownField/)
   })
 })
 

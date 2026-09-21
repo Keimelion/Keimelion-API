@@ -1,50 +1,44 @@
 import { z } from 'zod'
-import { FILTER_OPERATORS } from './filter-config.js'
-import type { FilterConfig } from './filter-config.js'
+import type { FilterConfig, FilterFieldConfig, FilterOperator } from './filter-config.js'
 import type { FilterInput } from './filter-parser.js'
 
-const filterOperatorSchema = z.enum(FILTER_OPERATORS)
+const scalarValueSchema = z.string()
+const booleanStringValueSchema = z.enum(['true', 'false'])
+const arrayValueSchema = z.array(z.string()).min(1)
+const tupleValueSchema = z.tuple([z.string(), z.string()])
+
+const valueSchemaByOperator: Record<FilterOperator, z.ZodType<string | string[]>> = {
+  eq:      scalarValueSchema,
+  gte:     scalarValueSchema,
+  lte:     scalarValueSchema,
+  ilike:   scalarValueSchema,
+  isNull:  booleanStringValueSchema,
+  in:      arrayValueSchema,
+  between: tupleValueSchema,
+}
 
 export function buildFilterSchema<TEntity>(config: FilterConfig<TEntity>): z.ZodType<FilterInput[]> {
-  const allowedFields = Object.keys(config) as (keyof TEntity & string)[]
+  const entrySchemas = Object.entries(config).flatMap(([field, fieldConfig]) =>
+    (fieldConfig as FilterFieldConfig).operators.map((operator) => buildEntrySchema(field, operator)),
+  )
 
-  const filterInputSchema = z
-    .object({
-      field: z.string(),
-      operator: z.string(),
-      value: z.union([z.string(), z.array(z.string())]),
-    })
-    .superRefine((input, context) => {
-      const fieldKey = input.field as keyof TEntity & string
+  const [first, second, ...rest] = entrySchemas
 
-      if (!allowedFields.includes(fieldKey)) {
-        context.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: `Field "${input.field}" is not allowed for filtering`,
-          path: ['field'],
-        })
-        return
-      }
+  if (first === undefined) {
+    return z.array(z.never())
+  }
 
-      const parsedOperator = filterOperatorSchema.safeParse(input.operator)
-      if (!parsedOperator.success) {
-        context.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: `Operator "${input.operator}" is not a valid filter operator`,
-          path: ['operator'],
-        })
-        return
-      }
+  if (second === undefined) {
+    return z.array(first)
+  }
 
-      const fieldConfig = config[fieldKey]
-      if (!fieldConfig.operators.includes(parsedOperator.data)) {
-        context.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: `Operator "${input.operator}" is not allowed for field "${input.field}"`,
-          path: ['operator'],
-        })
-      }
-    })
+  return z.array(z.union([first, second, ...rest]))
+}
 
-  return z.array(filterInputSchema)
+function buildEntrySchema(field: string, operator: FilterOperator): z.ZodType<FilterInput> {
+  return z.object({
+    field:    z.literal(field),
+    operator: z.literal(operator),
+    value:    valueSchemaByOperator[operator],
+  }) as z.ZodType<FilterInput>
 }
