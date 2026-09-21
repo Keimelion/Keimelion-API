@@ -413,6 +413,19 @@ describe('GET /v1/admin/users', () => {
     expect(body.items[0]?.email).toBe('admin@example.com')
   })
 
+  it('accepts bracket-syntax username[ilike] and returns 200', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
+    mockListUsers([TARGET_USER])
+    mockCountChain(1)
+
+    const response = await apiRequest('/v1/admin/users?username%5Bilike%5D=regular', { token })
+
+    expect(response.status).toBe(200)
+    const body = await response.json() as { items: { username: string }[] }
+    expect(body.items[0]?.username).toBe('regularuser')
+  })
+
   it('accepts bracket-syntax bannedAt[isNull]=true and returns 200', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)

@@ -15,6 +15,7 @@ import type { FilterInput } from '../../../shared/db/filter-parser.js'
 
 interface AdminUsersFilterEntity {
   email: string
+  username: string
   createdAt: Date
   bannedAt: Date | null
   deletedAt: Date | null
@@ -22,11 +23,12 @@ interface AdminUsersFilterEntity {
 }
 
 export const usersGenericFilterConfig: FilterConfig<AdminUsersFilterEntity> = {
-  email: { column: users.email, operators: ['eq', 'ilike'] },
+  email:     { column: users.email,     operators: ['eq', 'ilike'] },
+  username:  { column: users.username,  operators: ['eq', 'ilike'] },
   createdAt: { column: users.createdAt, operators: ['gte', 'lte', 'between', 'isNull'] },
-  bannedAt: { column: users.bannedAt, operators: ['isNull'] },
+  bannedAt:  { column: users.bannedAt,  operators: ['isNull'] },
   deletedAt: { column: users.deletedAt, operators: ['isNull'] },
-  role: { column: users.role, operators: ['eq', 'in'] },
+  role:      { column: users.role,      operators: ['eq', 'in'] },
 }
 
 interface AdminInsertUserFields {
