@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { db } from '../../db/client.js'
 import { apiRequest } from '../../shared/test/api-request.js'
 import { generateTestToken, makeAccessTokenEntry } from '../../shared/test/auth.js'
+import { EXPORT_ENTITY_REGISTRY } from './export/export-entities.js'
 
 const SAFE_USER = {
   id: '00000000-0000-0000-0000-000000000001',
@@ -527,5 +528,13 @@ describe('GET /v1/users/me/export', () => {
     expect(response.headers.get('Content-Type')).toContain('application/zip')
     const buffer = await response.arrayBuffer()
     expect(buffer.byteLength).toBeGreaterThan(0)
+  })
+
+  it('includes shopId in itemSources export — column is in allow-list and mapper exposes it', () => {
+    const itemSourcesDescriptor = EXPORT_ENTITY_REGISTRY.find(
+      (descriptor) => descriptor.filename === 'item-sources.csv',
+    )
+    expect(itemSourcesDescriptor).toBeDefined()
+    expect(itemSourcesDescriptor?.columns).toContain('shopId')
   })
 })

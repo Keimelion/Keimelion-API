@@ -78,6 +78,7 @@ const itemSourcesEntityDescriptor: ExportEntityDescriptor = {
   columns: [
     'id',
     'itemId',
+    'shopId',
     'sourceUrl',
     'price',
     'currency',
