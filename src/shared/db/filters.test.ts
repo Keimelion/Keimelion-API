@@ -1,0 +1,223 @@
+import { describe, it, expect } from 'vitest'
+import { parseFilterQuery } from './filter-parser.js'
+import { buildFilterSchema } from './filter-schema.js'
+import { buildGenericWhere } from './filter-where.js'
+import { escapeIlikePattern } from './filters.js'
+import type { FilterConfig } from './filter-config.js'
+import type { AnyColumn } from 'drizzle-orm'
+
+const mockColumn = { name: 'mock_column' } as unknown as AnyColumn
+const mockColumnTwo = { name: 'mock_column_two' } as unknown as AnyColumn
+
+interface TestEntity {
+  email: string
+  createdAt: Date
+  role: string
+  bannedAt: Date | null
+  score: number
+}
+
+const testConfig: FilterConfig<TestEntity> = {
+  email: { column: mockColumn, operators: ['eq', 'ilike'] },
+  createdAt: { column: mockColumnTwo, operators: ['gte', 'lte', 'between', 'isNull'] },
+  role: { column: mockColumn, operators: ['eq', 'in'] },
+  bannedAt: { column: mockColumnTwo, operators: ['isNull'] },
+  score: { column: mockColumn, operators: ['gte', 'lte', 'between'] },
+}
+
+const testSchema = buildFilterSchema(testConfig)
+
+describe('parseFilterQuery', () => {
+  it('parses a single bracket-nested filter', () => {
+    const result = parseFilterQuery('http://localhost/v1/admin/users?email[eq]=test@example.com')
+    expect(result).toEqual([{ field: 'email', operator: 'eq', value: 'test@example.com' }])
+  })
+
+  it('parses multiple filters on different fields', () => {
+    const result = parseFilterQuery('http://localhost/v1/admin/users?email[ilike]=acme&createdAt[gte]=2024-01-01')
+    expect(result).toHaveLength(2)
+    expect(result).toContainEqual({ field: 'email', operator: 'ilike', value: 'acme' })
+    expect(result).toContainEqual({ field: 'createdAt', operator: 'gte', value: '2024-01-01' })
+  })
+
+  it('parses a filter with an array value', () => {
+    const result = parseFilterQuery('http://localhost/v1/admin/users?role[in][]=admin&role[in][]=moderator')
+    expect(result).toHaveLength(1)
+    expect(result[0]).toEqual({ field: 'role', operator: 'in', value: ['admin', 'moderator'] })
+  })
+
+  it('returns empty array when no bracket filters are present', () => {
+    const result = parseFilterQuery('http://localhost/v1/admin/users?page=1&limit=10')
+    expect(result).toEqual([])
+  })
+
+  it('returns empty array when query string is absent', () => {
+    const result = parseFilterQuery('http://localhost/v1/admin/users')
+    expect(result).toEqual([])
+  })
+
+  it('ignores top-level string values (non-bracket params)', () => {
+    const result = parseFilterQuery('http://localhost/v1/admin/users?email=notbracket')
+    expect(result).toEqual([])
+  })
+
+  it('ignores entries with non-string values', () => {
+    const result = parseFilterQuery('http://localhost/v1/admin/users?bannedAt[isNull]=true')
+    expect(result).toEqual([{ field: 'bannedAt', operator: 'isNull', value: 'true' }])
+  })
+})
+
+describe('buildFilterSchema — whitelist enforcement', () => {
+  it('passes validation for an allowed (field, op) pair', () => {
+    const filters = [{ field: 'email', operator: 'eq', value: 'test@example.com' }]
+    const result = testSchema.safeParse(filters)
+    expect(result.success).toBe(true)
+  })
+
+  it('rejects an unknown field regardless of operator', () => {
+    const filters = [{ field: 'passwordHash', operator: 'eq', value: 'anything' }]
+    const result = testSchema.safeParse(filters)
+    expect(result.success).toBe(false)
+    expect(JSON.stringify(result)).toContain('passwordHash')
+  })
+
+  it('rejects an operator not whitelisted for the given field', () => {
+    const filters = [{ field: 'email', operator: 'gte', value: '2024-01-01' }]
+    const result = testSchema.safeParse(filters)
+    expect(result.success).toBe(false)
+    expect(JSON.stringify(result)).toContain('gte')
+  })
+
+  it('rejects an operator that does not exist in the framework', () => {
+    const filters = [{ field: 'email', operator: 'regex', value: '.*' }]
+    const result = testSchema.safeParse(filters)
+    expect(result.success).toBe(false)
+  })
+
+  it('rejects a known field when it has only one allowed operator and a different op is sent', () => {
+    const filters = [{ field: 'bannedAt', operator: 'eq', value: 'foo' }]
+    const result = testSchema.safeParse(filters)
+    expect(result.success).toBe(false)
+  })
+
+  it('passes validation for ilike on email (whitelisted)', () => {
+    const filters = [{ field: 'email', operator: 'ilike', value: '%acme%' }]
+    const result = testSchema.safeParse(filters)
+    expect(result.success).toBe(true)
+  })
+
+  it('rejects ilike on role (not whitelisted for role)', () => {
+    const filters = [{ field: 'role', operator: 'ilike', value: 'ad' }]
+    const result = testSchema.safeParse(filters)
+    expect(result.success).toBe(false)
+  })
+
+  it('passes validation for in on role (whitelisted)', () => {
+    const filters = [{ field: 'role', operator: 'in', value: ['admin', 'user'] }]
+    const result = testSchema.safeParse(filters)
+    expect(result.success).toBe(true)
+  })
+
+  it('passes validation for between on createdAt (whitelisted)', () => {
+    const filters = [{ field: 'createdAt', operator: 'between', value: ['2024-01-01', '2024-12-31'] }]
+    const result = testSchema.safeParse(filters)
+    expect(result.success).toBe(true)
+  })
+
+  it('passes validation for isNull on bannedAt (whitelisted)', () => {
+    const filters = [{ field: 'bannedAt', operator: 'isNull', value: 'true' }]
+    const result = testSchema.safeParse(filters)
+    expect(result.success).toBe(true)
+  })
+
+  it('passes an empty array (no filters)', () => {
+    const result = testSchema.safeParse([])
+    expect(result.success).toBe(true)
+  })
+
+  it('passes validation for multiple allowed filters', () => {
+    const filters = [
+      { field: 'email', operator: 'ilike', value: 'acme' },
+      { field: 'createdAt', operator: 'gte', value: '2024-01-01' },
+      { field: 'bannedAt', operator: 'isNull', value: 'false' },
+    ]
+    const result = testSchema.safeParse(filters)
+    expect(result.success).toBe(true)
+  })
+})
+
+describe('buildGenericWhere', () => {
+  it('returns undefined for empty filters array', () => {
+    const result = buildGenericWhere(testConfig, [])
+    expect(result).toBeUndefined()
+  })
+
+  it('returns a SQL object for a single filter', () => {
+    const filters = [{ field: 'email', operator: 'eq', value: 'test@example.com' }]
+    const result = buildGenericWhere(testConfig, filters)
+    expect(result).toBeDefined()
+  })
+
+  it('returns a SQL object for multiple filters', () => {
+    const filters = [
+      { field: 'email', operator: 'ilike', value: 'acme' },
+      { field: 'createdAt', operator: 'gte', value: '2024-01-01' },
+    ]
+    const result = buildGenericWhere(testConfig, filters)
+    expect(result).toBeDefined()
+  })
+
+  it('handles isNull=true operator', () => {
+    const filters = [{ field: 'bannedAt', operator: 'isNull', value: 'true' }]
+    const result = buildGenericWhere(testConfig, filters)
+    expect(result).toBeDefined()
+  })
+
+  it('handles isNull=false operator', () => {
+    const filters = [{ field: 'bannedAt', operator: 'isNull', value: 'false' }]
+    const result = buildGenericWhere(testConfig, filters)
+    expect(result).toBeDefined()
+  })
+
+  it('handles between operator with two-element array', () => {
+    const filters = [{ field: 'score', operator: 'between', value: ['10', '100'] }]
+    const result = buildGenericWhere(testConfig, filters)
+    expect(result).toBeDefined()
+  })
+
+  it('returns undefined clause for between with wrong number of values', () => {
+    const filters = [{ field: 'score', operator: 'between', value: ['10'] }]
+    const result = buildGenericWhere(testConfig, filters)
+    expect(result).toBeUndefined()
+  })
+
+  it('handles in operator with array value', () => {
+    const filters = [{ field: 'role', operator: 'in', value: ['admin', 'user'] }]
+    const result = buildGenericWhere(testConfig, filters)
+    expect(result).toBeDefined()
+  })
+
+  it('skips unknown fields silently (already blocked by schema, defensive fallback)', () => {
+    const filters = [{ field: 'unknownField', operator: 'eq', value: 'foo' }]
+    const result = buildGenericWhere(testConfig, filters)
+    expect(result).toBeUndefined()
+  })
+})
+
+describe('escapeIlikePattern', () => {
+  it('escapes backslash', () => {
+    expect(escapeIlikePattern('a\\b')).toBe('a\\\\b')
+  })
+
+  it('escapes percent sign', () => {
+    expect(escapeIlikePattern('100%')).toBe('100\\%')
+  })
+
+  it('escapes underscore', () => {
+    expect(escapeIlikePattern('a_b')).toBe('a\\_b')
+  })
+
+  it('leaves plain strings untouched', () => {
+    expect(escapeIlikePattern('hello world')).toBe('hello world')
+  })
+})

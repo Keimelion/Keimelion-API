@@ -400,6 +400,59 @@ describe('GET /v1/admin/users', () => {
     expect(response.status).toBe(422)
   })
 
+  it('accepts bracket-syntax filter email[ilike] and returns 200', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
+    mockListUsers([ADMIN_USER])
+    mockCountChain(1)
+
+    const response = await apiRequest('/v1/admin/users?email%5Bilike%5D=admin', { token })
+
+    expect(response.status).toBe(200)
+    const body = await response.json() as { items: { email: string }[] }
+    expect(body.items[0]?.email).toBe('admin@example.com')
+  })
+
+  it('accepts bracket-syntax bannedAt[isNull]=true and returns 200', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
+    mockListUsers([TARGET_USER])
+    mockCountChain(1)
+
+    const response = await apiRequest('/v1/admin/users?bannedAt%5BisNull%5D=true', { token })
+
+    expect(response.status).toBe(200)
+  })
+
+  it('accepts combined named and bracket-syntax filters and returns 200', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
+    mockListUsers([ADMIN_USER])
+    mockCountChain(1)
+
+    const response = await apiRequest('/v1/admin/users?role=admin&email%5Bilike%5D=admin', { token })
+
+    expect(response.status).toBe(200)
+  })
+
+  it('returns 422 when bracket-syntax uses a disallowed operator for the field', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
+
+    const response = await apiRequest('/v1/admin/users?email%5Bgte%5D=foo', { token })
+
+    expect(response.status).toBe(422)
+  })
+
+  it('returns 422 when bracket-syntax uses an unknown field', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
+
+    const response = await apiRequest('/v1/admin/users?passwordHash%5Beq%5D=anything', { token })
+
+    expect(response.status).toBe(422)
+  })
+
   it('returns 403 when user does not have admin role', async () => {
     const token = await generateTestToken(TARGET_USER.id)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(TARGET_USER)

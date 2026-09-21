@@ -9,6 +9,25 @@ import type { UserRole } from '../../../shared/enums/user-role.js'
 import type { SortInput } from '../../../shared/schemas/sort.js'
 import { buildOrderBy, type SortConfig } from '../../../shared/db/sort.js'
 import { nullnessFlag, stringContains } from '../../../shared/db/filters.js'
+import { buildGenericWhere } from '../../../shared/db/filter-where.js'
+import type { FilterConfig } from '../../../shared/db/filter-config.js'
+import type { FilterInput } from '../../../shared/db/filter-parser.js'
+
+interface AdminUsersFilterEntity {
+  email: string
+  createdAt: Date
+  bannedAt: Date | null
+  deletedAt: Date | null
+  role: string
+}
+
+export const usersGenericFilterConfig: FilterConfig<AdminUsersFilterEntity> = {
+  email: { column: users.email, operators: ['eq', 'ilike'] },
+  createdAt: { column: users.createdAt, operators: ['gte', 'lte', 'between', 'isNull'] },
+  bannedAt: { column: users.bannedAt, operators: ['isNull'] },
+  deletedAt: { column: users.deletedAt, operators: ['isNull'] },
+  role: { column: users.role, operators: ['eq', 'in'] },
+}
 
 interface AdminInsertUserFields {
   email: string
@@ -32,6 +51,7 @@ export interface ListUsersFilters {
   createdFrom?: string | undefined
   createdTo?: string | undefined
   sort?: SortInput<AdminUsersSortField> | undefined
+  genericFilters?: FilterInput[] | undefined
 }
 
 const USERS_SORT: SortConfig<AdminUsersSortField> = {
@@ -46,6 +66,10 @@ const USERS_SORT: SortConfig<AdminUsersSortField> = {
 }
 
 function buildUsersWhere(filters: ListUsersFilters): SQL | undefined {
+  const genericClause = filters.genericFilters !== undefined && filters.genericFilters.length > 0
+    ? buildGenericWhere(usersGenericFilterConfig, filters.genericFilters)
+    : undefined
+
   return and(
     nullnessFlag(users.deletedAt, filters.isDeleted, false),
     nullnessFlag(users.bannedAt, filters.isBanned),
@@ -54,6 +78,7 @@ function buildUsersWhere(filters: ListUsersFilters): SQL | undefined {
     filters.role !== undefined ? eq(users.role, filters.role) : undefined,
     filters.createdFrom !== undefined ? gte(users.createdAt, new Date(filters.createdFrom)) : undefined,
     filters.createdTo !== undefined ? lte(users.createdAt, new Date(filters.createdTo)) : undefined,
+    genericClause,
   )
 }
 

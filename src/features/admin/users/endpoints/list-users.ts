@@ -8,6 +8,13 @@ import { adminOnly } from '../../../../shared/middlewares/admin-only.js'
 import { jsonResult } from '../../../../shared/utils/response.js'
 import { listUsers } from '../admin-users.service.js'
 import { USER_ROLE_VALUES } from '../../../../shared/enums/user-role.js'
+import { parseFilterQuery } from '../../../../shared/db/filter-parser.js'
+import { buildFilterSchema } from '../../../../shared/db/filter-schema.js'
+import { usersGenericFilterConfig } from '../admin-users.repository.js'
+import { sendError } from '../../../../shared/utils/response.js'
+import { HttpStatus } from '../../../../shared/enums/http.js'
+import { ErrorCode } from '../../../../shared/enums/error-code.js'
+import type { FilterInput } from '../../../../shared/db/filter-parser.js'
 
 const ADMIN_USERS_SORT_FIELDS = ['createdAt', 'email', 'username', 'lastActiveAt'] as const
 
@@ -37,11 +44,25 @@ const listUsersQuerySchema = paginationQuerySchema
     { message: 'createdFrom must be before or equal to createdTo' },
   )
 
-export type ListUsersInput = z.infer<typeof listUsersQuerySchema>
+export type ListUsersQueryInput = z.infer<typeof listUsersQuerySchema>
+
+export interface ListUsersInput extends ListUsersQueryInput {
+  genericFilters?: FilterInput[] | undefined
+}
+
+const genericFilterSchema = buildFilterSchema(usersGenericFilterConfig)
 
 export function mountListUsers(router: FeatureRouter): void {
   router.get('/', ...adminOnly, zValidator('query', listUsersQuerySchema, validationErrorHandler), async (context) => {
     const query = context.req.valid('query')
-    return jsonResult(context, await listUsers(query))
+
+    const rawFilters = parseFilterQuery(context.req.url)
+    const filterValidation = genericFilterSchema.safeParse(rawFilters)
+
+    if (!filterValidation.success) {
+      return context.json(sendError(ErrorCode.UNPROCESSABLE_ENTITY), HttpStatus.UNPROCESSABLE_ENTITY)
+    }
+
+    return jsonResult(context, await listUsers({ ...query, genericFilters: filterValidation.data }))
   })
 }
