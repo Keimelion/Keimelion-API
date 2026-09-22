@@ -1,6 +1,6 @@
 import type { OccasionType, OccasionTypeTranslation } from '../../../db/entities/occasion-types/occasion-types.schema.js'
 import type { OccasionTypeDetail } from '../../../shared/types/occasion-type.js'
-import { toOccasionTypeDetail } from '../../occasion-types/occasion-types.mapper.js'
+import { toOccasionTypeDetail } from '../../../shared/types/occasion-type.js'
 
 export interface AdminOccasionTypeTranslation {
   locale: string

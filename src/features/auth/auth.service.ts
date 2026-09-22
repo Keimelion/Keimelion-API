@@ -17,7 +17,7 @@ import {
   setPasswordResetToken,
   resetUserPassword,
 } from '../users/users.repository.js'
-import { toUserDetail } from '../users/users.mapper.js'
+import { toUserDetail } from '../../shared/types/user.js'
 import {
   storeTokenAndUpdateActivity,
   revokeTokenAndUpdateActivity,

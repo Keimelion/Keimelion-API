@@ -1,5 +1,5 @@
 import type { User } from '../../../db/entities/users/users.schema.js'
-import { toUserDetail } from '../../users/users.mapper.js'
+import { toUserDetail } from '../../../shared/types/user.js'
 import type { UserDetail } from '../../../shared/types/user.js'
 
 export interface AdminUser extends UserDetail {

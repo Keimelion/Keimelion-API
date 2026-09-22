@@ -12,7 +12,7 @@ import {
   deleteShop,
 } from '../../../db/entities/shops/shops.repository.js'
 import { findAllShops, countShops } from './admin-shops.repository.js'
-import { toShopDetail } from '../../shops/shops.mapper.js'
+import { toShopDetail } from '../../../shared/types/shop.js'
 import { AdminAction } from '../admin.enums.js'
 import type { Shop } from '../../../db/entities/shops/shops.schema.js'
 import type { ShopDetail, ShopWrite } from '../../../shared/types/shop.js'

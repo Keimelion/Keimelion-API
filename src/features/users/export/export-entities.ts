@@ -1,7 +1,7 @@
 import { findUserById } from '../../../db/entities/users/users.repository.js'
 import { findItemsByCreator, findItemSourcesByCreator, findListItemsForContributor } from './rgpd-export.repository.js'
-import { toUserDetail } from '../users.mapper.js'
-import { toItemDetail, toItemSourceDetail, toListItemDetail } from '../../lists/lists.mapper.js'
+import { toUserDetail } from '../../../shared/types/user.js'
+import { toItemDetail, toItemSourceDetail, toListItemDetail } from '../../../shared/types/item.js'
 
 /**
  * Descriptor for a single entity exported in the RGPD CSV archive.
