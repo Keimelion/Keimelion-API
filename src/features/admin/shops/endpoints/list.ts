@@ -9,7 +9,6 @@ import type { FeatureRouter } from '../../../../shared/types/app.js'
 import type { FilterInput } from '../../../../shared/db/filter-parser.js'
 import { listShops } from '../admin-shops.service.js'
 import { shopsEntity } from '../admin-shops.repository.js'
-import type { ShopsSortField } from '../admin-shops.repository.js'
 
 const listShopsQuerySchema = paginationQuerySchema.extend({
   sort: shopsEntity.buildListQuerySchema(),
@@ -19,7 +18,6 @@ export type ListShopsQueryInput = z.infer<typeof listShopsQuerySchema>
 
 export interface ListShopsInput extends ListShopsQueryInput {
   genericFilters: FilterInput[]
-  sort?: { field: ShopsSortField; direction: 'asc' | 'desc' } | undefined
 }
 
 export function mountListShops(router: FeatureRouter): void {

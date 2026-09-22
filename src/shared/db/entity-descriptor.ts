@@ -28,12 +28,6 @@ export interface EntityDescriptor<
   validateFilters: (url: string) => FilterInput[] | null
 }
 
-interface DefineEntityOptions<TSortField extends string, TFilterField extends string> {
-  sortable: Readonly<Record<TSortField, AnyColumn>>
-  filterable: Readonly<Record<TFilterField, FilterableField>>
-  defaultSort: { field: TSortField; direction: SortDirection }
-}
-
 export function defineEntity<
   TSortFields extends Readonly<Record<string, AnyColumn>>,
   TFilterFields extends Readonly<Record<string, FilterableField>>,
@@ -48,28 +42,20 @@ export function defineEntity<
   type TFilterField = keyof TFilterFields & string
 
   const sortFields = Object.keys(options.sortable) as [TSortField, ...TSortField[]]
-
-  const filterConfig = buildFilterConfigFromFilterable(
-    options.filterable as Readonly<Record<TFilterField, FilterableField>>,
-  )
-
+  const sortable = options.sortable as Readonly<Record<TSortField, AnyColumn>>
+  const filterable = options.filterable as Readonly<Record<TFilterField, FilterableField>>
+  const filterConfig = buildFilterConfigFromFilterable(filterable)
   const validator = makeFilterValidator(filterConfig)
 
-  const descriptor: DefineEntityOptions<TSortField, TFilterField> = {
-    sortable: options.sortable as Readonly<Record<TSortField, AnyColumn>>,
-    filterable: options.filterable as Readonly<Record<TFilterField, FilterableField>>,
-    defaultSort: options.defaultSort,
-  }
-
   return {
-    sortable: descriptor.sortable,
-    filterable: descriptor.filterable,
-    defaultSort: descriptor.defaultSort,
+    sortable,
+    filterable,
+    defaultSort: options.defaultSort,
     filterConfig,
     sortFields,
     buildListQuerySchema: () => sortQuerySchema(sortFields),
     buildWhere: (filters) => buildGenericWhere(filterConfig, filters),
-    buildOrderBy: (sort) => buildOrderByFromDescriptor(descriptor, sort),
+    buildOrderBy: (sort) => buildOrderBySql(sortable, options.defaultSort, sort),
     validateFilters: (url) => validator(url),
   }
 }
@@ -91,33 +77,13 @@ function buildFilterConfigFromFilterable<TFilterField extends string>(
   ) as FilterConfig<Record<TFilterField, unknown>>
 }
 
-function buildOrderByFromDescriptor<TSortField extends string, TFilterField extends string>(
-  descriptor: DefineEntityOptions<TSortField, TFilterField>,
+function buildOrderBySql<TSortField extends string>(
+  sortable: Readonly<Record<TSortField, AnyColumn>>,
+  defaultSort: { field: TSortField; direction: SortDirection },
   sort: { field: TSortField; direction: SortDirection } | undefined,
 ): SQL {
-  const field = sort?.field ?? descriptor.defaultSort.field
-  const direction = sort?.direction ?? descriptor.defaultSort.direction
-  const column = descriptor.sortable[field]
+  const field = sort?.field ?? defaultSort.field
+  const direction = sort?.direction ?? defaultSort.direction
   const orderFn = direction === 'asc' ? asc : desc
-  return orderFn(column)
-}
-
-export function buildListQuerySchema<TSortField extends string, TFilterField extends string>(
-  entity: EntityDescriptor<TSortField, TFilterField>,
-): ReturnType<typeof sortQuerySchema<TSortField>> {
-  return entity.buildListQuerySchema()
-}
-
-export function buildListWhere<TSortField extends string, TFilterField extends string>(
-  entity: EntityDescriptor<TSortField, TFilterField>,
-  filters: FilterInput[],
-): SQL | undefined {
-  return entity.buildWhere(filters)
-}
-
-export function buildOrderBy<TSortField extends string, TFilterField extends string>(
-  entity: EntityDescriptor<TSortField, TFilterField>,
-  sort: { field: TSortField; direction: SortDirection } | undefined,
-): SQL {
-  return entity.buildOrderBy(sort)
+  return orderFn(sortable[field])
 }

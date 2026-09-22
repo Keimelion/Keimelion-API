@@ -8,7 +8,6 @@ import { jsonResult, sendError } from '../../../../shared/utils/response.js'
 import { ErrorCode } from '../../../../shared/enums/error-code.js'
 import { listUsers } from '../admin-users.service.js'
 import { usersEntity } from '../admin-users.repository.js'
-import type { UsersSortField } from '../admin-users.repository.js'
 import type { FilterInput } from '../../../../shared/db/filter-parser.js'
 
 const listUsersQuerySchema = paginationQuerySchema.extend({
@@ -19,7 +18,6 @@ export type ListUsersQueryInput = z.infer<typeof listUsersQuerySchema>
 
 export interface ListUsersInput extends ListUsersQueryInput {
   genericFilters: FilterInput[]
-  sort?: { field: UsersSortField; direction: 'asc' | 'desc' } | undefined
 }
 
 export function mountListUsers(router: FeatureRouter): void {
