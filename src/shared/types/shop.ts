@@ -1,10 +1,13 @@
-export interface ShopDetail {
+export interface ShopPublic {
   id: string
   slug: string
   name: string
   domain: string | null
   logoUrl: string | null
   isAffiliated: boolean
+}
+
+export interface ShopDetail extends ShopPublic {
   sortOrder: number
   isActive: boolean
   createdAt: Date
@@ -19,13 +22,4 @@ export interface ShopWrite {
   isAffiliated: boolean
   sortOrder: number
   isActive: boolean
-}
-
-export interface ShopPublic {
-  id: string
-  slug: string
-  name: string
-  domain: string | null
-  logoUrl: string | null
-  isAffiliated: boolean
 }
