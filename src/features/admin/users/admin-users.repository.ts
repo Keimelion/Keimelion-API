@@ -23,13 +23,12 @@ interface AdminUsersFilterEntity {
   role: string
 }
 
-const isoDateSchema = z.string().datetime({ offset: true })
 const roleSchema = z.enum(USER_ROLE_VALUES)
 
 export const usersGenericFilterConfig: FilterConfig<AdminUsersFilterEntity> = {
   email:     { column: users.email,     operators: ['eq', 'ilike'] },
   username:  { column: users.username,  operators: ['eq', 'ilike'] },
-  createdAt: { column: users.createdAt, operators: ['gte', 'lte', 'between'], valueType: 'date', valueSchema: isoDateSchema },
+  createdAt: { column: users.createdAt, operators: ['gte', 'lte', 'between'], valueType: 'date' },
   bannedAt:  { column: users.bannedAt,  operators: ['isNull'] },
   deletedAt: { column: users.deletedAt, operators: ['isNull'] },
   role:      { column: users.role,      operators: ['eq', 'in'], valueSchema: roleSchema },

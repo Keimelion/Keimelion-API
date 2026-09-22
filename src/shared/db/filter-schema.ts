@@ -1,14 +1,17 @@
 import { z } from 'zod'
-import type { FilterConfig, FilterFieldConfig, FilterOperator } from './filter-config.js'
+import type { FilterConfig, FilterFieldConfig, FilterOperator, FilterValueType } from './filter-config.js'
 import type { FilterInput } from './filter-parser.js'
 
 const defaultScalarSchema = z.string()
 const booleanStringSchema = z.enum(['true', 'false'])
+const numericStringSchema = z.string().regex(/^-?\d+(?:\.\d+)?$/, 'must be a numeric string')
+const isoDateStringSchema = z.string().datetime({ offset: true })
 
 export function buildFilterSchema<TEntity>(config: FilterConfig<TEntity>): z.ZodType<FilterInput[]> {
   const entrySchemas = Object.entries(config).flatMap(([field, fieldConfig]) => {
     const cfg = fieldConfig as FilterFieldConfig
-    return cfg.operators.map((operator) => buildEntrySchema(field, operator, cfg.valueSchema))
+    const scalarSchema = cfg.valueSchema ?? defaultForValueType(cfg.valueType)
+    return cfg.operators.map((operator) => buildEntrySchema(field, operator, scalarSchema))
   })
 
   const [first, second, ...rest] = entrySchemas
@@ -24,35 +27,43 @@ export function buildFilterSchema<TEntity>(config: FilterConfig<TEntity>): z.Zod
   return z.array(z.union([first, second, ...rest]))
 }
 
+function defaultForValueType(valueType: FilterValueType | undefined): z.ZodType<string> {
+  switch (valueType) {
+    case 'boolean': return booleanStringSchema
+    case 'number':  return numericStringSchema
+    case 'date':    return isoDateStringSchema
+    case 'string':
+    case undefined: return defaultScalarSchema
+  }
+}
+
 function buildEntrySchema(
   field: string,
   operator: FilterOperator,
-  valueSchema: z.ZodType<string> | undefined,
+  scalarSchema: z.ZodType<string>,
 ): z.ZodType<FilterInput> {
   return z.object({
     field:    z.literal(field),
     operator: z.literal(operator),
-    value:    resolveValueSchema(operator, valueSchema),
+    value:    resolveValueSchema(operator, scalarSchema),
   }) as z.ZodType<FilterInput>
 }
 
 function resolveValueSchema(
   operator: FilterOperator,
-  valueSchema: z.ZodType<string> | undefined,
+  scalarSchema: z.ZodType<string>,
 ): z.ZodType<string | string[]> {
   if (operator === 'isNull') return booleanStringSchema
-
-  const scalar = valueSchema ?? defaultScalarSchema
 
   switch (operator) {
     case 'eq':
     case 'gte':
     case 'lte':
     case 'ilike':
-      return scalar
+      return scalarSchema
     case 'in':
-      return z.array(scalar).min(1)
+      return z.array(scalarSchema).min(1)
     case 'between':
-      return z.tuple([scalar, scalar])
+      return z.tuple([scalarSchema, scalarSchema])
   }
 }

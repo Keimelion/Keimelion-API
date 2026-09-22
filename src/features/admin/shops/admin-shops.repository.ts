@@ -1,5 +1,4 @@
 import { asc, count, type SQL } from 'drizzle-orm'
-import { z } from 'zod'
 import { db } from '../../../db/client.js'
 import { shops } from '../../../db/entities/shops/shops.schema.js'
 import { buildOrderBy, type SortConfig } from '../../../shared/db/sort.js'
@@ -20,14 +19,12 @@ interface AdminShopsFilterEntity {
   isAffiliated: boolean
 }
 
-const booleanStringSchema = z.enum(['true', 'false'])
-
 export const shopsGenericFilterConfig: FilterConfig<AdminShopsFilterEntity> = {
   name:         { column: shops.name,         operators: ['eq', 'ilike'] },
   slug:         { column: shops.slug,         operators: ['eq', 'ilike'] },
   domain:       { column: shops.domain,       operators: ['eq', 'ilike', 'isNull'] },
-  isActive:     { column: shops.isActive,     operators: ['eq'], valueType: 'boolean', valueSchema: booleanStringSchema },
-  isAffiliated: { column: shops.isAffiliated, operators: ['eq'], valueType: 'boolean', valueSchema: booleanStringSchema },
+  isActive:     { column: shops.isActive,     operators: ['eq'], valueType: 'boolean' },
+  isAffiliated: { column: shops.isAffiliated, operators: ['eq'], valueType: 'boolean' },
 }
 
 export interface ListShopsFilters {

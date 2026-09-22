@@ -1,9 +1,12 @@
 import { and, between, eq, gte, ilike, inArray, isNotNull, isNull, lte, type AnyColumn, type SQL } from 'drizzle-orm'
-import { escapeIlikePattern } from './filters.js'
 import type { FilterConfig, FilterFieldConfig, FilterOperator, FilterValueType } from './filter-config.js'
 import type { FilterInput } from './filter-parser.js'
 
 type CoercedValue = string | boolean | number | Date
+
+export function escapeIlikePattern(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_')
+}
 
 export function buildGenericWhere<TEntity>(
   config: FilterConfig<TEntity>,

@@ -2,8 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { z } from 'zod'
 import { parseFilterQuery } from './filter-parser.js'
 import { buildFilterSchema } from './filter-schema.js'
-import { buildGenericWhere } from './filter-where.js'
-import { escapeIlikePattern } from './filters.js'
+import { buildGenericWhere, escapeIlikePattern } from './filter-where.js'
 import type { FilterConfig } from './filter-config.js'
 import type { AnyColumn } from 'drizzle-orm'
 
@@ -237,6 +236,70 @@ describe('buildGenericWhere', () => {
   it('throws for an unknown field (schema is expected to catch this upstream)', () => {
     const filters = [{ field: 'unknownField', operator: 'eq', value: 'foo' }]
     expect(() => buildGenericWhere(testConfig, filters)).toThrow(/unknownField/)
+  })
+})
+
+describe('buildFilterSchema — valueType auto-defaults', () => {
+  const booleanConfig: FilterConfig<{ isActive: boolean }> = {
+    isActive: { column: mockColumn, operators: ['eq'], valueType: 'boolean' },
+  }
+  const booleanSchema = buildFilterSchema(booleanConfig)
+
+  it('boolean valueType accepts "true"/"false"', () => {
+    expect(booleanSchema.safeParse([{ field: 'isActive', operator: 'eq', value: 'true' }]).success).toBe(true)
+    expect(booleanSchema.safeParse([{ field: 'isActive', operator: 'eq', value: 'false' }]).success).toBe(true)
+  })
+
+  it('boolean valueType rejects other truthy/falsy strings', () => {
+    expect(booleanSchema.safeParse([{ field: 'isActive', operator: 'eq', value: 'yes' }]).success).toBe(false)
+    expect(booleanSchema.safeParse([{ field: 'isActive', operator: 'eq', value: '1' }]).success).toBe(false)
+    expect(booleanSchema.safeParse([{ field: 'isActive', operator: 'eq', value: '' }]).success).toBe(false)
+  })
+
+  const numberConfig: FilterConfig<{ score: number }> = {
+    score: { column: mockColumn, operators: ['eq', 'gte'], valueType: 'number' },
+  }
+  const numberSchema = buildFilterSchema(numberConfig)
+
+  it('number valueType accepts numeric strings (int and decimal, negative allowed)', () => {
+    expect(numberSchema.safeParse([{ field: 'score', operator: 'eq', value: '42' }]).success).toBe(true)
+    expect(numberSchema.safeParse([{ field: 'score', operator: 'eq', value: '-3.14' }]).success).toBe(true)
+    expect(numberSchema.safeParse([{ field: 'score', operator: 'gte', value: '0' }]).success).toBe(true)
+  })
+
+  it('number valueType rejects non-numeric strings', () => {
+    expect(numberSchema.safeParse([{ field: 'score', operator: 'eq', value: 'abc' }]).success).toBe(false)
+    expect(numberSchema.safeParse([{ field: 'score', operator: 'eq', value: 'NaN' }]).success).toBe(false)
+    expect(numberSchema.safeParse([{ field: 'score', operator: 'eq', value: '1e5' }]).success).toBe(false)
+  })
+
+  const dateConfig: FilterConfig<{ createdAt: Date }> = {
+    createdAt: { column: mockColumn, operators: ['gte'], valueType: 'date' },
+  }
+  const dateSchema = buildFilterSchema(dateConfig)
+
+  it('date valueType accepts ISO 8601 with offset', () => {
+    expect(dateSchema.safeParse([{ field: 'createdAt', operator: 'gte', value: '2024-01-01T00:00:00Z' }]).success).toBe(true)
+    expect(dateSchema.safeParse([{ field: 'createdAt', operator: 'gte', value: '2024-01-01T12:00:00+02:00' }]).success).toBe(true)
+  })
+
+  it('date valueType rejects non-ISO strings', () => {
+    expect(dateSchema.safeParse([{ field: 'createdAt', operator: 'gte', value: 'not-a-date' }]).success).toBe(false)
+    expect(dateSchema.safeParse([{ field: 'createdAt', operator: 'gte', value: '2024-01-01' }]).success).toBe(false)
+  })
+
+  it('explicit valueSchema takes precedence over valueType default', () => {
+    const config: FilterConfig<{ status: string }> = {
+      status: {
+        column: mockColumn,
+        operators: ['eq'],
+        valueType: 'string',
+        valueSchema: z.enum(['open', 'closed']),
+      },
+    }
+    const schema = buildFilterSchema(config)
+    expect(schema.safeParse([{ field: 'status', operator: 'eq', value: 'open' }]).success).toBe(true)
+    expect(schema.safeParse([{ field: 'status', operator: 'eq', value: 'other' }]).success).toBe(false)
   })
 })
 
