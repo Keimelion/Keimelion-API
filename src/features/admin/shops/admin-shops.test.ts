@@ -382,19 +382,19 @@ describe('GET /v1/admin/shops', () => {
     expect(body.items.some((item) => !item.isActive)).toBe(true)
   })
 
-  it('filters by isActive=true', async () => {
+  it('filters by isActive[eq]=true', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
 
     vi.mocked(db.query.shops.findMany).mockResolvedValueOnce([SHOP_ROW] as never)
     mockCountChain(1)
 
-    const response = await apiRequest('/v1/admin/shops?isActive=true', { token })
+    const response = await apiRequest('/v1/admin/shops?isActive%5Beq%5D=true', { token })
 
     expect(response.status).toBe(200)
   })
 
-  it('filters by isAffiliated=true', async () => {
+  it('filters by isAffiliated[eq]=true', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
 
@@ -402,26 +402,26 @@ describe('GET /v1/admin/shops', () => {
     vi.mocked(db.query.shops.findMany).mockResolvedValueOnce([affiliatedShop] as never)
     mockCountChain(1)
 
-    const response = await apiRequest('/v1/admin/shops?isAffiliated=true', { token })
+    const response = await apiRequest('/v1/admin/shops?isAffiliated%5Beq%5D=true', { token })
 
     expect(response.status).toBe(200)
     const body = await response.json() as { items: { isAffiliated: boolean }[] }
     expect(body.items[0]?.isAffiliated).toBe(true)
   })
 
-  it('filters by hasDomain=true', async () => {
+  it('filters by domain[isNull]=false', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
 
     vi.mocked(db.query.shops.findMany).mockResolvedValueOnce([SHOP_ROW] as never)
     mockCountChain(1)
 
-    const response = await apiRequest('/v1/admin/shops?hasDomain=true', { token })
+    const response = await apiRequest('/v1/admin/shops?domain%5BisNull%5D=false', { token })
 
     expect(response.status).toBe(200)
   })
 
-  it('filters by hasDomain=false', async () => {
+  it('filters by domain[isNull]=true', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
 
@@ -429,19 +429,19 @@ describe('GET /v1/admin/shops', () => {
     vi.mocked(db.query.shops.findMany).mockResolvedValueOnce([shopNoDomain] as never)
     mockCountChain(1)
 
-    const response = await apiRequest('/v1/admin/shops?hasDomain=false', { token })
+    const response = await apiRequest('/v1/admin/shops?domain%5BisNull%5D=true', { token })
 
     expect(response.status).toBe(200)
   })
 
-  it('filters by search term', async () => {
+  it('filters by name[ilike]', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
 
     vi.mocked(db.query.shops.findMany).mockResolvedValueOnce([SHOP_ROW] as never)
     mockCountChain(1)
 
-    const response = await apiRequest('/v1/admin/shops?search=amazon', { token })
+    const response = await apiRequest('/v1/admin/shops?name%5Bilike%5D=amazon', { token })
 
     expect(response.status).toBe(200)
   })
@@ -476,29 +476,29 @@ describe('GET /v1/admin/shops', () => {
     expect(response.status).toBe(422)
   })
 
-  it('returns 422 when isActive is not a boolean string', async () => {
+  it('returns 422 when bracket-syntax uses an unknown field', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
 
-    const response = await apiRequest('/v1/admin/shops?isActive=yes', { token })
+    const response = await apiRequest('/v1/admin/shops?unknownField%5Beq%5D=foo', { token })
 
     expect(response.status).toBe(422)
   })
 
-  it('returns 422 when isAffiliated is not a boolean string', async () => {
+  it('returns 422 when bracket-syntax uses a disallowed operator for the field', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
 
-    const response = await apiRequest('/v1/admin/shops?isAffiliated=1', { token })
+    const response = await apiRequest('/v1/admin/shops?isActive%5Bilike%5D=true', { token })
 
     expect(response.status).toBe(422)
   })
 
-  it('returns 422 when hasDomain is not a boolean string', async () => {
+  it('returns 422 when isActive[eq] is not "true" or "false"', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
 
-    const response = await apiRequest('/v1/admin/shops?hasDomain=maybe', { token })
+    const response = await apiRequest('/v1/admin/shops?isActive%5Beq%5D=yes', { token })
 
     expect(response.status).toBe(422)
   })

@@ -1,20 +1,35 @@
-import { and, asc, count, eq, or, type SQL } from 'drizzle-orm'
+import { asc, count, type SQL } from 'drizzle-orm'
 import { db } from '../../../db/client.js'
 import { shops } from '../../../db/entities/shops/shops.schema.js'
 import { buildOrderBy, type SortConfig } from '../../../shared/db/sort.js'
-import { nullnessFlag, stringContains } from '../../../shared/db/filters.js'
+import { buildGenericWhere } from '../../../shared/db/filter-where.js'
+import type { FilterConfig } from '../../../shared/db/filter-config.js'
+import type { FilterInput } from '../../../shared/db/filter-parser.js'
 import type { Shop } from '../../../db/entities/shops/shops.schema.js'
 import type { PaginationInput } from '../../../shared/schemas/pagination.js'
 import type { SortInput } from '../../../shared/schemas/sort.js'
 
 export type AdminShopsSortField = 'name' | 'slug' | 'sortOrder' | 'createdAt' | 'updatedAt'
 
+interface AdminShopsFilterEntity {
+  name: string
+  slug: string
+  domain: string | null
+  isActive: boolean
+  isAffiliated: boolean
+}
+
+export const shopsGenericFilterConfig: FilterConfig<AdminShopsFilterEntity> = {
+  name:         { column: shops.name,         operators: ['eq', 'ilike'] },
+  slug:         { column: shops.slug,         operators: ['eq', 'ilike'] },
+  domain:       { column: shops.domain,       operators: ['eq', 'ilike', 'isNull'] },
+  isActive:     { column: shops.isActive,     operators: ['eq'], valueType: 'boolean' },
+  isAffiliated: { column: shops.isAffiliated, operators: ['eq'], valueType: 'boolean' },
+}
+
 export interface ListShopsFilters {
-  search?: string | undefined
-  isActive?: boolean | undefined
-  isAffiliated?: boolean | undefined
-  hasDomain?: boolean | undefined
   sort?: SortInput<AdminShopsSortField> | undefined
+  genericFilters?: FilterInput[] | undefined
 }
 
 const SHOPS_SORT: SortConfig<AdminShopsSortField> = {
@@ -30,14 +45,9 @@ const SHOPS_SORT: SortConfig<AdminShopsSortField> = {
 }
 
 function buildShopsWhere(filters: ListShopsFilters): SQL | undefined {
-  return and(
-    filters.isActive !== undefined ? eq(shops.isActive, filters.isActive) : undefined,
-    filters.isAffiliated !== undefined ? eq(shops.isAffiliated, filters.isAffiliated) : undefined,
-    nullnessFlag(shops.domain, filters.hasDomain),
-    filters.search !== undefined
-      ? or(stringContains(shops.name, filters.search), stringContains(shops.slug, filters.search))
-      : undefined,
-  )
+  const generic = filters.genericFilters ?? []
+  if (generic.length === 0) return undefined
+  return buildGenericWhere(shopsGenericFilterConfig, generic)
 }
 
 function buildShopsOrderBy(sort: SortInput<AdminShopsSortField> | undefined): SQL[] {

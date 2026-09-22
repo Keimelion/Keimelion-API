@@ -74,15 +74,7 @@ export async function createShop(
 export async function listShops(
   input: ListShopsInput,
 ): Promise<ServiceResult<PaginatedResponse<BaseShop>>> {
-  const filters = {
-    search: input.search,
-    isActive: input.isActive,
-    isAffiliated: input.isAffiliated,
-    hasDomain: input.hasDomain,
-    sort: input.sort,
-  }
-
-  const [rows, total] = await Promise.all([findAllShops(input, filters), countShops(filters)])
+  const [rows, total] = await Promise.all([findAllShops(input, input), countShops(input)])
 
   return {
     data: buildPaginatedResponse(rows.map(toBaseShop), input, total),

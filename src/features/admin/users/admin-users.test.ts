@@ -109,14 +109,14 @@ describe('GET /v1/admin/users', () => {
     expect(body.pagination.total).toBe(1)
   })
 
-  it('returns soft-deleted users when isDeleted=true', async () => {
+  it('returns soft-deleted users when deletedAt[isNull]=false', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     const deletedUser = { ...TARGET_USER, deletedAt: new Date('2024-06-01') }
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     mockListUsers([deletedUser])
     mockCountChain(1)
 
-    const response = await apiRequest('/v1/admin/users?isDeleted=true', { token })
+    const response = await apiRequest('/v1/admin/users?deletedAt%5BisNull%5D=false', { token })
 
     const body = await response.json() as { items: { deletedAt: string | null }[] }
     expect(response.status).toBe(200)
@@ -129,7 +129,7 @@ describe('GET /v1/admin/users', () => {
     mockListUsers([])
     mockCountChain(0)
 
-    const response = await apiRequest('/v1/admin/users?email=nomatch', { token })
+    const response = await apiRequest('/v1/admin/users?email%5Bilike%5D=nomatch', { token })
 
     const body = await response.json() as { items: unknown[]; pagination: { total: number; totalPages: number } }
     expect(response.status).toBe(200)
@@ -138,79 +138,56 @@ describe('GET /v1/admin/users', () => {
     expect(body.pagination.totalPages).toBe(0)
   })
 
-  it('filters by email substring', async () => {
+  it('filters by role[eq]=admin', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     mockListUsers([ADMIN_USER])
     mockCountChain(1)
 
-    const response = await apiRequest('/v1/admin/users?email=admin', { token })
-
-    expect(response.status).toBe(200)
-    const body = await response.json() as { items: { email: string }[] }
-    expect(body.items[0]?.email).toBe('admin@example.com')
-  })
-
-  it('filters by username substring', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
-    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
-    mockListUsers([TARGET_USER])
-    mockCountChain(1)
-
-    const response = await apiRequest('/v1/admin/users?username=regular', { token })
-
-    expect(response.status).toBe(200)
-    const body = await response.json() as { items: { username: string }[] }
-    expect(body.items[0]?.username).toBe('regularuser')
-  })
-
-  it('filters by role', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
-    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
-    mockListUsers([ADMIN_USER])
-    mockCountChain(1)
-
-    const response = await apiRequest('/v1/admin/users?role=admin', { token })
+    const response = await apiRequest('/v1/admin/users?role%5Beq%5D=admin', { token })
 
     expect(response.status).toBe(200)
     const body = await response.json() as { pagination: { total: number } }
     expect(body.pagination.total).toBe(1)
   })
 
-  it('filters by isBanned=true returns only banned users', async () => {
+  it('filters by bannedAt[isNull]=false returns only banned users', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     const bannedUser = { ...TARGET_USER, bannedAt: new Date('2024-03-01') }
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     mockListUsers([bannedUser])
     mockCountChain(1)
 
-    const response = await apiRequest('/v1/admin/users?isBanned=true', { token })
+    const response = await apiRequest('/v1/admin/users?bannedAt%5BisNull%5D=false', { token })
 
     expect(response.status).toBe(200)
     const body = await response.json() as { items: { bannedAt: string | null }[] }
     expect(body.items[0]?.bannedAt).not.toBeNull()
   })
 
-  it('filters by isBanned=false returns only non-banned users', async () => {
+  it('filters by bannedAt[isNull]=true returns only non-banned users', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     mockListUsers([ADMIN_USER, TARGET_USER])
     mockCountChain(2)
 
-    const response = await apiRequest('/v1/admin/users?isBanned=false', { token })
+    const response = await apiRequest('/v1/admin/users?bannedAt%5BisNull%5D=true', { token })
 
     expect(response.status).toBe(200)
     const body = await response.json() as { items: { bannedAt: string | null }[] }
     expect(body.items.every((item) => item.bannedAt === null)).toBe(true)
   })
 
-  it('applies createdFrom and createdTo date filters', async () => {
+  it('applies createdAt[gte] and createdAt[lte] date filters', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     mockListUsers([ADMIN_USER])
     mockCountChain(1)
 
-    const response = await apiRequest('/v1/admin/users?createdFrom=2024-01-01T00:00:00Z&createdTo=2024-12-31T23:59:59Z', { token })
+    const response = await apiRequest(
+      '/v1/admin/users?createdAt%5Bgte%5D=2024-01-01T00:00:00Z&createdAt%5Blte%5D=2024-12-31T23:59:59Z',
+      { token },
+    )
 
     expect(response.status).toBe(200)
   })
@@ -243,7 +220,10 @@ describe('GET /v1/admin/users', () => {
     mockListUsers([ADMIN_USER])
     mockCountChain(1)
 
-    const response = await apiRequest('/v1/admin/users?role=admin&isBanned=false&sort=email:asc&page=1&limit=50', { token })
+    const response = await apiRequest(
+      '/v1/admin/users?role%5Beq%5D=admin&bannedAt%5BisNull%5D=true&sort=email:asc&page=1&limit=50',
+      { token },
+    )
 
     expect(response.status).toBe(200)
     const body = await response.json() as { pagination: { page: number; limit: number } }
@@ -257,7 +237,7 @@ describe('GET /v1/admin/users', () => {
     mockListUsers([ADMIN_USER])
     mockCountChain(1)
 
-    const response = await apiRequest('/v1/admin/users?role=admin', { token })
+    const response = await apiRequest('/v1/admin/users?role%5Beq%5D=admin', { token })
 
     const body = await response.json() as { pagination: { total: number } }
     expect(response.status).toBe(200)
@@ -336,66 +316,116 @@ describe('GET /v1/admin/users', () => {
     expect(response.status).toBe(422)
   })
 
-  it('returns 422 when role is invalid', async () => {
+  it('returns 422 when bracket isNull value is not "true" or "false"', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
 
-    const response = await apiRequest('/v1/admin/users?role=superuser', { token })
+    const response = await apiRequest('/v1/admin/users?bannedAt%5BisNull%5D=maybe', { token })
 
     expect(response.status).toBe(422)
   })
 
-  it('returns 422 when isBanned uses non-literal value', async () => {
+  it('returns 422 when bracket "in" is used with a scalar value', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
 
-    const response = await apiRequest('/v1/admin/users?isBanned=1', { token })
+    const response = await apiRequest('/v1/admin/users?role%5Bin%5D=admin', { token })
 
     expect(response.status).toBe(422)
   })
 
-  it('returns 422 when isBanned=yes', async () => {
+  it('accepts bracket-syntax filter email[ilike] and returns 200', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
+    mockListUsers([ADMIN_USER])
+    mockCountChain(1)
+
+    const response = await apiRequest('/v1/admin/users?email%5Bilike%5D=admin', { token })
+
+    expect(response.status).toBe(200)
+    const body = await response.json() as { items: { email: string }[] }
+    expect(body.items[0]?.email).toBe('admin@example.com')
+  })
+
+  it('accepts bracket-syntax username[ilike] and returns 200', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
+    mockListUsers([TARGET_USER])
+    mockCountChain(1)
+
+    const response = await apiRequest('/v1/admin/users?username%5Bilike%5D=regular', { token })
+
+    expect(response.status).toBe(200)
+    const body = await response.json() as { items: { username: string }[] }
+    expect(body.items[0]?.username).toBe('regularuser')
+  })
+
+  it('accepts bracket-syntax bannedAt[isNull]=true and returns 200', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
+    mockListUsers([TARGET_USER])
+    mockCountChain(1)
+
+    const response = await apiRequest('/v1/admin/users?bannedAt%5BisNull%5D=true', { token })
+
+    expect(response.status).toBe(200)
+  })
+
+  it('accepts multiple bracket filters combined and returns 200', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
+    mockListUsers([ADMIN_USER])
+    mockCountChain(1)
+
+    const response = await apiRequest('/v1/admin/users?role%5Beq%5D=admin&email%5Bilike%5D=admin', { token })
+
+    expect(response.status).toBe(200)
+  })
+
+  it('returns 422 when bracket-syntax uses a disallowed operator for the field', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
 
-    const response = await apiRequest('/v1/admin/users?isBanned=yes', { token })
+    const response = await apiRequest('/v1/admin/users?email%5Bgte%5D=foo', { token })
 
     expect(response.status).toBe(422)
   })
 
-  it('returns 422 when email is empty string', async () => {
+  it('returns 422 when role[eq] value is not a known role', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
 
-    const response = await apiRequest('/v1/admin/users?email=', { token })
+    const response = await apiRequest('/v1/admin/users?role%5Beq%5D=superuser', { token })
 
     expect(response.status).toBe(422)
   })
 
-  it('returns 422 when email exceeds 320 characters', async () => {
+  it('returns 422 when role[in] contains an unknown role', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
-    const longEmail = 'a'.repeat(321)
 
-    const response = await apiRequest(`/v1/admin/users?email=${longEmail}`, { token })
+    const response = await apiRequest(
+      '/v1/admin/users?role%5Bin%5D%5B%5D=admin&role%5Bin%5D%5B%5D=superuser',
+      { token },
+    )
 
     expect(response.status).toBe(422)
   })
 
-  it('returns 422 when createdFrom is not a valid date', async () => {
+  it('returns 422 when createdAt[gte] is not a valid ISO date', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
 
-    const response = await apiRequest('/v1/admin/users?createdFrom=not-a-date', { token })
+    const response = await apiRequest('/v1/admin/users?createdAt%5Bgte%5D=not-a-date', { token })
 
     expect(response.status).toBe(422)
   })
 
-  it('returns 422 when createdFrom is after createdTo', async () => {
+  it('returns 422 when bracket-syntax uses an unknown field', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
 
-    const response = await apiRequest('/v1/admin/users?createdFrom=2024-12-31T00:00:00Z&createdTo=2024-01-01T00:00:00Z', { token })
+    const response = await apiRequest('/v1/admin/users?passwordHash%5Beq%5D=anything', { token })
 
     expect(response.status).toBe(422)
   })
