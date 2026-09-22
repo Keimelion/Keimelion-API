@@ -12,6 +12,7 @@ import type { ItemSource } from '../../db/entities/item-sources/item-sources.sch
 import type { ListItem } from '../../db/entities/list-items/list-items.schema.js'
 import type { ListItemResponse } from './lists.mapper.js'
 import type { ServiceResult } from '../../shared/types/service.js'
+import type { ItemWrite } from '../../shared/types/item.js'
 import type { AddItemInput } from './endpoints/add-item.js'
 
 const DEFAULT_MODERATION_STATUS = 'approved'
@@ -43,10 +44,13 @@ async function createManualListItem(
   userId: string,
   input: AddItemInput,
 ): Promise<CreatedListItemRecord | null> {
-  const item = await insertItem({
+  const itemWrite: ItemWrite = {
     name: input.name,
     description: input.description ?? null,
     imageUrl: input.imageUrl ?? null,
+  }
+  const item = await insertItem({
+    ...itemWrite,
     createdByUserId: userId,
     moderationStatus: DEFAULT_MODERATION_STATUS,
   }, tx)

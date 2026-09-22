@@ -27,14 +27,6 @@ export interface ItemSourceDetail {
   updatedAt: Date
 }
 
-export interface ItemSourceWrite {
-  shopId: string | null
-  sourceUrl: string | null
-  price: string | null
-  currency: string
-  isPrimary: boolean
-}
-
 export interface ListItemDetail {
   id: string
   listId: string

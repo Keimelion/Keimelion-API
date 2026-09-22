@@ -17,7 +17,6 @@ export interface UserDetail {
 }
 
 export interface UserWrite {
-  email: string
   username: string | null
   avatarUrl: string | null
   isMarketingOptedIn: boolean

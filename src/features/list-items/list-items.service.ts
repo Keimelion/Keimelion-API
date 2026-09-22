@@ -4,13 +4,13 @@ import { serviceError } from '../../shared/utils/response.js'
 import { pickDefined } from '../../shared/utils/partial-update.js'
 import { updateListItem, deleteListItem } from '../../db/entities/list-items/list-items.repository.js'
 import { toListItemDetail } from '../lists/lists.mapper.js'
-import type { ListItemDetail } from '../../shared/types/item.js'
+import type { ListItemDetail, ListItemWrite } from '../../shared/types/item.js'
 import type { ServiceResult } from '../../shared/types/service.js'
-import type { UpdateListItemInput } from './endpoints/update-list-item.js'
+import type { PartialWrite } from '../../shared/types/api.js'
 
 export async function updateListItemById(
   listItemId: string,
-  input: UpdateListItemInput,
+  input: PartialWrite<ListItemWrite>,
 ): Promise<ServiceResult<{ listItem: ListItemDetail }>> {
   const updated = await updateListItem(listItemId, pickDefined(input))
   if (!updated) return serviceError(ErrorCode.INTERNAL_ERROR)

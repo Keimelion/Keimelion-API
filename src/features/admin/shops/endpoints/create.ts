@@ -28,8 +28,6 @@ const adminCreateShopSchema = z
   })
   .strict()
 
-export type AdminCreateShopInput = z.infer<typeof adminCreateShopSchema>
-
 export function mountCreateShop(router: FeatureRouter): void {
   router.post(
     '/',

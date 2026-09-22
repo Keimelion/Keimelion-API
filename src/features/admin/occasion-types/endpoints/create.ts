@@ -34,8 +34,6 @@ const adminCreateOccasionTypeSchema = z
   })
   .strict()
 
-export type AdminCreateOccasionTypeInput = z.infer<typeof adminCreateOccasionTypeSchema>
-
 export function mountCreateOccasionType(router: FeatureRouter): void {
   router.post(
     '/',

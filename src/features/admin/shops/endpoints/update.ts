@@ -27,8 +27,6 @@ const adminUpdateShopSchema = z
   })
   .strict()
 
-export type AdminUpdateShopInput = z.infer<typeof adminUpdateShopSchema>
-
 export function mountUpdateShop(router: FeatureRouter): void {
   router.patch(
     '/:id',

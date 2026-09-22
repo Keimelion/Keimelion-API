@@ -25,12 +25,12 @@ import type { ServiceResult } from '../../../shared/types/service.js'
 import type { PaginatedResponse } from '../../../shared/types/api.js'
 import type { PaginationInput } from '../../../shared/schemas/pagination.js'
 import type { OccasionTypeTranslation } from '../../../db/entities/occasion-types/occasion-types.schema.js'
-import type { AdminCreateOccasionTypeInput } from './endpoints/create.js'
+import type { OccasionTypeWrite } from '../../../shared/types/occasion-type.js'
 import type { AdminUpdateOccasionTypeInput } from './endpoints/update.js'
 
 export async function createOccasionType(
   adminId: string,
-  input: AdminCreateOccasionTypeInput,
+  input: OccasionTypeWrite,
 ): Promise<ServiceResult<{ occasionType: AdminOccasionType }>> {
   let createdRow: AdminOccasionType
 

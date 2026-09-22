@@ -21,7 +21,7 @@ export const usersEntity = defineEntity({
     username:    users.username,
     lastActiveAt: users.lastActiveAt,
   },
-  defaultSort: { field: 'createdAt', direction: 'desc' },
+  defaultSort: [{ field: 'createdAt', direction: 'desc' }],
   filterable: {
     email:     { column: users.email,     operators: ['eq', 'ilike'] },
     username:  { column: users.username,  operators: ['eq', 'ilike'] },

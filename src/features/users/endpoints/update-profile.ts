@@ -13,8 +13,6 @@ const updateProfileSchema = z.object({
   isMarketingOptedIn: z.boolean().optional(),
 })
 
-export type UpdateProfileInput = z.infer<typeof updateProfileSchema>
-
 export function mountUpdateProfile(router: FeatureRouter): void {
   router.patch('/me', authMiddleware, zValidator('json', updateProfileSchema, validationErrorHandler), async (context) => {
     const user = getAuthUser(context)

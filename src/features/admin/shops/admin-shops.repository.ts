@@ -1,4 +1,4 @@
-import { asc, count, type SQL } from 'drizzle-orm'
+import { count, type SQL } from 'drizzle-orm'
 import { db } from '../../../db/client.js'
 import { shops } from '../../../db/entities/shops/shops.schema.js'
 import { defineEntity } from '../../../shared/db/entity-descriptor.js'
@@ -15,7 +15,10 @@ export const shopsEntity = defineEntity({
     createdAt: shops.createdAt,
     updatedAt: shops.updatedAt,
   },
-  defaultSort: { field: 'sortOrder', direction: 'asc' },
+  defaultSort: [
+    { field: 'sortOrder', direction: 'asc' },
+    { field: 'name',      direction: 'asc' },
+  ],
   filterable: {
     name:         { column: shops.name,         operators: ['eq', 'ilike'] },
     slug:         { column: shops.slug,         operators: ['eq', 'ilike'] },
@@ -38,18 +41,11 @@ function buildShopsWhere(filters: ListShopsFilters): SQL | undefined {
   return shopsEntity.buildWhere(generic)
 }
 
-function buildShopsOrderBy(sort: SortInput<ShopsSortField> | undefined): SQL[] {
-  if (sort !== undefined) {
-    return [shopsEntity.buildOrderBy(sort)]
-  }
-  return [asc(shops.sortOrder), asc(shops.name)]
-}
-
 export function findAllShops(input: PaginationInput, filters: ListShopsFilters): Promise<Shop[]> {
   const offset = (input.page - 1) * input.limit
   return db.query.shops.findMany({
     where: buildShopsWhere(filters),
-    orderBy: buildShopsOrderBy(filters.sort),
+    orderBy: shopsEntity.buildOrderBy(filters.sort),
     limit: input.limit,
     offset,
   })

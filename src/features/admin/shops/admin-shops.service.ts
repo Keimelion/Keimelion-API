@@ -15,14 +15,12 @@ import { findAllShops, countShops } from './admin-shops.repository.js'
 import { toShopDetail } from '../../shops/shops.mapper.js'
 import { AdminAction } from '../admin.enums.js'
 import type { Shop } from '../../../db/entities/shops/shops.schema.js'
-import type { ShopDetail } from '../../../shared/types/shop.js'
+import type { ShopDetail, ShopWrite } from '../../../shared/types/shop.js'
 import type { ServiceResult } from '../../../shared/types/service.js'
-import type { PaginatedResponse } from '../../../shared/types/api.js'
-import type { AdminCreateShopInput } from './endpoints/create.js'
-import type { AdminUpdateShopInput } from './endpoints/update.js'
+import type { PaginatedResponse, PartialWrite } from '../../../shared/types/api.js'
 import type { ListShopsInput } from './endpoints/list.js'
 
-type ShopFieldPatch = Partial<Omit<ShopDetail, 'id' | 'createdAt' | 'updatedAt'>>
+type ShopFieldPatch = Partial<ShopWrite>
 
 type WriteOutcome = { row: Shop } | { errorCode: ErrorCode }
 
@@ -50,7 +48,7 @@ function buildShopChanges(
 
 export async function createShop(
   adminId: string,
-  input: AdminCreateShopInput,
+  input: ShopWrite,
 ): Promise<ServiceResult<{ shop: ShopDetail }>> {
   const outcome = await runShopWrite(() =>
     insertShop({
@@ -85,7 +83,7 @@ export async function listShops(
 export async function updateShopById(
   adminId: string,
   id: string,
-  input: AdminUpdateShopInput,
+  input: PartialWrite<ShopWrite>,
 ): Promise<ServiceResult<{ shop: ShopDetail }>> {
   const existingRow = await findShopById(id)
   if (!existingRow) return serviceError(ErrorCode.NOT_FOUND)
