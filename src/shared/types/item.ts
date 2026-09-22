@@ -1,4 +1,4 @@
-export interface BaseItem {
+export interface ItemDetail {
   id: string
   name: string
   description: string | null
@@ -9,7 +9,13 @@ export interface BaseItem {
   updatedAt: Date
 }
 
-export interface BaseItemSource {
+export interface ItemWrite {
+  name: string
+  description: string | null
+  imageUrl: string | null
+}
+
+export interface ItemSourceDetail {
   id: string
   itemId: string
   shopId: string | null
@@ -21,7 +27,15 @@ export interface BaseItemSource {
   updatedAt: Date
 }
 
-export interface BaseListItem {
+export interface ItemSourceWrite {
+  shopId: string | null
+  sourceUrl: string | null
+  price: string | null
+  currency: string
+  isPrimary: boolean
+}
+
+export interface ListItemDetail {
   id: string
   listId: string
   itemId: string
@@ -32,4 +46,10 @@ export interface BaseListItem {
   creatorNote: string | null
   createdAt: Date
   updatedAt: Date
+}
+
+export interface ListItemWrite {
+  quantityDesired: number
+  creatorNote: string | null
+  sortOrder: number | null
 }

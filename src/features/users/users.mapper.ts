@@ -1,9 +1,9 @@
 import type { User } from '../../db/entities/users/users.schema.js'
-import type { BaseUser } from '../../shared/types/user.js'
+import type { UserDetail } from '../../shared/types/user.js'
 
-export type PublicUser = BaseUser
+export type PublicUser = UserDetail
 
-export function toBaseUser(user: User): BaseUser {
+export function toUserDetail(user: User): UserDetail {
   return {
     id: user.id,
     email: user.email,
@@ -22,5 +22,5 @@ export function toBaseUser(user: User): BaseUser {
 }
 
 export function toPublicUser(user: User): PublicUser {
-  return toBaseUser(user)
+  return toUserDetail(user)
 }

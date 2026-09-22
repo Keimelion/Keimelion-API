@@ -1,4 +1,4 @@
-export interface BaseOccasionType {
+export interface OccasionTypeDetail {
   id: string
   slug: string
   emoji: string | null
@@ -6,4 +6,11 @@ export interface BaseOccasionType {
   isActive: boolean
   createdAt: Date
   updatedAt: Date
+}
+
+export interface OccasionTypeWrite {
+  slug: string
+  emoji: string | null
+  sortOrder: number
+  isActive: boolean
 }

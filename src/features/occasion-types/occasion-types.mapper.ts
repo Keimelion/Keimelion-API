@@ -1,6 +1,6 @@
 import type { OccasionType } from '../../db/entities/occasion-types/occasion-types.schema.js'
 import type { OccasionTypeWithLabel } from '../../db/entities/occasion-types/occasion-types.repository.js'
-import type { BaseOccasionType } from '../../shared/types/occasion-type.js'
+import type { OccasionTypeDetail } from '../../shared/types/occasion-type.js'
 
 export interface PublicOccasionType {
   id: string
@@ -9,7 +9,7 @@ export interface PublicOccasionType {
   emoji: string | null
 }
 
-export function toBaseOccasionType(row: OccasionType): BaseOccasionType {
+export function toOccasionTypeDetail(row: OccasionType): OccasionTypeDetail {
   return {
     id: row.id,
     slug: row.slug,

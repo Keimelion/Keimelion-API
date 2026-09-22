@@ -1,58 +1,46 @@
 import { asc, count, type SQL } from 'drizzle-orm'
 import { db } from '../../../db/client.js'
 import { shops } from '../../../db/entities/shops/shops.schema.js'
-import { buildOrderBy, type SortConfig } from '../../../shared/db/sort.js'
-import { buildGenericWhere } from '../../../shared/db/filter-where.js'
-import type { FilterConfig } from '../../../shared/db/filter-config.js'
-import type { FilterInput } from '../../../shared/db/filter-parser.js'
+import { defineEntity } from '../../../shared/db/entity-descriptor.js'
 import type { Shop } from '../../../db/entities/shops/shops.schema.js'
 import type { PaginationInput } from '../../../shared/schemas/pagination.js'
 import type { SortInput } from '../../../shared/schemas/sort.js'
+import type { FilterInput } from '../../../shared/db/filter-parser.js'
 
-export type AdminShopsSortField = 'name' | 'slug' | 'sortOrder' | 'createdAt' | 'updatedAt'
-
-interface AdminShopsFilterEntity {
-  name: string
-  slug: string
-  domain: string | null
-  isActive: boolean
-  isAffiliated: boolean
-}
-
-export const shopsGenericFilterConfig: FilterConfig<AdminShopsFilterEntity> = {
-  name:         { column: shops.name,         operators: ['eq', 'ilike'] },
-  slug:         { column: shops.slug,         operators: ['eq', 'ilike'] },
-  domain:       { column: shops.domain,       operators: ['eq', 'ilike', 'isNull'] },
-  isActive:     { column: shops.isActive,     operators: ['eq'], valueType: 'boolean' },
-  isAffiliated: { column: shops.isAffiliated, operators: ['eq'], valueType: 'boolean' },
-}
-
-export interface ListShopsFilters {
-  sort?: SortInput<AdminShopsSortField> | undefined
-  genericFilters?: FilterInput[] | undefined
-}
-
-const SHOPS_SORT: SortConfig<AdminShopsSortField> = {
-  columns: {
-    name: shops.name,
-    slug: shops.slug,
+export const shopsEntity = defineEntity({
+  sortable: {
+    name:      shops.name,
+    slug:      shops.slug,
     sortOrder: shops.sortOrder,
     createdAt: shops.createdAt,
     updatedAt: shops.updatedAt,
   },
-  defaultField: 'sortOrder',
-  defaultDirection: 'asc',
+  defaultSort: { field: 'sortOrder', direction: 'asc' },
+  filterable: {
+    name:         { column: shops.name,         operators: ['eq', 'ilike'] },
+    slug:         { column: shops.slug,         operators: ['eq', 'ilike'] },
+    domain:       { column: shops.domain,       operators: ['eq', 'ilike', 'isNull'] },
+    isActive:     { column: shops.isActive,     operators: ['eq'], valueType: 'boolean' },
+    isAffiliated: { column: shops.isAffiliated, operators: ['eq'], valueType: 'boolean' },
+  },
+})
+
+export type ShopsSortField = keyof typeof shopsEntity.sortable
+
+export interface ListShopsFilters {
+  sort?: SortInput<ShopsSortField> | undefined
+  genericFilters?: FilterInput[] | undefined
 }
 
 function buildShopsWhere(filters: ListShopsFilters): SQL | undefined {
   const generic = filters.genericFilters ?? []
   if (generic.length === 0) return undefined
-  return buildGenericWhere(shopsGenericFilterConfig, generic)
+  return shopsEntity.buildWhere(generic)
 }
 
-function buildShopsOrderBy(sort: SortInput<AdminShopsSortField> | undefined): SQL[] {
+function buildShopsOrderBy(sort: SortInput<ShopsSortField> | undefined): SQL[] {
   if (sort !== undefined) {
-    return [buildOrderBy(SHOPS_SORT, sort)]
+    return [shopsEntity.buildOrderBy(sort)]
   }
   return [asc(shops.sortOrder), asc(shops.name)]
 }

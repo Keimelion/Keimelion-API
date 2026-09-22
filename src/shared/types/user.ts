@@ -1,6 +1,6 @@
 import type { User } from '../../db/entities/users/users.schema.js'
 
-export interface BaseUser {
+export interface UserDetail {
   id: string
   email: string
   username: string | null
@@ -14,4 +14,11 @@ export interface BaseUser {
   lastActiveAt: Date | null
   createdAt: Date
   updatedAt: Date
+}
+
+export interface UserWrite {
+  email: string
+  username: string | null
+  avatarUrl: string | null
+  isMarketingOptedIn: boolean
 }

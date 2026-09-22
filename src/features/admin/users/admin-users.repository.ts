@@ -3,35 +3,40 @@ import { users } from '../../../db/entities/users/users.schema.js'
 import { and, count, eq, isNull, type SQL } from 'drizzle-orm'
 import { z } from 'zod'
 import { USER_ROLE_VALUES } from '../../../shared/enums/user-role.js'
+import { defineEntity } from '../../../shared/db/entity-descriptor.js'
 import type { User } from '../../../db/entities/users/users.schema.js'
 
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 import type { PaginationInput } from '../../../shared/schemas/pagination.js'
 import type { UserRole } from '../../../shared/enums/user-role.js'
 import type { SortInput } from '../../../shared/schemas/sort.js'
-import { buildOrderBy, type SortConfig } from '../../../shared/db/sort.js'
-import { buildGenericWhere } from '../../../shared/db/filter-where.js'
-import type { FilterConfig } from '../../../shared/db/filter-config.js'
 import type { FilterInput } from '../../../shared/db/filter-parser.js'
-
-interface AdminUsersFilterEntity {
-  email: string
-  username: string
-  createdAt: Date
-  bannedAt: Date | null
-  deletedAt: Date | null
-  role: string
-}
 
 const roleSchema = z.enum(USER_ROLE_VALUES)
 
-export const usersGenericFilterConfig: FilterConfig<AdminUsersFilterEntity> = {
-  email:     { column: users.email,     operators: ['eq', 'ilike'] },
-  username:  { column: users.username,  operators: ['eq', 'ilike'] },
-  createdAt: { column: users.createdAt, operators: ['gte', 'lte', 'between'], valueType: 'date' },
-  bannedAt:  { column: users.bannedAt,  operators: ['isNull'] },
-  deletedAt: { column: users.deletedAt, operators: ['isNull'] },
-  role:      { column: users.role,      operators: ['eq', 'in'], valueSchema: roleSchema },
+export const usersEntity = defineEntity({
+  sortable: {
+    createdAt:   users.createdAt,
+    email:       users.email,
+    username:    users.username,
+    lastActiveAt: users.lastActiveAt,
+  },
+  defaultSort: { field: 'createdAt', direction: 'desc' },
+  filterable: {
+    email:     { column: users.email,     operators: ['eq', 'ilike'] },
+    username:  { column: users.username,  operators: ['eq', 'ilike'] },
+    createdAt: { column: users.createdAt, operators: ['gte', 'lte', 'between'], valueType: 'date' },
+    bannedAt:  { column: users.bannedAt,  operators: ['isNull'] },
+    deletedAt: { column: users.deletedAt, operators: ['isNull'] },
+    role:      { column: users.role,      operators: ['eq', 'in'], valueSchema: roleSchema },
+  },
+})
+
+export type UsersSortField = keyof typeof usersEntity.sortable
+
+export interface ListUsersFilters {
+  sort?: SortInput<UsersSortField> | undefined
+  genericFilters?: FilterInput[] | undefined
 }
 
 interface AdminInsertUserFields {
@@ -45,29 +50,11 @@ interface AdminInsertUserFields {
 
 type AdminUpdateUserFields = Partial<Pick<typeof users.$inferInsert, 'avatarUrl' | 'isMarketingOptedIn' | 'role'>>
 
-export type AdminUsersSortField = 'createdAt' | 'email' | 'username' | 'lastActiveAt'
-
-export interface ListUsersFilters {
-  sort?: SortInput<AdminUsersSortField> | undefined
-  genericFilters?: FilterInput[] | undefined
-}
-
-const USERS_SORT: SortConfig<AdminUsersSortField> = {
-  columns: {
-    createdAt: users.createdAt,
-    email: users.email,
-    username: users.username,
-    lastActiveAt: users.lastActiveAt,
-  },
-  defaultField: 'createdAt',
-  defaultDirection: 'desc',
-}
-
 function buildUsersWhere(filters: ListUsersFilters): SQL | undefined {
   const generic = filters.genericFilters ?? []
   const hasDeletedAtFilter = generic.some((filter) => filter.field === 'deletedAt')
   const softDeleteDefault = hasDeletedAtFilter ? undefined : isNull(users.deletedAt)
-  const genericClause = generic.length > 0 ? buildGenericWhere(usersGenericFilterConfig, generic) : undefined
+  const genericClause = generic.length > 0 ? usersEntity.buildWhere(generic) : undefined
 
   return and(softDeleteDefault, genericClause)
 }
@@ -85,7 +72,7 @@ export function findAllUsers(input: PaginationInput, filters: ListUsersFilters):
 
   return db.query.users.findMany({
     where: buildUsersWhere(filters),
-    orderBy: buildOrderBy(USERS_SORT, filters.sort),
+    orderBy: usersEntity.buildOrderBy(filters.sort),
     limit: input.limit,
     offset,
   })

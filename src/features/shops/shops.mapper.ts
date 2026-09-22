@@ -1,7 +1,7 @@
 import type { Shop } from '../../db/entities/shops/shops.schema.js'
-import type { BaseShop } from '../../shared/types/shop.js'
+import type { ShopDetail } from '../../shared/types/shop.js'
 
-export function toBaseShop(row: Shop): BaseShop {
+export function toShopDetail(row: Shop): ShopDetail {
   return {
     id: row.id,
     slug: row.slug,

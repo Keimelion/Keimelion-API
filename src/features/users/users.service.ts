@@ -9,8 +9,8 @@ import { deleteAllUserTokens } from '../../db/entities/access-tokens/access-toke
 import { revokeAllUserSessions } from '../../shared/db/user-sessions.js'
 import { findItemsByCreator, findItemSourcesByCreator, findListItemsForContributor } from './export/rgpd-export.repository.js'
 import { updateUserProfile } from './users.repository.js'
-import { toPublicUser, toBaseUser } from './users.mapper.js'
-import { toBaseItem, toBaseItemSource, toBaseListItem } from '../lists/lists.mapper.js'
+import { toPublicUser, toUserDetail } from './users.mapper.js'
+import { toItemDetail, toItemSourceDetail, toListItemDetail } from '../lists/lists.mapper.js'
 import { buildExportZipStream } from './export/csv-archive-writer.js'
 import { EXPORT_ENTITY_REGISTRY } from './export/export-entities.js'
 import type { PublicUser } from './users.mapper.js'
@@ -111,7 +111,7 @@ export async function exportUserData(userId: string, format: ExportFormat): Prom
   }
 
   const user = await findUserById(userId)
-  const profile = user ? toBaseUser(user) : null
+  const profile = user ? toUserDetail(user) : null
 
   const [rawItems, rawItemSources, rawListItems] = await Promise.all([
     findItemsByCreator(userId),
@@ -123,9 +123,9 @@ export async function exportUserData(userId: string, format: ExportFormat): Prom
     kind: 'json',
     payload: {
       profile,
-      items: rawItems.map(toBaseItem),
-      itemSources: rawItemSources.map(toBaseItemSource),
-      listItems: rawListItems.map(toBaseListItem),
+      items: rawItems.map(toItemDetail),
+      itemSources: rawItemSources.map(toItemSourceDetail),
+      listItems: rawListItems.map(toListItemDetail),
     },
     contentType: EXPORT_JSON_CONTENT_TYPE,
     filename: EXPORT_JSON_FILENAME,
