@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { z } from 'zod'
 import { parseFilterQuery } from './filter-parser.js'
 import { buildFilterSchema } from './filter-schema.js'
 import { buildGenericWhere } from './filter-where.js'
@@ -236,6 +237,70 @@ describe('buildGenericWhere', () => {
   it('throws for an unknown field (schema is expected to catch this upstream)', () => {
     const filters = [{ field: 'unknownField', operator: 'eq', value: 'foo' }]
     expect(() => buildGenericWhere(testConfig, filters)).toThrow(/unknownField/)
+  })
+})
+
+describe('buildFilterSchema — valueSchema override', () => {
+  const enumConfig: FilterConfig<{ role: string }> = {
+    role: { column: mockColumn, operators: ['eq', 'in'], valueSchema: z.enum(['admin', 'moderator', 'user']) },
+  }
+  const enumSchema = buildFilterSchema(enumConfig)
+
+  it('accepts eq with a value in the enum', () => {
+    const result = enumSchema.safeParse([{ field: 'role', operator: 'eq', value: 'admin' }])
+    expect(result.success).toBe(true)
+  })
+
+  it('rejects eq with a value outside the enum', () => {
+    const result = enumSchema.safeParse([{ field: 'role', operator: 'eq', value: 'superuser' }])
+    expect(result.success).toBe(false)
+  })
+
+  it('applies the value schema per-item for the "in" operator', () => {
+    const good = enumSchema.safeParse([{ field: 'role', operator: 'in', value: ['admin', 'moderator'] }])
+    expect(good.success).toBe(true)
+    const bad = enumSchema.safeParse([{ field: 'role', operator: 'in', value: ['admin', 'superuser'] }])
+    expect(bad.success).toBe(false)
+  })
+
+  const dateConfig: FilterConfig<{ createdAt: Date }> = {
+    createdAt: {
+      column: mockColumn,
+      operators: ['gte', 'between'],
+      valueSchema: z.string().datetime({ offset: true }),
+    },
+  }
+  const dateSchema = buildFilterSchema(dateConfig)
+
+  it('accepts gte with a valid ISO date', () => {
+    const result = dateSchema.safeParse([{ field: 'createdAt', operator: 'gte', value: '2024-01-01T00:00:00Z' }])
+    expect(result.success).toBe(true)
+  })
+
+  it('rejects gte with an invalid date', () => {
+    const result = dateSchema.safeParse([{ field: 'createdAt', operator: 'gte', value: 'not-a-date' }])
+    expect(result.success).toBe(false)
+  })
+
+  it('applies the value schema per-item for the "between" operator', () => {
+    const good = dateSchema.safeParse([
+      { field: 'createdAt', operator: 'between', value: ['2024-01-01T00:00:00Z', '2024-12-31T00:00:00Z'] },
+    ])
+    expect(good.success).toBe(true)
+    const bad = dateSchema.safeParse([
+      { field: 'createdAt', operator: 'between', value: ['2024-01-01T00:00:00Z', 'nope'] },
+    ])
+    expect(bad.success).toBe(false)
+  })
+
+  it('ignores the value schema for isNull (only accepts "true"/"false")', () => {
+    const config: FilterConfig<{ deletedAt: Date | null }> = {
+      deletedAt: { column: mockColumn, operators: ['isNull'], valueSchema: z.string().datetime() },
+    }
+    const schema = buildFilterSchema(config)
+    expect(schema.safeParse([{ field: 'deletedAt', operator: 'isNull', value: 'true' }]).success).toBe(true)
+    expect(schema.safeParse([{ field: 'deletedAt', operator: 'isNull', value: 'false' }]).success).toBe(true)
+    expect(schema.safeParse([{ field: 'deletedAt', operator: 'isNull', value: '2024-01-01' }]).success).toBe(false)
   })
 })
 

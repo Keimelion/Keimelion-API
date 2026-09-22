@@ -2,25 +2,14 @@ import { z } from 'zod'
 import type { FilterConfig, FilterFieldConfig, FilterOperator } from './filter-config.js'
 import type { FilterInput } from './filter-parser.js'
 
-const scalarValueSchema = z.string()
-const booleanStringValueSchema = z.enum(['true', 'false'])
-const arrayValueSchema = z.array(z.string()).min(1)
-const tupleValueSchema = z.tuple([z.string(), z.string()])
-
-const valueSchemaByOperator: Record<FilterOperator, z.ZodType<string | string[]>> = {
-  eq:      scalarValueSchema,
-  gte:     scalarValueSchema,
-  lte:     scalarValueSchema,
-  ilike:   scalarValueSchema,
-  isNull:  booleanStringValueSchema,
-  in:      arrayValueSchema,
-  between: tupleValueSchema,
-}
+const defaultScalarSchema = z.string()
+const booleanStringSchema = z.enum(['true', 'false'])
 
 export function buildFilterSchema<TEntity>(config: FilterConfig<TEntity>): z.ZodType<FilterInput[]> {
-  const entrySchemas = Object.entries(config).flatMap(([field, fieldConfig]) =>
-    (fieldConfig as FilterFieldConfig).operators.map((operator) => buildEntrySchema(field, operator)),
-  )
+  const entrySchemas = Object.entries(config).flatMap(([field, fieldConfig]) => {
+    const cfg = fieldConfig as FilterFieldConfig
+    return cfg.operators.map((operator) => buildEntrySchema(field, operator, cfg.valueSchema))
+  })
 
   const [first, second, ...rest] = entrySchemas
 
@@ -35,10 +24,35 @@ export function buildFilterSchema<TEntity>(config: FilterConfig<TEntity>): z.Zod
   return z.array(z.union([first, second, ...rest]))
 }
 
-function buildEntrySchema(field: string, operator: FilterOperator): z.ZodType<FilterInput> {
+function buildEntrySchema(
+  field: string,
+  operator: FilterOperator,
+  valueSchema: z.ZodType<string> | undefined,
+): z.ZodType<FilterInput> {
   return z.object({
     field:    z.literal(field),
     operator: z.literal(operator),
-    value:    valueSchemaByOperator[operator],
+    value:    resolveValueSchema(operator, valueSchema),
   }) as z.ZodType<FilterInput>
+}
+
+function resolveValueSchema(
+  operator: FilterOperator,
+  valueSchema: z.ZodType<string> | undefined,
+): z.ZodType<string | string[]> {
+  if (operator === 'isNull') return booleanStringSchema
+
+  const scalar = valueSchema ?? defaultScalarSchema
+
+  switch (operator) {
+    case 'eq':
+    case 'gte':
+    case 'lte':
+    case 'ilike':
+      return scalar
+    case 'in':
+      return z.array(scalar).min(1)
+    case 'between':
+      return z.tuple([scalar, scalar])
+  }
 }
