@@ -5,32 +5,22 @@ import { jsonResult } from '../../../../shared/utils/response.js'
 import { validationErrorHandler } from '../../../../shared/utils/validation.js'
 import { getAuthUser } from '../../../../shared/middlewares/auth.js'
 import { RATE_LIMITS } from '../../../../shared/utils/rate-limiter.js'
+import {
+  currencySchema,
+  httpsSourceUrlSchema,
+  itemSourceParamSchema,
+  priceSchema,
+  shopIdSchema,
+} from '../../../../db/entities/item-sources/item-sources.schemas.js'
 import type { FeatureRouter } from '../../../../shared/types/app.js'
 import { updateItemSourceById } from '../admin-items.service.js'
 
-const MAX_SOURCE_URL_LENGTH = 2048
-const PRICE_REGEX = /^\d{1,8}(\.\d{1,2})?$/
-const CURRENCY_REGEX = /^[A-Z]{3}$/
-const CURRENCY_LENGTH = 3
-
-const httpsSourceUrlSchema = z
-  .string()
-  .url()
-  .max(MAX_SOURCE_URL_LENGTH)
-  .refine((value) => value.startsWith('https://'), 'source_url must use HTTPS')
-  .nullable()
-
-const itemSourceParamSchema = z.object({
-  id: z.string().uuid(),
-  sourceId: z.string().uuid(),
-})
-
 const adminUpdateItemSourceSchema = z
   .object({
-    shopId: z.string().uuid().nullable().optional(),
+    shopId: shopIdSchema.optional(),
     sourceUrl: httpsSourceUrlSchema.optional(),
-    price: z.string().regex(PRICE_REGEX).nullable().optional(),
-    currency: z.string().length(CURRENCY_LENGTH).regex(CURRENCY_REGEX).optional(),
+    price: priceSchema.optional(),
+    currency: currencySchema.optional(),
     isPrimary: z.boolean().optional(),
   })
   .strict()
