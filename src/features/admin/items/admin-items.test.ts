@@ -499,6 +499,11 @@ describe('GET /v1/admin/items/:id', () => {
     const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}`, { token })
     expect(response.status).toBe(403)
   })
+
+  it('returns 401 when no token is provided', async () => {
+    const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}`)
+    expect(response.status).toBe(401)
+  })
 })
 
 describe('PATCH /v1/admin/items/:id', () => {
@@ -652,6 +657,15 @@ describe('PATCH /v1/admin/items/:id', () => {
     })
 
     expect(response.status).toBe(403)
+  })
+
+  it('returns 401 when no token is provided', async () => {
+    const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}`, {
+      method: 'PATCH',
+      body: { name: 'Test' },
+    })
+
+    expect(response.status).toBe(401)
   })
 })
 
@@ -814,6 +828,14 @@ describe('POST /v1/admin/items/:id/restore', () => {
 
     expect(response.status).toBe(403)
   })
+
+  it('returns 401 when no token is provided', async () => {
+    const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}/restore`, {
+      method: 'POST',
+    })
+
+    expect(response.status).toBe(401)
+  })
 })
 
 describe('GET /v1/admin/items/:id/sources', () => {
@@ -861,6 +883,11 @@ describe('GET /v1/admin/items/:id/sources', () => {
 
     const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}/sources`, { token })
     expect(response.status).toBe(403)
+  })
+
+  it('returns 401 when no token is provided', async () => {
+    const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}/sources`)
+    expect(response.status).toBe(401)
   })
 })
 
@@ -1068,6 +1095,15 @@ describe('POST /v1/admin/items/:id/sources', () => {
 
     expect(response.status).toBe(403)
   })
+
+  it('returns 401 when no token is provided', async () => {
+    const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}/sources`, {
+      method: 'POST',
+      body: {},
+    })
+
+    expect(response.status).toBe(401)
+  })
 })
 
 describe('PATCH /v1/admin/items/:id/sources/:sourceId', () => {
@@ -1109,6 +1145,41 @@ describe('PATCH /v1/admin/items/:id/sources/:sourceId', () => {
     const body = await response.json() as { source: { currency: string } }
     expect(response.status).toBe(200)
     expect(body.source.currency).toBe('USD')
+  })
+
+  it('logs at info level on successful update', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindItemSourceById(SOURCE_ROW)
+
+    vi.mocked(db.transaction).mockImplementationOnce((callback) => {
+      const tx = {
+        update: vi.fn().mockReturnValueOnce({
+          set: vi.fn().mockReturnValueOnce({
+            where: vi.fn().mockReturnValueOnce({
+              returning: vi.fn().mockResolvedValueOnce([{ ...SOURCE_ROW, currency: 'USD' }]),
+            }),
+          }),
+        }),
+        insert: vi.fn(),
+        delete: vi.fn(),
+        select: vi.fn(),
+      }
+      return callback(tx as never) as never
+    })
+
+    await apiRequest(
+      `/v1/admin/items/${ITEM_ROW.id}/sources/${SOURCE_ROW.id}`,
+      {
+        method: 'PATCH',
+        token,
+        body: { currency: 'USD' },
+      },
+    )
+
+    expect(vi.mocked(logger.info)).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'admin_update_item_source' }),
+    )
   })
 
   it('returns 404 when sourceId does not belong to itemId (IDOR guard)', async () => {
@@ -1172,6 +1243,18 @@ describe('PATCH /v1/admin/items/:id/sources/:sourceId', () => {
     )
 
     expect(response.status).toBe(403)
+  })
+
+  it('returns 401 when no token is provided', async () => {
+    const response = await apiRequest(
+      `/v1/admin/items/${ITEM_ROW.id}/sources/${SOURCE_ROW.id}`,
+      {
+        method: 'PATCH',
+        body: { currency: 'USD' },
+      },
+    )
+
+    expect(response.status).toBe(401)
   })
 })
 
