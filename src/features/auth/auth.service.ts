@@ -17,7 +17,7 @@ import {
   setPasswordResetToken,
   resetUserPassword,
 } from '../users/users.repository.js'
-import { toPublicUser } from '../users/users.mapper.js'
+import { toUserDetail } from '../../shared/types/user.js'
 import {
   storeTokenAndUpdateActivity,
   revokeTokenAndUpdateActivity,
@@ -26,7 +26,7 @@ import {
 import { deleteAllUserTokens } from '../../db/entities/access-tokens/access-tokens.repository.js'
 import { insertRefreshToken, findRefreshTokenByHash } from '../../db/entities/refresh-tokens/refresh-tokens.repository.js'
 import { findUserById } from '../../db/entities/users/users.repository.js'
-import type { PublicUser } from '../users/users.mapper.js'
+import type { UserDetail } from '../../shared/types/user.js'
 import type { ServiceResult } from '../../shared/types/service.js'
 import type { RegisterInput } from './endpoints/register.js'
 import type { VerifyEmailInput } from './endpoints/verify-email.js'
@@ -37,7 +37,7 @@ import type { ResetPasswordInput } from './endpoints/reset-password.js'
 const PASSWORD_RESET_TOKEN_TTL_MS = 60 * 60 * 1000
 const REFRESH_TOKEN_BYTE_LENGTH = 32
 
-export async function registerUser(input: RegisterInput): Promise<ServiceResult<{ user: PublicUser; refreshToken: string }>> {
+export async function registerUser(input: RegisterInput): Promise<ServiceResult<{ user: UserDetail; refreshToken: string }>> {
   if (await isEmailAlreadyTaken(input.email)) {
     return serviceError(ErrorCode.CONFLICT)
   }
@@ -53,7 +53,7 @@ export async function registerUser(input: RegisterInput): Promise<ServiceResult<
 
   const rawRefreshToken = await issueRefreshToken(createdUser.id)
 
-  return { data: { user: toPublicUser(createdUser), refreshToken: rawRefreshToken }, httpStatus: HttpStatus.CREATED }
+  return { data: { user: toUserDetail(createdUser), refreshToken: rawRefreshToken }, httpStatus: HttpStatus.CREATED }
 }
 
 export async function verifyEmail(input: VerifyEmailInput): Promise<ServiceResult<{ message: string }>> {
@@ -68,7 +68,7 @@ export async function verifyEmail(input: VerifyEmailInput): Promise<ServiceResul
   return { data: { message: 'Email verified successfully' }, httpStatus: HttpStatus.OK }
 }
 
-export async function loginUser(input: LoginInput): Promise<ServiceResult<{ accessToken: string; refreshToken: string; user: PublicUser }>> {
+export async function loginUser(input: LoginInput): Promise<ServiceResult<{ accessToken: string; refreshToken: string; user: UserDetail }>> {
   const user = await findUserByEmail(input.email)
 
   if (!user || await isPasswordInvalid(input.password, user.passwordHash)) {
@@ -88,7 +88,7 @@ export async function loginUser(input: LoginInput): Promise<ServiceResult<{ acce
 
   const rawRefreshToken = await issueRefreshToken(user.id)
 
-  return { data: { accessToken: token, refreshToken: rawRefreshToken, user: toPublicUser(user) }, httpStatus: HttpStatus.OK }
+  return { data: { accessToken: token, refreshToken: rawRefreshToken, user: toUserDetail(user) }, httpStatus: HttpStatus.OK }
 }
 
 export async function refreshAccessToken(rawToken: string): Promise<ServiceResult<{ accessToken: string; refreshToken: string }>> {

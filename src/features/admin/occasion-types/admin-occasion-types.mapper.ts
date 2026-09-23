@@ -1,13 +1,13 @@
 import type { OccasionType, OccasionTypeTranslation } from '../../../db/entities/occasion-types/occasion-types.schema.js'
-import type { BaseOccasionType } from '../../../shared/types/occasion-type.js'
-import { toBaseOccasionType } from '../../occasion-types/occasion-types.mapper.js'
+import type { OccasionTypeDetail } from '../../../shared/types/occasion-type.js'
+import { toOccasionTypeDetail } from '../../../shared/types/occasion-type.js'
 
 export interface AdminOccasionTypeTranslation {
   locale: string
   label: string
 }
 
-export interface AdminOccasionType extends BaseOccasionType {
+export interface AdminOccasionType extends OccasionTypeDetail {
   translations: AdminOccasionTypeTranslation[]
 }
 
@@ -16,7 +16,7 @@ export function toAdminOccasionType(
   translations: OccasionTypeTranslation[],
 ): AdminOccasionType {
   return {
-    ...toBaseOccasionType(row),
+    ...toOccasionTypeDetail(row),
     translations: translations.map((translation) => ({
       locale: translation.locale,
       label: translation.label,

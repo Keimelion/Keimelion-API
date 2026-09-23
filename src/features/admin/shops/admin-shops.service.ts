@@ -12,17 +12,15 @@ import {
   deleteShop,
 } from '../../../db/entities/shops/shops.repository.js'
 import { findAllShops, countShops } from './admin-shops.repository.js'
-import { toBaseShop } from '../../shops/shops.mapper.js'
+import { toShopDetail } from '../../../shared/types/shop.js'
 import { AdminAction } from '../admin.enums.js'
 import type { Shop } from '../../../db/entities/shops/shops.schema.js'
-import type { BaseShop } from '../../../shared/types/shop.js'
+import type { ShopDetail, ShopWrite } from '../../../shared/types/shop.js'
 import type { ServiceResult } from '../../../shared/types/service.js'
-import type { PaginatedResponse } from '../../../shared/types/api.js'
-import type { AdminCreateShopInput } from './endpoints/create.js'
-import type { AdminUpdateShopInput } from './endpoints/update.js'
+import type { PaginatedResponse, PartialWrite } from '../../../shared/types/api.js'
 import type { ListShopsInput } from './endpoints/list.js'
 
-type ShopFieldPatch = Partial<Omit<BaseShop, 'id' | 'createdAt' | 'updatedAt'>>
+type ShopFieldPatch = Partial<ShopWrite>
 
 type WriteOutcome = { row: Shop } | { errorCode: ErrorCode }
 
@@ -50,8 +48,8 @@ function buildShopChanges(
 
 export async function createShop(
   adminId: string,
-  input: AdminCreateShopInput,
-): Promise<ServiceResult<{ shop: BaseShop }>> {
+  input: ShopWrite,
+): Promise<ServiceResult<{ shop: ShopDetail }>> {
   const outcome = await runShopWrite(() =>
     insertShop({
       slug: input.slug,
@@ -66,18 +64,18 @@ export async function createShop(
 
   if ('errorCode' in outcome) return serviceError(outcome.errorCode)
 
-  const shop = toBaseShop(outcome.row)
+  const shop = toShopDetail(outcome.row)
   logger.info({ adminId, action: AdminAction.CREATE_SHOP, shopId: shop.id, slug: shop.slug })
   return { data: { shop }, httpStatus: HttpStatus.CREATED }
 }
 
 export async function listShops(
   input: ListShopsInput,
-): Promise<ServiceResult<PaginatedResponse<BaseShop>>> {
+): Promise<ServiceResult<PaginatedResponse<ShopDetail>>> {
   const [rows, total] = await Promise.all([findAllShops(input, input), countShops(input)])
 
   return {
-    data: buildPaginatedResponse(rows.map(toBaseShop), input, total),
+    data: buildPaginatedResponse(rows.map(toShopDetail), input, total),
     httpStatus: HttpStatus.OK,
   }
 }
@@ -85,8 +83,8 @@ export async function listShops(
 export async function updateShopById(
   adminId: string,
   id: string,
-  input: AdminUpdateShopInput,
-): Promise<ServiceResult<{ shop: BaseShop }>> {
+  input: PartialWrite<ShopWrite>,
+): Promise<ServiceResult<{ shop: ShopDetail }>> {
   const existingRow = await findShopById(id)
   if (!existingRow) return serviceError(ErrorCode.NOT_FOUND)
 
@@ -104,14 +102,14 @@ export async function updateShopById(
 
   if (Object.keys(fieldPatch).length === 0) {
     logger.info({ ...logBase, changes: {} })
-    return { data: { shop: toBaseShop(existingRow) }, httpStatus: HttpStatus.OK }
+    return { data: { shop: toShopDetail(existingRow) }, httpStatus: HttpStatus.OK }
   }
 
   const outcome = await runShopWrite(() => updateShop(id, fieldPatch))
   if ('errorCode' in outcome) return serviceError(outcome.errorCode)
 
   logger.info({ ...logBase, changes: buildShopChanges(existingRow, fieldPatch) })
-  return { data: { shop: toBaseShop(outcome.row) }, httpStatus: HttpStatus.OK }
+  return { data: { shop: toShopDetail(outcome.row) }, httpStatus: HttpStatus.OK }
 }
 
 export async function deleteShopById(

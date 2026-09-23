@@ -9,13 +9,13 @@ import { deleteAllUserTokens } from '../../db/entities/access-tokens/access-toke
 import { revokeAllUserSessions } from '../../shared/db/user-sessions.js'
 import { findItemsByCreator, findItemSourcesByCreator, findListItemsForContributor } from './export/rgpd-export.repository.js'
 import { updateUserProfile } from './users.repository.js'
-import { toPublicUser, toBaseUser } from './users.mapper.js'
-import { toBaseItem, toBaseItemSource, toBaseListItem } from '../lists/lists.mapper.js'
+import { toUserDetail } from '../../shared/types/user.js'
+import { toItemDetail, toItemSourceDetail, toListItemDetail } from '../../shared/types/item.js'
 import { buildExportZipStream } from './export/csv-archive-writer.js'
 import { EXPORT_ENTITY_REGISTRY } from './export/export-entities.js'
-import type { PublicUser } from './users.mapper.js'
+import type { UserDetail, UserWrite } from '../../shared/types/user.js'
 import type { ServiceResult } from '../../shared/types/service.js'
-import type { UpdateProfileInput } from './endpoints/update-profile.js'
+import type { PartialWrite } from '../../shared/types/api.js'
 import type { ChangePasswordInput } from './endpoints/change-password.js'
 import type { ExportFormat } from './endpoints/export-data.js'
 
@@ -40,24 +40,24 @@ interface ZipExportResult {
 
 export type ExportResult = JsonExportResult | ZipExportResult
 
-export async function getProfile(userId: string): Promise<ServiceResult<{ user: PublicUser }>> {
+export async function getProfile(userId: string): Promise<ServiceResult<{ user: UserDetail }>> {
   const user = await findUserById(userId)
 
   if (!user) {
     return serviceError(ErrorCode.NOT_FOUND)
   }
 
-  return { data: { user: toPublicUser(user) }, httpStatus: HttpStatus.OK }
+  return { data: { user: toUserDetail(user) }, httpStatus: HttpStatus.OK }
 }
 
-export async function updateProfile(userId: string, input: UpdateProfileInput): Promise<ServiceResult<{ user: PublicUser }>> {
+export async function updateProfile(userId: string, input: PartialWrite<UserWrite>): Promise<ServiceResult<{ user: UserDetail }>> {
   const updatedUser = await updateUserProfile(userId, pickDefined(input))
 
   if (!updatedUser) {
     return serviceError(ErrorCode.USER_UPDATE_FAILED)
   }
 
-  return { data: { user: toPublicUser(updatedUser) }, httpStatus: HttpStatus.OK }
+  return { data: { user: toUserDetail(updatedUser) }, httpStatus: HttpStatus.OK }
 }
 
 export async function deleteAccount(userId: string, originalEmail: string): Promise<ServiceResult<{ message: string }>> {
@@ -111,7 +111,7 @@ export async function exportUserData(userId: string, format: ExportFormat): Prom
   }
 
   const user = await findUserById(userId)
-  const profile = user ? toBaseUser(user) : null
+  const profile = user ? toUserDetail(user) : null
 
   const [rawItems, rawItemSources, rawListItems] = await Promise.all([
     findItemsByCreator(userId),
@@ -123,9 +123,9 @@ export async function exportUserData(userId: string, format: ExportFormat): Prom
     kind: 'json',
     payload: {
       profile,
-      items: rawItems.map(toBaseItem),
-      itemSources: rawItemSources.map(toBaseItemSource),
-      listItems: rawListItems.map(toBaseListItem),
+      items: rawItems.map(toItemDetail),
+      itemSources: rawItemSources.map(toItemSourceDetail),
+      listItems: rawListItems.map(toListItemDetail),
     },
     contentType: EXPORT_JSON_CONTENT_TYPE,
     filename: EXPORT_JSON_FILENAME,

@@ -1,7 +1,7 @@
 import { findUserById } from '../../../db/entities/users/users.repository.js'
 import { findItemsByCreator, findItemSourcesByCreator, findListItemsForContributor } from './rgpd-export.repository.js'
-import { toBaseUser } from '../users.mapper.js'
-import { toBaseItem, toBaseItemSource, toBaseListItem } from '../../lists/lists.mapper.js'
+import { toUserDetail } from '../../../shared/types/user.js'
+import { toItemDetail, toItemSourceDetail, toListItemDetail } from '../../../shared/types/item.js'
 
 /**
  * Descriptor for a single entity exported in the RGPD CSV archive.
@@ -52,7 +52,7 @@ const profileEntityDescriptor: ExportEntityDescriptor = {
   fetchRows: async (userId: string) => {
     const user = await findUserById(userId)
     if (!user) return []
-    return [toBaseUser(user)]
+    return [toUserDetail(user)]
   },
 }
 
@@ -69,7 +69,7 @@ const itemsEntityDescriptor: ExportEntityDescriptor = {
   ],
   fetchRows: async (userId: string) => {
     const userItems = await findItemsByCreator(userId)
-    return userItems.map((item) => toBaseItem(item))
+    return userItems.map((item) => toItemDetail(item))
   },
 }
 
@@ -88,7 +88,7 @@ const itemSourcesEntityDescriptor: ExportEntityDescriptor = {
   ],
   fetchRows: async (userId: string) => {
     const sources = await findItemSourcesByCreator(userId)
-    return sources.map((source) => toBaseItemSource(source))
+    return sources.map((source) => toItemSourceDetail(source))
   },
 }
 
@@ -108,7 +108,7 @@ const listItemsEntityDescriptor: ExportEntityDescriptor = {
   ],
   fetchRows: async (userId: string) => {
     const userListItems = await findListItemsForContributor(userId)
-    return userListItems.map((listItem) => toBaseListItem(listItem))
+    return userListItems.map((listItem) => toListItemDetail(listItem))
   },
 }
 

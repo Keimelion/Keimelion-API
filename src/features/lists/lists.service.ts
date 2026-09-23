@@ -6,12 +6,13 @@ import { serviceError } from '../../shared/utils/response.js'
 import { insertItem } from '../../db/entities/items/items.repository.js'
 import { insertItemSource } from '../../db/entities/item-sources/item-sources.repository.js'
 import { insertListItem } from '../../db/entities/list-items/list-items.repository.js'
-import { toBaseItem, toBaseListItem, toBaseItemSource } from './lists.mapper.js'
+import { toItemDetail, toListItemDetail, toItemSourceDetail } from '../../shared/types/item.js'
 import type { Item } from '../../db/entities/items/items.schema.js'
 import type { ItemSource } from '../../db/entities/item-sources/item-sources.schema.js'
 import type { ListItem } from '../../db/entities/list-items/list-items.schema.js'
-import type { ListItemResponse } from './lists.mapper.js'
+import type { ListItemResponse } from './lists.types.js'
 import type { ServiceResult } from '../../shared/types/service.js'
+import type { ItemWrite } from '../../shared/types/item.js'
 import type { AddItemInput } from './endpoints/add-item.js'
 
 const DEFAULT_MODERATION_STATUS = 'approved'
@@ -43,10 +44,13 @@ async function createManualListItem(
   userId: string,
   input: AddItemInput,
 ): Promise<CreatedListItemRecord | null> {
-  const item = await insertItem({
+  const itemWrite: ItemWrite = {
     name: input.name,
     description: input.description ?? null,
     imageUrl: input.imageUrl ?? null,
+  }
+  const item = await insertItem({
+    ...itemWrite,
     createdByUserId: userId,
     moderationStatus: DEFAULT_MODERATION_STATUS,
   }, tx)
@@ -74,8 +78,8 @@ async function createManualListItem(
 
 function buildListItemResponse(record: CreatedListItemRecord): ListItemResponse {
   return {
-    ...toBaseListItem(record.listItem),
-    item: toBaseItem(record.item),
-    source: record.source ? toBaseItemSource(record.source) : null,
+    ...toListItemDetail(record.listItem),
+    item: toItemDetail(record.item),
+    source: record.source ? toItemSourceDetail(record.source) : null,
   }
 }

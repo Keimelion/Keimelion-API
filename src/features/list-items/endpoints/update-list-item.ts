@@ -22,8 +22,6 @@ const updateListItemSchema = z.object({
   { message: 'At least one field must be provided' },
 )
 
-export type UpdateListItemInput = z.infer<typeof updateListItemSchema>
-
 export function mountUpdateListItem(router: FeatureRouter): void {
   router.patch(
     '/:id',
