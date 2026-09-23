@@ -537,4 +537,21 @@ describe('GET /v1/users/me/export', () => {
     expect(itemSourcesDescriptor).toBeDefined()
     expect(itemSourcesDescriptor?.columns).toContain('shopId')
   })
+
+  it('excludes catalog items (createdByUserId=null) from JSON export — findItemsByCreator scopes by userId', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+
+    vi.mocked(db.query.items.findMany).mockResolvedValueOnce([] as never)
+    vi.mocked(db.query.items.findMany).mockResolvedValueOnce([] as never)
+    vi.mocked(db.query.itemSources.findMany).mockResolvedValueOnce([])
+    vi.mocked(db.query.listCollaborators.findMany).mockResolvedValueOnce([])
+
+    const response = await apiRequest('/v1/users/me/export?format=json', { token })
+
+    expect(response.status).toBe(200)
+    const body = await response.json() as { items: unknown[] }
+    expect(body.items).toHaveLength(0)
+  })
 })
