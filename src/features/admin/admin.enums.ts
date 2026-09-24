@@ -15,4 +15,7 @@ export const AdminAction = {
   CREATE_ITEM_SOURCE: 'admin_create_item_source',
   UPDATE_ITEM_SOURCE: 'admin_update_item_source',
   DELETE_ITEM_SOURCE: 'admin_delete_item_source',
+  UPDATE_LIST: 'admin_update_list',
+  DELETE_LIST: 'admin_delete_list',
+  RESTORE_LIST: 'admin_restore_list',
 } as const

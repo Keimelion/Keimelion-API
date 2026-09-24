@@ -1,10 +1,11 @@
 import { ErrorCode } from '../enums/error-code.js'
-import { isPgUniqueViolation } from '../db/pg-errors.js'
+import { isPgUniqueViolation, isPgForeignKeyViolation } from '../db/pg-errors.js'
 
 export type WriteOutcome<T> = { row: T } | { errorCode: ErrorCode }
 
 interface RunWriteOptions {
   fallbackErrorCode?: ErrorCode
+  foreignKeyErrorCode?: ErrorCode
 }
 
 export async function runWrite<T>(
@@ -18,6 +19,9 @@ export async function runWrite<T>(
     return { row }
   } catch (error) {
     if (isPgUniqueViolation(error)) return { errorCode: ErrorCode.CONFLICT }
+    if (options?.foreignKeyErrorCode !== undefined && isPgForeignKeyViolation(error)) {
+      return { errorCode: options.foreignKeyErrorCode }
+    }
     return { errorCode: fallback }
   }
 }
@@ -27,18 +31,19 @@ interface BuildChangesOptions {
   redactedValue?: string
 }
 
-export function buildChanges<T extends Record<string, unknown>>(
-  existing: T,
-  patch: Partial<T>,
+export function buildChanges(
+  existing: object,
+  patch: object,
   options?: BuildChangesOptions,
 ): Record<string, { from: unknown; to: unknown }> {
   const redactFields = options?.redactFields
   const redactedValue = options?.redactedValue ?? '<redacted>'
+  const source = existing as Record<string, unknown>
   const changes: Record<string, { from: unknown; to: unknown }> = {}
   for (const [key, value] of Object.entries(patch)) {
     const isRedacted = redactFields?.has(key) ?? false
     changes[key] = {
-      from: isRedacted ? redactedValue : existing[key as keyof T],
+      from: isRedacted ? redactedValue : source[key],
       to: isRedacted ? redactedValue : value,
     }
   }
