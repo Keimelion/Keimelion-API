@@ -12,7 +12,7 @@ type UpdateListFields = Partial<
 >
 
 export function findListById(id: string, options?: FindListByIdOptions): Promise<List | undefined> {
-  const includeDeleted = options?.includeDeleted ?? true
+  const includeDeleted = options?.includeDeleted ?? false
   const where = includeDeleted ? eq(lists.id, id) : and(eq(lists.id, id), isNull(lists.deletedAt))
   return db.query.lists.findFirst({ where })
 }
