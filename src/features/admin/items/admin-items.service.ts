@@ -99,7 +99,7 @@ export async function updateItemById(
   const outcome = await runWrite(() => updateItem(id, fieldPatch))
   if ('errorCode' in outcome) return serviceError(outcome.errorCode)
 
-  const changes = buildChanges(existingRow as unknown as Record<string, unknown>, fieldPatch as Record<string, unknown>, { redactFields: URL_FIELDS, redactedValue: '<url>' })
+  const changes = buildChanges(existingRow, fieldPatch, { redactFields: URL_FIELDS, redactedValue: '<url>' })
   logger.info({ adminId, action: AdminAction.UPDATE_ITEM, itemId: id, changes })
   return { data: { item: toAdminItemDetail(outcome.row) }, httpStatus: HttpStatus.OK }
 }

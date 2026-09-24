@@ -20,8 +20,8 @@ import {
 } from './admin-lists.repository.js'
 import { toAdminListDetail } from './admin-lists.mapper.js'
 import { AdminAction } from '../admin.enums.js'
-import type { lists } from '../../../db/entities/lists/lists.schema.js'
 import type { List } from '../../../db/entities/lists/lists.schema.js'
+import type { UpdateListFields } from '../../../db/entities/lists/lists.repository.js'
 import type { User } from '../../../db/entities/users/users.schema.js'
 import type { UserDetail } from '../../../shared/types/user.js'
 import type { AdminListDetail } from './admin-lists.mapper.js'
@@ -31,10 +31,6 @@ import type { ListListsInput } from './endpoints/list.js'
 import type { UpdateListInput } from './endpoints/update.js'
 
 const FREE_TEXT_FIELDS = new Set(['title', 'description'])
-
-type ListUpdateFields = Partial<
-  Pick<typeof lists.$inferInsert, 'title' | 'description' | 'listStatus' | 'occasionTypeId'>
->
 
 export async function listLists(
   input: ListListsInput,
@@ -77,7 +73,7 @@ export async function updateListById(
   const existingRow = await findAdminListById(id)
   if (!existingRow || existingRow.deletedAt) return serviceError(ErrorCode.NOT_FOUND)
 
-  const fieldPatch: ListUpdateFields = pickDefined({
+  const fieldPatch: UpdateListFields = pickDefined({
     title: input.title,
     description: input.description,
     listStatus: input.listStatus,
@@ -136,11 +132,10 @@ function resolveOwnerDetail(ownersMap: Map<string, User>, listId: string): UserD
   return owner ? toUserDetail(owner) : null
 }
 
-function logChanges(adminId: string, listId: string, existingRow: List, fieldPatch: ListUpdateFields): void {
-  const changes = buildChanges(
-    existingRow as unknown as Record<string, unknown>,
-    fieldPatch as Record<string, unknown>,
-    { redactFields: FREE_TEXT_FIELDS, redactedValue: '<redacted>' },
-  )
+function logChanges(adminId: string, listId: string, existingRow: List, fieldPatch: UpdateListFields): void {
+  const changes = buildChanges(existingRow, fieldPatch, {
+    redactFields: FREE_TEXT_FIELDS,
+    redactedValue: '<redacted>',
+  })
   logger.info({ adminId, action: AdminAction.UPDATE_LIST, listId, changes })
 }

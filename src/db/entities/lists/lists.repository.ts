@@ -7,7 +7,7 @@ interface FindListByIdOptions {
   includeDeleted?: boolean
 }
 
-type UpdateListFields = Partial<
+export type UpdateListFields = Partial<
   Pick<typeof lists.$inferInsert, 'title' | 'description' | 'listStatus' | 'occasionTypeId'>
 >
 
