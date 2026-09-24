@@ -3,7 +3,7 @@ import { ErrorCode } from '../../../shared/enums/error-code.js'
 import { serviceError } from '../../../shared/utils/response.js'
 import { logger } from '../../../shared/utils/logger.js'
 import { pickDefined } from '../../../shared/utils/partial-update.js'
-import { isPgUniqueViolation } from '../../../shared/db/pg-errors.js'
+import { runWrite, buildChanges } from '../../../shared/utils/admin-write.js'
 import { buildPaginatedResponse } from '../../../shared/schemas/pagination.js'
 import {
   findShopById,
@@ -14,7 +14,6 @@ import {
 import { findAllShops, countShops } from './admin-shops.repository.js'
 import { toShopDetail } from '../../../shared/types/shop.js'
 import { AdminAction } from '../admin.enums.js'
-import type { Shop } from '../../../db/entities/shops/shops.schema.js'
 import type { ShopDetail, ShopWrite } from '../../../shared/types/shop.js'
 import type { ServiceResult } from '../../../shared/types/service.js'
 import type { PaginatedResponse, PartialWrite } from '../../../shared/types/api.js'
@@ -22,35 +21,11 @@ import type { ListShopsInput } from './endpoints/list.js'
 
 type ShopFieldPatch = Partial<ShopWrite>
 
-type WriteOutcome = { row: Shop } | { errorCode: ErrorCode }
-
-async function runShopWrite(op: () => Promise<Shop | undefined>): Promise<WriteOutcome> {
-  try {
-    const row = await op()
-    if (!row) return { errorCode: ErrorCode.INTERNAL_ERROR }
-    return { row }
-  } catch (error) {
-    if (isPgUniqueViolation(error)) return { errorCode: ErrorCode.CONFLICT }
-    return { errorCode: ErrorCode.INTERNAL_ERROR }
-  }
-}
-
-function buildShopChanges(
-  existing: Shop,
-  patch: ShopFieldPatch,
-): Record<string, { from: unknown; to: unknown }> {
-  const changes: Record<string, { from: unknown; to: unknown }> = {}
-  for (const [key, value] of Object.entries(patch)) {
-    changes[key] = { from: existing[key as keyof Shop], to: value }
-  }
-  return changes
-}
-
 export async function createShop(
   adminId: string,
   input: ShopWrite,
 ): Promise<ServiceResult<{ shop: ShopDetail }>> {
-  const outcome = await runShopWrite(() =>
+  const outcome = await runWrite(() =>
     insertShop({
       slug: input.slug,
       name: input.name,
@@ -105,10 +80,10 @@ export async function updateShopById(
     return { data: { shop: toShopDetail(existingRow) }, httpStatus: HttpStatus.OK }
   }
 
-  const outcome = await runShopWrite(() => updateShop(id, fieldPatch))
+  const outcome = await runWrite(() => updateShop(id, fieldPatch))
   if ('errorCode' in outcome) return serviceError(outcome.errorCode)
 
-  logger.info({ ...logBase, changes: buildShopChanges(existingRow, fieldPatch) })
+  logger.info({ ...logBase, changes: buildChanges(existingRow, fieldPatch) })
   return { data: { shop: toShopDetail(outcome.row) }, httpStatus: HttpStatus.OK }
 }
 

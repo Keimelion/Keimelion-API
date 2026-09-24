@@ -1,8 +1,8 @@
-import { and, count, isNull, type SQL } from 'drizzle-orm'
+import { and, count, type SQL } from 'drizzle-orm'
 import { z } from 'zod'
 import { db } from '../../../db/client.js'
 import { items } from '../../../db/entities/items/items.schema.js'
-import { defineEntity } from '../../../shared/db/entity-descriptor.js'
+import { defineEntity, buildSoftDeleteDefault } from '../../../shared/db/entity-descriptor.js'
 import { MODERATION_STATUS_VALUES } from '../../../shared/enums/moderation-status.js'
 import type { Item } from '../../../db/entities/items/items.schema.js'
 import type { PaginationInput } from '../../../shared/schemas/pagination.js'
@@ -38,11 +38,8 @@ export interface ListItemsFilters {
 
 function buildItemsWhere(filters: ListItemsFilters): SQL | undefined {
   const generic = filters.genericFilters ?? []
-  const hasDeletedAtFilter = generic.some((filter) => filter.field === 'deletedAt')
-  const softDeleteDefault = hasDeletedAtFilter ? undefined : isNull(items.deletedAt)
   const genericClause = generic.length > 0 ? itemsEntity.buildWhere(generic) : undefined
-
-  return and(softDeleteDefault, genericClause)
+  return and(buildSoftDeleteDefault(generic, items.deletedAt), genericClause)
 }
 
 export function findAllItems(input: PaginationInput, filters: ListItemsFilters): Promise<Item[]> {

@@ -13,7 +13,7 @@ import {
   shopIdSchema,
 } from '../../../../db/entities/item-sources/item-sources.schemas.js'
 import type { FeatureRouter } from '../../../../shared/types/app.js'
-import { updateItemSourceById } from '../admin-items.service.js'
+import { updateItemSourceById } from '../admin-item-sources.service.js'
 
 const adminUpdateItemSourceSchema = z
   .object({

@@ -4,7 +4,7 @@ import { jsonResult } from '../../../../shared/utils/response.js'
 import { validationErrorHandler } from '../../../../shared/utils/validation.js'
 import { uuidParamSchema } from '../../../../shared/schemas/params.js'
 import type { FeatureRouter } from '../../../../shared/types/app.js'
-import { listItemSources } from '../admin-items.service.js'
+import { listItemSources } from '../admin-item-sources.service.js'
 
 export function mountListItemSources(router: FeatureRouter): void {
   router.get(

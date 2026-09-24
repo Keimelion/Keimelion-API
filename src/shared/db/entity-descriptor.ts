@@ -1,4 +1,4 @@
-import { asc, desc, type AnyColumn, type SQL } from 'drizzle-orm'
+import { asc, desc, isNull, type AnyColumn, type SQL } from 'drizzle-orm'
 import { buildGenericWhere } from './filter-where.js'
 import { makeFilterValidator } from './filter-validator.js'
 import { sortQuerySchema, type SortDirection } from '../schemas/sort.js'
@@ -61,4 +61,12 @@ function buildOrderBySql<TSortField extends string>(
 ): SQL[] {
   const specs = sort !== undefined ? [sort] : defaultSort
   return specs.map((spec) => (spec.direction === 'asc' ? asc : desc)(sortable[spec.field]))
+}
+
+export function buildSoftDeleteDefault(
+  genericFilters: FilterInput[],
+  deletedAtColumn: AnyColumn,
+): SQL | undefined {
+  const hasDeletedAtFilter = genericFilters.some((filter) => filter.field === 'deletedAt')
+  return hasDeletedAtFilter ? undefined : isNull(deletedAtColumn)
 }
