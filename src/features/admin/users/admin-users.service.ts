@@ -9,7 +9,7 @@ import { serviceError } from '../../../shared/utils/response.js'
 import { logger } from '../../../shared/utils/logger.js'
 import { hashPassword, hashSha256Hex } from '../../../shared/utils/hash.js'
 import { pickDefined } from '../../../shared/utils/partial-update.js'
-import { isPgUniqueViolation } from '../../../shared/db/pg-errors.js'
+import { runWrite } from '../../../shared/utils/admin-write.js'
 import { findAllUsers, countUsers, adminUpdateUser, adminInsertUser } from './admin-users.repository.js'
 import { findUserById, softDeleteUser } from '../../../db/entities/users/users.repository.js'
 import { revokeAllUserSessions } from '../../../shared/db/user-sessions.js'
@@ -38,29 +38,22 @@ export async function createUser(
   const rawPassword = randomBytes(PASSWORD_RESET_TOKEN_BYTE_LENGTH).toString('hex')
   const passwordHash = await hashPassword(rawPassword)
 
-  let createdUser: AdminUser
+  const outcome = await runWrite(
+    () =>
+      adminInsertUser({
+        email: input.email,
+        username: input.username,
+        passwordHash,
+        role: input.role,
+        passwordResetToken: hashedPasswordResetToken,
+        passwordResetTokenExpiresAt,
+      }),
+    { fallbackErrorCode: ErrorCode.USER_CREATION_FAILED },
+  )
 
-  try {
-    const inserted = await adminInsertUser({
-      email: input.email,
-      username: input.username,
-      passwordHash,
-      role: input.role,
-      passwordResetToken: hashedPasswordResetToken,
-      passwordResetTokenExpiresAt,
-    })
+  if ('errorCode' in outcome) return serviceError(outcome.errorCode)
 
-    if (!inserted) {
-      return serviceError(ErrorCode.USER_CREATION_FAILED)
-    }
-
-    createdUser = toAdminUser(inserted)
-  } catch (error) {
-    if (isPgUniqueViolation(error)) {
-      return serviceError(ErrorCode.CONFLICT)
-    }
-    return serviceError(ErrorCode.USER_CREATION_FAILED)
-  }
+  const createdUser = toAdminUser(outcome.row)
 
   logAdminUserCreation(adminId, createdUser.id, input.role)
   sendAdminInvitationEmail(input.email, rawPasswordResetToken)

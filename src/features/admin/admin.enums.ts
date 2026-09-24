@@ -8,4 +8,11 @@ export const AdminAction = {
   CREATE_SHOP: 'admin_create_shop',
   UPDATE_SHOP: 'admin_update_shop',
   DELETE_SHOP: 'admin_delete_shop',
+  CREATE_ITEM: 'admin_create_item',
+  UPDATE_ITEM: 'admin_update_item',
+  DELETE_ITEM: 'admin_delete_item',
+  RESTORE_ITEM: 'admin_restore_item',
+  CREATE_ITEM_SOURCE: 'admin_create_item_source',
+  UPDATE_ITEM_SOURCE: 'admin_update_item_source',
+  DELETE_ITEM_SOURCE: 'admin_delete_item_source',
 } as const

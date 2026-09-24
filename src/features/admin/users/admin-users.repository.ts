@@ -1,9 +1,9 @@
 import { db } from '../../../db/client.js'
 import { users } from '../../../db/entities/users/users.schema.js'
-import { and, count, eq, isNull, type SQL } from 'drizzle-orm'
+import { and, count, eq, type SQL } from 'drizzle-orm'
 import { z } from 'zod'
 import { USER_ROLE_VALUES } from '../../../shared/enums/user-role.js'
-import { defineEntity } from '../../../shared/db/entity-descriptor.js'
+import { defineEntity, buildSoftDeleteDefault } from '../../../shared/db/entity-descriptor.js'
 import type { User } from '../../../db/entities/users/users.schema.js'
 
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
@@ -52,11 +52,8 @@ type AdminUpdateUserFields = Partial<Pick<typeof users.$inferInsert, 'avatarUrl'
 
 function buildUsersWhere(filters: ListUsersFilters): SQL | undefined {
   const generic = filters.genericFilters ?? []
-  const hasDeletedAtFilter = generic.some((filter) => filter.field === 'deletedAt')
-  const softDeleteDefault = hasDeletedAtFilter ? undefined : isNull(users.deletedAt)
   const genericClause = generic.length > 0 ? usersEntity.buildWhere(generic) : undefined
-
-  return and(softDeleteDefault, genericClause)
+  return and(buildSoftDeleteDefault(generic, users.deletedAt), genericClause)
 }
 
 export async function countUsers(filters: ListUsersFilters): Promise<number> {

@@ -4,7 +4,7 @@ import { ErrorCode } from '../../../shared/enums/error-code.js'
 import { serviceError } from '../../../shared/utils/response.js'
 import { logger } from '../../../shared/utils/logger.js'
 import { pickDefined } from '../../../shared/utils/partial-update.js'
-import { isPgUniqueViolation } from '../../../shared/db/pg-errors.js'
+import { runWrite } from '../../../shared/utils/admin-write.js'
 import { buildPaginatedResponse } from '../../../shared/schemas/pagination.js'
 import {
   findOccasionTypeById,
@@ -32,10 +32,8 @@ export async function createOccasionType(
   adminId: string,
   input: OccasionTypeWrite,
 ): Promise<ServiceResult<{ occasionType: AdminOccasionType }>> {
-  let createdRow: AdminOccasionType
-
-  try {
-    const row = await insertOccasionType(
+  const outcome = await runWrite(() =>
+    insertOccasionType(
       {
         slug: input.slug,
         emoji: input.emoji,
@@ -43,20 +41,13 @@ export async function createOccasionType(
         isActive: input.isActive,
       },
       input.translations,
-    )
+    ),
+  )
 
-    if (!row) {
-      return serviceError(ErrorCode.INTERNAL_ERROR)
-    }
+  if ('errorCode' in outcome) return serviceError(outcome.errorCode)
 
-    const translations = await findTranslationsForOccasionType(row.id)
-    createdRow = toAdminOccasionType(row, translations)
-  } catch (error) {
-    if (isPgUniqueViolation(error)) {
-      return serviceError(ErrorCode.CONFLICT)
-    }
-    return serviceError(ErrorCode.INTERNAL_ERROR)
-  }
+  const translations = await findTranslationsForOccasionType(outcome.row.id)
+  const createdRow = toAdminOccasionType(outcome.row, translations)
 
   logger.info({
     adminId,
