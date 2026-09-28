@@ -1,6 +1,6 @@
 # Coding Standards — Keimelion API
 
-These standards apply to all TypeScript source code. The Dev agent follows them when implementing; the Lead Dev agent enforces them during code review.
+These standards apply to all TypeScript source code. The Dev agent follows them when implementing and enforces them during its own self-review pass.
 
 ---
 
