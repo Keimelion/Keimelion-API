@@ -183,6 +183,32 @@ function mockDeleteTransaction(refCount: number, returnRow: unknown): void {
   })
 }
 
+interface DeleteSourceTransactionSpies {
+  deleteCall: ReturnType<typeof vi.fn>
+}
+
+function mockDeleteSourceTransaction(sourceCount: number, returnRow: unknown): DeleteSourceTransactionSpies {
+  const txSelectChain = {
+    from: vi.fn().mockReturnThis(),
+    where: vi.fn().mockResolvedValueOnce([{ total: sourceCount }]),
+  }
+  const deleteCall = vi.fn().mockReturnValueOnce({
+    where: vi.fn().mockReturnValueOnce({
+      returning: vi.fn().mockResolvedValueOnce([returnRow]),
+    }),
+  })
+  vi.mocked(db.transaction).mockImplementationOnce((callback) => {
+    const tx = {
+      select: vi.fn().mockReturnValueOnce(txSelectChain),
+      update: vi.fn(),
+      insert: vi.fn(),
+      delete: deleteCall,
+    }
+    return callback(tx as never) as never
+  })
+  return { deleteCall }
+}
+
 describe('POST /v1/admin/items', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -1360,15 +1386,11 @@ describe('DELETE /v1/admin/items/:id/sources/:sourceId', () => {
     vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
   })
 
-  it('returns 200 with success message', async () => {
+  it('returns 200 with success message when the item has other sources', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
     mockFindItemSourceById(SOURCE_ROW)
-    vi.mocked(db.delete).mockReturnValueOnce({
-      where: vi.fn().mockReturnValueOnce({
-        returning: vi.fn().mockResolvedValueOnce([SOURCE_ROW]),
-      }),
-    } as never)
+    mockDeleteSourceTransaction(2, SOURCE_ROW)
 
     const response = await apiRequest(
       `/v1/admin/items/${ITEM_ROW.id}/sources/${SOURCE_ROW.id}`,
@@ -1378,6 +1400,40 @@ describe('DELETE /v1/admin/items/:id/sources/:sourceId', () => {
     const body = await response.json() as { message: string }
     expect(response.status).toBe(200)
     expect(body.message).toContain('deleted')
+  })
+
+  it('returns 409 when removing the last source and does not run the delete', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindItemSourceById(SOURCE_ROW)
+    const { deleteCall } = mockDeleteSourceTransaction(1, SOURCE_ROW)
+
+    const response = await apiRequest(
+      `/v1/admin/items/${ITEM_ROW.id}/sources/${SOURCE_ROW.id}`,
+      { method: 'DELETE', token },
+    )
+
+    const body = await response.json() as { code: string; metadata: { message: string } }
+    expect(response.status).toBe(409)
+    expect(body.code).toBe('CONFLICT')
+    expect(body.metadata.message).toBe('Cannot remove the last source of an item')
+    expect(deleteCall).not.toHaveBeenCalled()
+  })
+
+  it('does not log the delete action when the last-source guard rejects the call', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindItemSourceById(SOURCE_ROW)
+    mockDeleteSourceTransaction(1, SOURCE_ROW)
+
+    await apiRequest(
+      `/v1/admin/items/${ITEM_ROW.id}/sources/${SOURCE_ROW.id}`,
+      { method: 'DELETE', token },
+    )
+
+    expect(vi.mocked(logger.warn)).not.toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'admin_delete_item_source' }),
+    )
   })
 
   it('returns 404 when sourceId does not belong to itemId (IDOR guard)', async () => {
@@ -1410,11 +1466,7 @@ describe('DELETE /v1/admin/items/:id/sources/:sourceId', () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
     mockFindItemSourceById(SOURCE_ROW)
-    vi.mocked(db.delete).mockReturnValueOnce({
-      where: vi.fn().mockReturnValueOnce({
-        returning: vi.fn().mockResolvedValueOnce([SOURCE_ROW]),
-      }),
-    } as never)
+    mockDeleteSourceTransaction(2, SOURCE_ROW)
 
     await apiRequest(
       `/v1/admin/items/${ITEM_ROW.id}/sources/${SOURCE_ROW.id}`,

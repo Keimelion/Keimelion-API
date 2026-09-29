@@ -71,4 +71,4 @@ ALTER TABLE "list_collaborators" ADD CONSTRAINT "list_collaborators_user_id_user
 ALTER TABLE "list_items" ADD CONSTRAINT "list_items_list_id_lists_id_fk" FOREIGN KEY ("list_id") REFERENCES "public"."lists"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "list_items" ADD CONSTRAINT "list_items_item_id_items_id_fk" FOREIGN KEY ("item_id") REFERENCES "public"."items"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "lists" ADD CONSTRAINT "lists_occasion_type_id_occasion_types_id_fk" FOREIGN KEY ("occasion_type_id") REFERENCES "public"."occasion_types"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-CREATE UNIQUE INDEX "item_sources_primary_idx" ON "item_sources" USING btree ("item_id") WHERE "item_sources"."is_primary" = $1;
+CREATE UNIQUE INDEX "item_sources_primary_idx" ON "item_sources" USING btree ("item_id") WHERE "item_sources"."is_primary" = true;

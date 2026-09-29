@@ -13,6 +13,7 @@ import {
   deleteItemSource,
   demotePrimaryItemSource,
   setPrimaryItemSource,
+  countItemSourcesByItemId,
 } from '../../../db/entities/item-sources/item-sources.repository.js'
 import { findShopById } from '../../../db/entities/shops/shops.repository.js'
 import { toItemSourceDetail } from '../../../shared/types/item.js'
@@ -120,7 +121,17 @@ export async function deleteItemSourceById(
   const existingSource = await findItemSourceById(sourceId)
   if (existingSource?.itemId !== itemId) return serviceError(ErrorCode.NOT_FOUND)
 
-  await deleteItemSource(sourceId)
+  const outcome = await db.transaction(async (tx) => {
+    const remaining = await countItemSourcesByItemId(itemId, tx)
+    if (remaining <= 1) {
+      return serviceError(ErrorCode.CONFLICT, { message: 'Cannot remove the last source of an item' })
+    }
+
+    await deleteItemSource(sourceId, tx)
+    return null
+  })
+
+  if (outcome !== null) return outcome
 
   logger.warn({ adminId, action: AdminAction.DELETE_ITEM_SOURCE, itemId, sourceId })
   return { data: { message: 'Item source deleted successfully' }, httpStatus: HttpStatus.OK }

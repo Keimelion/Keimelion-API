@@ -1,4 +1,4 @@
-import { and, eq, inArray } from 'drizzle-orm'
+import { and, count, eq, inArray } from 'drizzle-orm'
 import { db } from '../../client.js'
 import { itemSources } from './item-sources.schema.js'
 import type { ItemSource } from './item-sources.schema.js'
@@ -60,6 +60,15 @@ export async function deleteItemSource(id: string, tx?: DbTransaction): Promise<
   const client = tx ?? db
   const [row] = await client.delete(itemSources).where(eq(itemSources.id, id)).returning()
   return row
+}
+
+export async function countItemSourcesByItemId(itemId: string, tx?: DbTransaction): Promise<number> {
+  const client = tx ?? db
+  const [row] = await client
+    .select({ total: count() })
+    .from(itemSources)
+    .where(eq(itemSources.itemId, itemId))
+  return row?.total ?? 0
 }
 
 export async function demotePrimaryItemSource(itemId: string, tx: DbTransaction): Promise<void> {
