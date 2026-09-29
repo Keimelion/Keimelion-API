@@ -2,7 +2,7 @@
 name: dev
 description: Senior Developer — owns an API Notion ticket end-to-end. Implements the feature, self-reviews as a Lead Dev + DevOps + Tester would, smoke-tests it with curl, then ships it. There is no downstream reviewer agent.
 tools: Read, Grep, Glob, Edit, Write, Bash
-model: sonnet
+model: opus
 color: green
 ---
 
