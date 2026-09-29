@@ -121,3 +121,38 @@ chore: update dependencies
 | `docs` | Documentation only |
 | `perf` | Performance improvement |
 | `ci` | CI/CD |
+
+---
+
+## Claude Code — agent workflow
+
+Repo-tracked Claude Code configuration lives under `.claude/`. Feature tickets flow through a **single senior Dev agent** that owns the ticket end-to-end: implementation, architecture self-review, security audit, DB migration audit, curl smoke test, PR, and Notion status updates. There is no separate Lead Dev / DevOps / Tester agent.
+
+| File | Purpose |
+|---|---|
+| `.claude/agents/dev.md` | The single dev agent — merged Dev + Lead Dev + DevOps + Tester responsibilities, with a self-review checklist |
+| `.claude/agents/po.md` | Product Owner — grooms Notion tickets from specs |
+| `.claude/agents/doc-writer.md` | Updates Notion spec pages after a feature is Validated |
+| `.claude/skills/build-feature/` | `/build-feature <ticket>` — delegates to the Dev end-to-end |
+| `.claude/skills/refine-ticket/` | `/refine-ticket <ticket>` — PO + Dev collaborative refinement |
+| `.claude/skills/apply-pr-review/` | `/apply-pr-review` — Dev applies (or pushes back on) PR review comments |
+| `.claude/skills/document-feature/` | `/document-feature` — sync Notion specs with the implementation |
+| `.claude/coding-standards.md` | Single source of truth for style rules the Dev follows and enforces |
+
+### Notion access — local REST wrapper
+
+The Dev agent does **not** use the Notion MCP server. All Notion interactions go through `scripts/notion/notion.mjs`, a zero-dependency Node ESM wrapper around the Notion REST API — cheaper per call and lighter on tool-definition context:
+
+```bash
+node scripts/notion/notion.mjs get-page <page-id>
+node scripts/notion/notion.mjs set-status <page-id> "In Progress"
+node scripts/notion/notion.mjs set-property <page-id> "PR URL" "https://…"
+node scripts/notion/notion.mjs add-comment <page-id> "…"
+```
+
+**Setup** (one time):
+1. Create an internal Notion integration at https://www.notion.so/profile/integrations
+2. Share every Notion database the agent reads or writes (backlog, features spec, MVP scope, DB schema, architecture, conventions) with the integration
+3. Add `NOTION_TOKEN=secret_…` to `.env` — the wrapper auto-loads it from the CWD, no `export` needed
+
+The PO agent keeps its Notion MCP tools (used rarely, benefits from MCP's ergonomic search + create). Only the Dev is on the wrapper.
