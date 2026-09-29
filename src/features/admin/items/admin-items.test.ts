@@ -108,12 +108,38 @@ function mockFindItemSourceById(row: unknown): void {
   vi.mocked(db.query.itemSources.findFirst).mockResolvedValueOnce(row as never)
 }
 
-function mockInsertItem(returnRow: unknown): void {
-  vi.mocked(db.insert).mockReturnValueOnce({
-    values: vi.fn().mockReturnValueOnce({
-      returning: vi.fn().mockResolvedValueOnce([returnRow]),
-    }),
-  } as never)
+function buildTxInsertMock(rows: unknown[]): ReturnType<typeof vi.fn> {
+  const insert = vi.fn()
+  for (const row of rows) {
+    insert.mockReturnValueOnce({
+      values: vi.fn().mockReturnValueOnce({
+        returning: vi.fn().mockResolvedValueOnce([row]),
+      }),
+    })
+  }
+  return insert
+}
+
+function mockCreateItemTransaction(itemRow: unknown, sourceRows: unknown[]): void {
+  vi.mocked(db.transaction).mockImplementationOnce((callback) => {
+    const tx = {
+      insert: buildTxInsertMock([itemRow, ...sourceRows]),
+      update: vi.fn(),
+      delete: vi.fn(),
+      select: vi.fn(),
+    }
+    return callback(tx as never) as never
+  })
+}
+
+function mockCreateItemTransactionFailure(): void {
+  vi.mocked(db.transaction).mockImplementationOnce(() => {
+    throw new Error('insert failed')
+  })
+}
+
+function mockFindItemSourcesByItemIdOnce(rows: unknown[]): void {
+  vi.mocked(db.query.itemSources.findMany).mockResolvedValueOnce(rows as never)
 }
 
 function mockUpdateItem(returnRow: unknown): void {
@@ -163,32 +189,36 @@ describe('POST /v1/admin/items', () => {
     vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
   })
 
-  it('returns 201 with created item when payload is valid', async () => {
+  it('returns 201 with created item and sources when payload is valid', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
-    mockInsertItem(ITEM_ROW)
+    mockCreateItemTransaction(ITEM_ROW, [SOURCE_ROW])
 
     const response = await apiRequest('/v1/admin/items', {
       method: 'POST',
       token,
-      body: { name: 'Test Item' },
+      body: { name: 'Test Item', sources: [{ currency: 'EUR', isPrimary: false }] },
     })
 
-    const body = await response.json() as { item: { name: string; createdByUserId: null } }
+    const body = await response.json() as {
+      item: { name: string; createdByUserId: null; sources: { itemId: string }[] }
+    }
     expect(response.status).toBe(201)
     expect(body.item.name).toBe('Test Item')
     expect(body.item.createdByUserId).toBeNull()
+    expect(body.item.sources).toHaveLength(1)
+    expect(body.item.sources[0]?.itemId).toBe(ITEM_ROW.id)
   })
 
   it('returns 201 with default moderationStatus=approved when not specified', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
-    mockInsertItem(ITEM_ROW)
+    mockCreateItemTransaction(ITEM_ROW, [SOURCE_ROW])
 
     const response = await apiRequest('/v1/admin/items', {
       method: 'POST',
       token,
-      body: { name: 'Test Item' },
+      body: { name: 'Test Item', sources: [{ currency: 'EUR', isPrimary: false }] },
     })
 
     const body = await response.json() as { item: { moderationStatus: string } }
@@ -199,12 +229,16 @@ describe('POST /v1/admin/items', () => {
   it('returns 201 with custom moderationStatus', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
-    mockInsertItem({ ...ITEM_ROW, moderationStatus: 'pending' })
+    mockCreateItemTransaction({ ...ITEM_ROW, moderationStatus: 'pending' }, [SOURCE_ROW])
 
     const response = await apiRequest('/v1/admin/items', {
       method: 'POST',
       token,
-      body: { name: 'Test Item', moderationStatus: 'pending' },
+      body: {
+        name: 'Test Item',
+        moderationStatus: 'pending',
+        sources: [{ currency: 'EUR', isPrimary: false }],
+      },
     })
 
     const body = await response.json() as { item: { moderationStatus: string } }
@@ -215,17 +249,76 @@ describe('POST /v1/admin/items', () => {
   it('logs at info level on successful creation', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
-    mockInsertItem(ITEM_ROW)
+    mockCreateItemTransaction(ITEM_ROW, [SOURCE_ROW])
 
     await apiRequest('/v1/admin/items', {
       method: 'POST',
       token,
-      body: { name: 'Test Item' },
+      body: { name: 'Test Item', sources: [{ currency: 'EUR', isPrimary: false }] },
     })
 
     expect(vi.mocked(logger.info)).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'admin_create_item', itemId: ITEM_ROW.id }),
     )
+  })
+
+  it('returns 422 when sources is missing', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    const response = await apiRequest('/v1/admin/items', {
+      method: 'POST',
+      token,
+      body: { name: 'Test Item' },
+    })
+
+    expect(response.status).toBe(422)
+  })
+
+  it('returns 422 when sources is an empty array', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    const response = await apiRequest('/v1/admin/items', {
+      method: 'POST',
+      token,
+      body: { name: 'Test Item', sources: [] },
+    })
+
+    expect(response.status).toBe(422)
+  })
+
+  it('returns 422 when more than one source is marked as primary', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    const response = await apiRequest('/v1/admin/items', {
+      method: 'POST',
+      token,
+      body: {
+        name: 'Test Item',
+        sources: [
+          { currency: 'EUR', isPrimary: true },
+          { currency: 'USD', isPrimary: true },
+        ],
+      },
+    })
+
+    expect(response.status).toBe(422)
+  })
+
+  it('returns 500 and rolls back when a source insert fails', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockCreateItemTransactionFailure()
+
+    const response = await apiRequest('/v1/admin/items', {
+      method: 'POST',
+      token,
+      body: { name: 'Test Item', sources: [{ currency: 'EUR', isPrimary: false }] },
+    })
+
+    expect(response.status).toBe(500)
   })
 
   it('returns 422 when name is empty', async () => {
@@ -235,7 +328,7 @@ describe('POST /v1/admin/items', () => {
     const response = await apiRequest('/v1/admin/items', {
       method: 'POST',
       token,
-      body: { name: '' },
+      body: { name: '', sources: [{ currency: 'EUR', isPrimary: false }] },
     })
 
     expect(response.status).toBe(422)
@@ -248,7 +341,7 @@ describe('POST /v1/admin/items', () => {
     const response = await apiRequest('/v1/admin/items', {
       method: 'POST',
       token,
-      body: { name: 'Test', moderationStatus: 'invalid' },
+      body: { name: 'Test', moderationStatus: 'invalid', sources: [{ currency: 'EUR', isPrimary: false }] },
     })
 
     expect(response.status).toBe(422)
@@ -261,7 +354,11 @@ describe('POST /v1/admin/items', () => {
     const response = await apiRequest('/v1/admin/items', {
       method: 'POST',
       token,
-      body: { name: 'Test', imageUrl: 'http://example.com/image.jpg' },
+      body: {
+        name: 'Test',
+        imageUrl: 'http://example.com/image.jpg',
+        sources: [{ currency: 'EUR', isPrimary: false }],
+      },
     })
 
     expect(response.status).toBe(422)
@@ -274,7 +371,7 @@ describe('POST /v1/admin/items', () => {
     const response = await apiRequest('/v1/admin/items', {
       method: 'POST',
       token,
-      body: { name: 'Test', unknownField: 'value' },
+      body: { name: 'Test', unknownField: 'value', sources: [{ currency: 'EUR', isPrimary: false }] },
     })
 
     expect(response.status).toBe(422)
@@ -287,7 +384,7 @@ describe('POST /v1/admin/items', () => {
     const response = await apiRequest('/v1/admin/items', {
       method: 'POST',
       token,
-      body: { name: 'Test' },
+      body: { name: 'Test', sources: [{ currency: 'EUR', isPrimary: false }] },
     })
 
     expect(response.status).toBe(403)
@@ -296,7 +393,7 @@ describe('POST /v1/admin/items', () => {
   it('returns 401 when no token is provided', async () => {
     const response = await apiRequest('/v1/admin/items', {
       method: 'POST',
-      body: { name: 'Test' },
+      body: { name: 'Test', sources: [{ currency: 'EUR', isPrimary: false }] },
     })
 
     expect(response.status).toBe(401)
@@ -309,35 +406,56 @@ describe('GET /v1/admin/items', () => {
     vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
   })
 
-  it('returns 200 with paginated items', async () => {
+  it('returns 200 with paginated items including sources array on each item', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
 
     vi.mocked(db.query.items.findMany).mockResolvedValueOnce([ITEM_ROW] as never)
     mockCountChain(1)
+    mockFindItemSourcesByItemIdOnce([SOURCE_ROW])
 
     const response = await apiRequest('/v1/admin/items', { token })
 
     const body = await response.json() as {
-      items: { name: string }[]
+      items: { name: string; sources: { itemId: string }[] }[]
       pagination: { total: number }
     }
     expect(response.status).toBe(200)
     expect(body.items).toHaveLength(1)
     expect(body.pagination.total).toBe(1)
+    expect(body.items[0]?.sources).toHaveLength(1)
+    expect(body.items[0]?.sources[0]?.itemId).toBe(ITEM_ROW.id)
   })
 
-  it('returns items with deletedAt field in response', async () => {
+  it('returns items with deletedAt and sources fields in response', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
 
     vi.mocked(db.query.items.findMany).mockResolvedValueOnce([ITEM_ROW] as never)
     mockCountChain(1)
+    mockFindItemSourcesByItemIdOnce([])
 
     const response = await apiRequest('/v1/admin/items', { token })
 
     const body = await response.json() as { items: Record<string, unknown>[] }
     expect(body.items[0]).toHaveProperty('deletedAt')
+    expect(body.items[0]).toHaveProperty('sources')
+    expect(Array.isArray(body.items[0]?.sources)).toBe(true)
+  })
+
+  it('returns an empty sources array for legacy items with zero sources', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    vi.mocked(db.query.items.findMany).mockResolvedValueOnce([ITEM_ROW] as never)
+    mockCountChain(1)
+    mockFindItemSourcesByItemIdOnce([])
+
+    const response = await apiRequest('/v1/admin/items', { token })
+
+    const body = await response.json() as { items: { sources: unknown[] }[] }
+    expect(response.status).toBe(200)
+    expect(body.items[0]?.sources).toEqual([])
   })
 
   it('returns empty list when no items exist', async () => {
@@ -361,6 +479,7 @@ describe('GET /v1/admin/items', () => {
 
     vi.mocked(db.query.items.findMany).mockResolvedValueOnce([ITEM_ROW] as never)
     mockCountChain(1)
+    mockFindItemSourcesByItemIdOnce([])
 
     const response = await apiRequest('/v1/admin/items', { token })
     expect(response.status).toBe(200)
@@ -372,6 +491,7 @@ describe('GET /v1/admin/items', () => {
 
     vi.mocked(db.query.items.findMany).mockResolvedValueOnce([ITEM_ROW] as never)
     mockCountChain(1)
+    mockFindItemSourcesByItemIdOnce([])
 
     const response = await apiRequest('/v1/admin/items?moderationStatus%5Beq%5D=approved', { token })
     expect(response.status).toBe(200)
@@ -383,6 +503,7 @@ describe('GET /v1/admin/items', () => {
 
     vi.mocked(db.query.items.findMany).mockResolvedValueOnce([ITEM_ROW] as never)
     mockCountChain(1)
+    mockFindItemSourcesByItemIdOnce([])
 
     const response = await apiRequest('/v1/admin/items?name%5Bilike%5D=test', { token })
     expect(response.status).toBe(200)
@@ -394,6 +515,7 @@ describe('GET /v1/admin/items', () => {
 
     vi.mocked(db.query.items.findMany).mockResolvedValueOnce([ITEM_ROW] as never)
     mockCountChain(1)
+    mockFindItemSourcesByItemIdOnce([])
 
     const response = await apiRequest('/v1/admin/items?createdByUserId%5BisNull%5D=true', { token })
     expect(response.status).toBe(200)
@@ -405,6 +527,7 @@ describe('GET /v1/admin/items', () => {
 
     vi.mocked(db.query.items.findMany).mockResolvedValueOnce([ITEM_ROW] as never)
     mockCountChain(1)
+    mockFindItemSourcesByItemIdOnce([])
 
     const response = await apiRequest('/v1/admin/items?sort=name:asc', { token })
     expect(response.status).toBe(200)
@@ -512,11 +635,12 @@ describe('PATCH /v1/admin/items/:id', () => {
     vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
   })
 
-  it('returns 200 with updated item when patching name', async () => {
+  it('returns 200 with updated item (with sources) when patching name', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
     mockFindItemById(ITEM_ROW)
     mockUpdateItem({ ...ITEM_ROW, name: 'Updated Name' })
+    mockFindItemSourcesByItemIdOnce([SOURCE_ROW])
 
     const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}`, {
       method: 'PATCH',
@@ -524,9 +648,10 @@ describe('PATCH /v1/admin/items/:id', () => {
       body: { name: 'Updated Name' },
     })
 
-    const body = await response.json() as { item: { name: string } }
+    const body = await response.json() as { item: { name: string; sources: unknown[] } }
     expect(response.status).toBe(200)
     expect(body.item.name).toBe('Updated Name')
+    expect(body.item.sources).toHaveLength(1)
   })
 
   it('returns 200 when patching moderationStatus', async () => {
@@ -534,6 +659,7 @@ describe('PATCH /v1/admin/items/:id', () => {
     mockAdminAuth()
     mockFindItemById(ITEM_ROW)
     mockUpdateItem({ ...ITEM_ROW, moderationStatus: 'rejected' })
+    mockFindItemSourcesByItemIdOnce([])
 
     const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}`, {
       method: 'PATCH',
@@ -551,6 +677,7 @@ describe('PATCH /v1/admin/items/:id', () => {
     mockAdminAuth()
     mockFindItemById({ ...ITEM_ROW, imageUrl: 'https://old.example.com/img.jpg' })
     mockUpdateItem({ ...ITEM_ROW, imageUrl: 'https://new.example.com/img.jpg' })
+    mockFindItemSourcesByItemIdOnce([])
 
     await apiRequest(`/v1/admin/items/${ITEM_ROW.id}`, {
       method: 'PATCH',
@@ -675,19 +802,21 @@ describe('DELETE /v1/admin/items/:id (soft delete)', () => {
     vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
   })
 
-  it('returns 200 with soft-deleted item when no list_items reference it', async () => {
+  it('returns 200 with soft-deleted item (with sources) when no list_items reference it', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
     mockDeleteTransaction(0, { ...ITEM_ROW, deletedAt: new Date() })
+    mockFindItemSourcesByItemIdOnce([SOURCE_ROW])
 
     const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}`, {
       method: 'DELETE',
       token,
     })
 
-    const body = await response.json() as { item: { deletedAt: string | null } }
+    const body = await response.json() as { item: { deletedAt: string | null; sources: unknown[] } }
     expect(response.status).toBe(200)
     expect(body.item.deletedAt).not.toBeNull()
+    expect(body.item.sources).toHaveLength(1)
   })
 
   it('returns 409 when list_items reference the item', async () => {
@@ -709,6 +838,7 @@ describe('DELETE /v1/admin/items/:id (soft delete)', () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
     mockDeleteTransaction(0, { ...ITEM_ROW, deletedAt: new Date() })
+    mockFindItemSourcesByItemIdOnce([])
 
     await apiRequest(`/v1/admin/items/${ITEM_ROW.id}`, {
       method: 'DELETE',
@@ -759,20 +889,22 @@ describe('POST /v1/admin/items/:id/restore', () => {
     vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
   })
 
-  it('returns 200 with restored item', async () => {
+  it('returns 200 with restored item (with sources)', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
     mockFindItemById(DELETED_ITEM_ROW)
     mockUpdateItem({ ...DELETED_ITEM_ROW, deletedAt: null })
+    mockFindItemSourcesByItemIdOnce([])
 
     const response = await apiRequest(`/v1/admin/items/${DELETED_ITEM_ROW.id}/restore`, {
       method: 'POST',
       token,
     })
 
-    const body = await response.json() as { item: { deletedAt: null } }
+    const body = await response.json() as { item: { deletedAt: null; sources: unknown[] } }
     expect(response.status).toBe(200)
     expect(body.item.deletedAt).toBeNull()
+    expect(body.item.sources).toEqual([])
   })
 
   it('returns 404 when item is not soft-deleted (live item)', async () => {
@@ -806,6 +938,7 @@ describe('POST /v1/admin/items/:id/restore', () => {
     mockAdminAuth()
     mockFindItemById(DELETED_ITEM_ROW)
     mockUpdateItem({ ...DELETED_ITEM_ROW, deletedAt: null })
+    mockFindItemSourcesByItemIdOnce([])
 
     await apiRequest(`/v1/admin/items/${DELETED_ITEM_ROW.id}/restore`, {
       method: 'POST',
@@ -838,56 +971,19 @@ describe('POST /v1/admin/items/:id/restore', () => {
   })
 })
 
-describe('GET /v1/admin/items/:id/sources', () => {
+describe('GET /v1/admin/items/:id/sources (removed)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
   })
 
-  it('returns 200 with sources for live item', async () => {
+  // No auth mock — GET on this path is not mounted, so no middleware runs.
+  // Hono short-circuits with 404 before hitting authMiddleware.
+  it('returns 404 because the endpoint no longer exists', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
-    mockAdminAuth()
-    mockFindItemById(ITEM_ROW)
-    vi.mocked(db.query.itemSources.findMany).mockResolvedValueOnce([SOURCE_ROW] as never)
-
-    const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}/sources`, { token })
-
-    const body = await response.json() as { sources: unknown[] }
-    expect(response.status).toBe(200)
-    expect(body.sources).toHaveLength(1)
-  })
-
-  it('returns 200 with sources for soft-deleted item', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
-    mockAdminAuth()
-    mockFindItemById(DELETED_ITEM_ROW)
-    vi.mocked(db.query.itemSources.findMany).mockResolvedValueOnce([] as never)
-
-    const response = await apiRequest(`/v1/admin/items/${DELETED_ITEM_ROW.id}/sources`, { token })
-
-    expect(response.status).toBe(200)
-  })
-
-  it('returns 404 when item does not exist', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
-    mockAdminAuth()
-    mockFindItemById(undefined)
 
     const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}/sources`, { token })
     expect(response.status).toBe(404)
-  })
-
-  it('returns 403 when user is not admin', async () => {
-    const token = await generateTestToken(NON_ADMIN_USER.id)
-    mockNonAdminAuth()
-
-    const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}/sources`, { token })
-    expect(response.status).toBe(403)
-  })
-
-  it('returns 401 when no token is provided', async () => {
-    const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}/sources`)
-    expect(response.status).toBe(401)
   })
 })
 

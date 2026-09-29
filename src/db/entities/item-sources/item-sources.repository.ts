@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
 import { db } from '../../client.js'
 import { itemSources } from './item-sources.schema.js'
 import type { ItemSource } from './item-sources.schema.js'
@@ -28,6 +28,22 @@ export function findItemSourceById(id: string): Promise<ItemSource | undefined> 
 
 export function findItemSourcesByItemId(itemId: string): Promise<ItemSource[]> {
   return db.query.itemSources.findMany({ where: eq(itemSources.itemId, itemId) })
+}
+
+export async function findItemSourcesByItemIds(itemIds: string[]): Promise<Map<string, ItemSource[]>> {
+  if (itemIds.length === 0) return new Map()
+
+  const rows = await db.query.itemSources.findMany({
+    where: inArray(itemSources.itemId, itemIds),
+  })
+
+  const grouped = new Map<string, ItemSource[]>()
+  for (const id of itemIds) grouped.set(id, [])
+  for (const row of rows) {
+    const bucket = grouped.get(row.itemId)
+    if (bucket) bucket.push(row)
+  }
+  return grouped
 }
 
 export async function updateItemSource(

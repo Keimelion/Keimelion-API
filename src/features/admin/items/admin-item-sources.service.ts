@@ -8,7 +8,6 @@ import { runWrite, type WriteOutcome } from '../../../shared/utils/admin-write.j
 import { findItemById } from '../../../db/entities/items/items.repository.js'
 import {
   findItemSourceById,
-  findItemSourcesByItemId,
   insertItemSource,
   updateItemSource,
   deleteItemSource,
@@ -25,19 +24,6 @@ import type { CreateItemSourceInput } from './endpoints/create-source.js'
 import type { UpdateItemSourceInput } from './endpoints/update-source.js'
 
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
-
-export async function listItemSources(
-  itemId: string,
-): Promise<ServiceResult<{ sources: ItemSourceDetail[] }>> {
-  const item = await findItemById(itemId, { includeDeleted: true })
-  if (!item) return serviceError(ErrorCode.NOT_FOUND)
-
-  const sources = await findItemSourcesByItemId(itemId)
-  return {
-    data: { sources: sources.map(toItemSourceDetail) },
-    httpStatus: HttpStatus.OK,
-  }
-}
 
 export async function createItemSource(
   adminId: string,
