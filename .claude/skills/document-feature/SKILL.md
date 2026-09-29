@@ -27,7 +27,7 @@ Fetch the following and store their full content:
 Delegate to the Doc Writer agent. Include in the delegation prompt:
 - The full ticket content (from Step 0)
 - The current content of the DB schema, features spec, and MVP scope pages (from Step 0)
-- **Instruction: do NOT call notion-fetch — all content is already provided. Only use Notion MCP to write.**
+- **Instruction: do NOT call `get-page` — all content is already provided. Only write to Notion via the wrapper (`set-property`, `add-comment`).**
 
 Doc Writer agent tasks:
 - Read every file listed in "Files Involved" on the ticket

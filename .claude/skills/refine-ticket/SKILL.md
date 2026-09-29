@@ -20,7 +20,7 @@ The PO reviews the ticket from a product perspective and the Dev reviews it from
 
 ## Notion access
 
-The PO agent uses its Notion MCP tools. The Dev agent uses the local wrapper:
+Both agents use the local wrapper — Notion MCP is not used anywhere:
 
 ```bash
 node scripts/notion/notion.mjs get-page <page-id>
@@ -28,13 +28,13 @@ node scripts/notion/notion.mjs add-comment <page-id> "<text>"
 node scripts/notion/notion.mjs set-property <page-id> "<field>" "<value>"
 ```
 
-Requires `NOTION_TOKEN` in the shell env for the Dev's wrapper calls.
+Requires `NOTION_TOKEN` in the shell env (auto-loaded from `.env` in the CWD).
 
 ---
 
 ## Step 0 — Context fetch and dependency check (YOU do this, before delegating to any agent)
 
-Fetch the following pages yourself using your Notion MCP tools and store their full content:
+Fetch the following pages yourself using the wrapper (`node scripts/notion/notion.mjs get-page <id>`) and store their full content:
 1. The ticket: **$ARGUMENTS**
 2. Features spec: `336355b4-4d03-8185-9406-c5b4502a20fe` — for the PO
 3. MVP scope: `336355b4-4d03-81d1-818e-e68530984a2a` — for the PO

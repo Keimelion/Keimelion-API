@@ -243,15 +243,85 @@ async function addComment(rawId, text) {
   process.stdout.write(`Comment added to ${pageId}\n`)
 }
 
+async function readJsonArg(arg) {
+  if (arg !== '-') return JSON.parse(arg)
+  const chunks = []
+  for await (const chunk of process.stdin) chunks.push(chunk)
+  return JSON.parse(Buffer.concat(chunks).toString('utf-8'))
+}
+
+function summarizeResult(result) {
+  const rawProperties = result.properties ?? {}
+  const properties = {}
+  let title = null
+  for (const [name, property] of Object.entries(rawProperties)) {
+    const value = extractPropertyValue(property)
+    properties[name] = value
+    if (property.type === 'title') title = value
+  }
+  return { id: result.id, url: result.url, object: result.object, title, properties }
+}
+
+async function search(query, objectType) {
+  const body = { query, page_size: 25 }
+  if (objectType) body.filter = { property: 'object', value: objectType }
+  const response = await notionFetch('/search', { method: 'POST', body: JSON.stringify(body) })
+  const results = (response.results ?? []).map((result) => {
+    if (result.object === 'database') {
+      const title = richTextToPlain(result.title ?? [])
+      return { id: result.id, url: result.url, object: 'database', title }
+    }
+    return summarizeResult(result)
+  })
+  process.stdout.write(`${JSON.stringify(results, null, 2)}\n`)
+}
+
+async function queryDatabase(rawId, payloadArg) {
+  const databaseId = normalizeId(rawId)
+  const payload = payloadArg ? await readJsonArg(payloadArg) : {}
+  if (payload.page_size === undefined) payload.page_size = 25
+  const collected = []
+  let cursor
+  do {
+    const body = { ...payload }
+    if (cursor) body.start_cursor = cursor
+    const page = await notionFetch(`/databases/${databaseId}/query`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    })
+    for (const result of page.results) collected.push(summarizeResult(result))
+    cursor = page.has_more ? page.next_cursor : null
+  } while (cursor && collected.length < (payload.page_size ?? 25))
+  process.stdout.write(`${JSON.stringify(collected, null, 2)}\n`)
+}
+
+async function createPage(rawParentId, propertiesArg) {
+  const parentId = normalizeId(rawParentId)
+  const properties = await readJsonArg(propertiesArg)
+  const response = await notionFetch('/pages', {
+    method: 'POST',
+    body: JSON.stringify({
+      parent: { database_id: parentId },
+      properties,
+    }),
+  })
+  process.stdout.write(`${JSON.stringify({ id: response.id, url: response.url }, null, 2)}\n`)
+}
+
 function printUsage() {
   process.stdout.write([
     'Usage: node scripts/notion/notion.mjs <command> [args...]',
     '',
-    'Commands:',
+    'Read:',
     '  get-page <page-id>',
+    '  search <query> [<object-type>]             # object-type: page | database (optional)',
+    '  query-database <db-id> [<payload-json>]    # payload: {filter, sorts, page_size}; use `-` for stdin',
+    '',
+    'Write:',
     '  set-status <page-id> <status>              # convenience for the Status property',
     '  set-property <page-id> <name> <value>      # any property; type auto-detected',
     '  add-comment <page-id> <text>',
+    '  create-page <database-id> <properties>    # properties: JSON object; use `-` for stdin',
     '',
     'Env:',
     '  NOTION_TOKEN     (required) Notion integration secret',
@@ -280,6 +350,21 @@ async function main() {
     case 'add-comment': {
       if (!args[0] || !args[1]) { printUsage(); process.exit(1) }
       await addComment(args[0], args[1])
+      return
+    }
+    case 'search': {
+      if (!args[0]) { printUsage(); process.exit(1) }
+      await search(args[0], args[1])
+      return
+    }
+    case 'query-database': {
+      if (!args[0]) { printUsage(); process.exit(1) }
+      await queryDatabase(args[0], args[1])
+      return
+    }
+    case 'create-page': {
+      if (!args[0] || !args[1]) { printUsage(); process.exit(1) }
+      await createPage(args[0], args[1])
       return
     }
     case 'help':
