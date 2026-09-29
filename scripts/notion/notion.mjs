@@ -1,11 +1,35 @@
 #!/usr/bin/env node
 // Minimal Notion REST wrapper used by the dev agent instead of the Notion MCP server.
-// Reads NOTION_TOKEN from the environment.
+// Reads NOTION_TOKEN from process.env, then falls back to .env.local / .env in the CWD.
 // Prints compact JSON on stdout; errors go to stderr with a non-zero exit code.
 
-const NOTION_API = 'https://api.notion.com/v1'
-const NOTION_VERSION = process.env.NOTION_VERSION ?? '2022-06-28'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 
+const NOTION_API = 'https://api.notion.com/v1'
+
+function loadEnvFile(fileName) {
+  try {
+    const content = readFileSync(resolve(process.cwd(), fileName), 'utf-8')
+    for (const line of content.split('\n')) {
+      const trimmed = line.trim()
+      if (trimmed.length === 0 || trimmed.startsWith('#')) continue
+      const equalsIndex = trimmed.indexOf('=')
+      if (equalsIndex === -1) continue
+      const key = trimmed.slice(0, equalsIndex).trim()
+      const rawValue = trimmed.slice(equalsIndex + 1).trim()
+      const value = rawValue.replace(/^["']|["']$/g, '')
+      if (process.env[key] === undefined) process.env[key] = value
+    }
+  } catch {
+    // File does not exist or is unreadable — silently continue.
+  }
+}
+
+if (process.env.NOTION_TOKEN === undefined) loadEnvFile('.env.local')
+if (process.env.NOTION_TOKEN === undefined) loadEnvFile('.env')
+
+const NOTION_VERSION = process.env.NOTION_VERSION ?? '2022-06-28'
 const NOTION_TOKEN = process.env.NOTION_TOKEN
 
 const [, , command, ...args] = process.argv
