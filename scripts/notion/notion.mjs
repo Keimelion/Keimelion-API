@@ -7,6 +7,8 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 const NOTION_API = 'https://api.notion.com/v1'
+const DEFAULT_TIMEOUT_MS = 30_000
+const NOTION_PAGE_SIZE_LIMIT = 100
 
 function loadEnvFile(fileName) {
   try {
@@ -31,6 +33,7 @@ if (process.env.NOTION_TOKEN === undefined) loadEnvFile('.env')
 
 const NOTION_VERSION = process.env.NOTION_VERSION ?? '2022-06-28'
 const NOTION_TOKEN = process.env.NOTION_TOKEN
+const NOTION_TIMEOUT_MS = Number(process.env.NOTION_TIMEOUT_MS ?? DEFAULT_TIMEOUT_MS)
 
 const [, , command, ...args] = process.argv
 
@@ -45,15 +48,26 @@ async function notionFetch(path, init = {}) {
     console.error('NOTION_TOKEN env var is required')
     process.exit(3)
   }
-  const response = await fetch(`${NOTION_API}${path}`, {
-    ...init,
-    headers: {
-      'Authorization': `Bearer ${NOTION_TOKEN}`,
-      'Notion-Version': NOTION_VERSION,
-      'Content-Type': 'application/json',
-      ...(init.headers ?? {}),
-    },
-  })
+  let response
+  try {
+    response = await fetch(`${NOTION_API}${path}`, {
+      ...init,
+      signal: AbortSignal.timeout(NOTION_TIMEOUT_MS),
+      headers: {
+        'Authorization': `Bearer ${NOTION_TOKEN}`,
+        'Notion-Version': NOTION_VERSION,
+        'Content-Type': 'application/json',
+        ...(init.headers ?? {}),
+      },
+    })
+  } catch (error) {
+    if (error.name === 'TimeoutError' || error.cause?.name === 'TimeoutError') {
+      console.error(`Notion API timeout after ${NOTION_TIMEOUT_MS}ms on ${path}`)
+    } else {
+      console.error(`Notion API network error on ${path}: ${error.message}`)
+    }
+    process.exit(2)
+  }
   const body = await response.text()
   if (!response.ok) {
     console.error(`Notion API ${response.status} on ${path}: ${body}`)
@@ -92,6 +106,34 @@ function extractPropertyValue(property) {
       return formula[formula.type] ?? null
     }
     default: return null
+  }
+}
+
+function buildPropertyPatch(type, rawValue) {
+  switch (type) {
+    case 'status': return { status: { name: rawValue } }
+    case 'select': return { select: { name: rawValue } }
+    case 'multi_select': {
+      const names = rawValue.split(',').map((name) => name.trim()).filter(Boolean)
+      return { multi_select: names.map((name) => ({ name })) }
+    }
+    case 'url': return { url: rawValue }
+    case 'email': return { email: rawValue }
+    case 'phone_number': return { phone_number: rawValue }
+    case 'number': {
+      const numeric = Number(rawValue)
+      if (Number.isNaN(numeric)) {
+        console.error(`Invalid number value: "${rawValue}"`)
+        process.exit(1)
+      }
+      return { number: numeric }
+    }
+    case 'checkbox': return { checkbox: rawValue === 'true' }
+    case 'title': return { title: [{ type: 'text', text: { content: rawValue } }] }
+    case 'rich_text': return { rich_text: [{ type: 'text', text: { content: rawValue } }] }
+    default:
+      console.error(`Unsupported property type: ${type}`)
+      process.exit(1)
   }
 }
 
@@ -195,27 +237,6 @@ async function getPropertyType(pageId, propertyName) {
   return property.type
 }
 
-function buildPropertyPatch(type, rawValue) {
-  switch (type) {
-    case 'status': return { status: { name: rawValue } }
-    case 'select': return { select: { name: rawValue } }
-    case 'multi_select': {
-      const names = rawValue.split(',').map((name) => name.trim()).filter(Boolean)
-      return { multi_select: names.map((name) => ({ name })) }
-    }
-    case 'url': return { url: rawValue }
-    case 'email': return { email: rawValue }
-    case 'phone_number': return { phone_number: rawValue }
-    case 'number': return { number: Number(rawValue) }
-    case 'checkbox': return { checkbox: rawValue === 'true' }
-    case 'title': return { title: [{ type: 'text', text: { content: rawValue } }] }
-    case 'rich_text': return { rich_text: [{ type: 'text', text: { content: rawValue } }] }
-    default:
-      console.error(`Unsupported property type: ${type}`)
-      process.exit(1)
-  }
-}
-
 async function setProperty(rawId, propertyName, rawValue) {
   const pageId = normalizeId(rawId)
   const type = await getPropertyType(pageId, propertyName)
@@ -243,11 +264,21 @@ async function addComment(rawId, text) {
   process.stdout.write(`Comment added to ${pageId}\n`)
 }
 
-async function readJsonArg(arg) {
-  if (arg !== '-') return JSON.parse(arg)
-  const chunks = []
-  for await (const chunk of process.stdin) chunks.push(chunk)
-  return JSON.parse(Buffer.concat(chunks).toString('utf-8'))
+async function readJsonArg(arg, source) {
+  let raw
+  if (arg === '-') {
+    const chunks = []
+    for await (const chunk of process.stdin) chunks.push(chunk)
+    raw = Buffer.concat(chunks).toString('utf-8')
+  } else {
+    raw = arg
+  }
+  try {
+    return JSON.parse(raw)
+  } catch (error) {
+    console.error(`Invalid JSON for ${source}: ${error.message}`)
+    process.exit(1)
+  }
 }
 
 function summarizeResult(result) {
@@ -278,26 +309,31 @@ async function search(query, objectType) {
 
 async function queryDatabase(rawId, payloadArg) {
   const databaseId = normalizeId(rawId)
-  const payload = payloadArg ? await readJsonArg(payloadArg) : {}
-  if (payload.page_size === undefined) payload.page_size = 25
+  const payload = payloadArg ? await readJsonArg(payloadArg, 'query-database payload') : {}
+  const { limit, page_size, ...notionQuery } = payload
+  const perRequest = Math.min(page_size ?? NOTION_PAGE_SIZE_LIMIT, NOTION_PAGE_SIZE_LIMIT)
   const collected = []
   let cursor
   do {
-    const body = { ...payload }
+    const remaining = limit ? limit - collected.length : perRequest
+    const body = { ...notionQuery, page_size: Math.min(perRequest, remaining) }
     if (cursor) body.start_cursor = cursor
     const page = await notionFetch(`/databases/${databaseId}/query`, {
       method: 'POST',
       body: JSON.stringify(body),
     })
-    for (const result of page.results) collected.push(summarizeResult(result))
+    for (const result of page.results) {
+      collected.push(summarizeResult(result))
+      if (limit && collected.length >= limit) break
+    }
     cursor = page.has_more ? page.next_cursor : null
-  } while (cursor && collected.length < (payload.page_size ?? 25))
+  } while (cursor && (!limit || collected.length < limit))
   process.stdout.write(`${JSON.stringify(collected, null, 2)}\n`)
 }
 
 async function createPage(rawParentId, propertiesArg) {
   const parentId = normalizeId(rawParentId)
-  const properties = await readJsonArg(propertiesArg)
+  const properties = await readJsonArg(propertiesArg, 'create-page properties')
   const response = await notionFetch('/pages', {
     method: 'POST',
     body: JSON.stringify({
@@ -315,7 +351,8 @@ function printUsage() {
     'Read:',
     '  get-page <page-id>',
     '  search <query> [<object-type>]             # object-type: page | database (optional)',
-    '  query-database <db-id> [<payload-json>]    # payload: {filter, sorts, page_size}; use `-` for stdin',
+    '  query-database <db-id> [<payload-json>]    # payload: {filter, sorts, page_size, limit}; use `-` for stdin',
+    '                                             # page_size: rows per request (max 100). limit: total cap (default: all).',
     '',
     'Write:',
     '  set-status <page-id> <status>              # convenience for the Status property',
@@ -324,8 +361,9 @@ function printUsage() {
     '  create-page <database-id> <properties>    # properties: JSON object; use `-` for stdin',
     '',
     'Env:',
-    '  NOTION_TOKEN     (required) Notion integration secret',
-    '  NOTION_VERSION   (optional) Notion API version, default 2022-06-28',
+    '  NOTION_TOKEN       (required) Notion integration secret',
+    '  NOTION_VERSION     (optional) Notion API version, default 2022-06-28',
+    '  NOTION_TIMEOUT_MS  (optional) Per-request timeout in ms, default 30000',
     '',
   ].join('\n'))
 }
@@ -379,4 +417,9 @@ async function main() {
   }
 }
 
-await main()
+try {
+  await main()
+} catch (error) {
+  console.error(`Unexpected error: ${error.message}`)
+  process.exit(2)
+}
