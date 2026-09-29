@@ -1,6 +1,6 @@
 ---
 name: build-feature
-description: Orchestrates the Dev → Lead Dev → DevOps → Tester pipeline for a Notion ticket. A triage step routes low-risk tickets through a slim Dev → Tester pipeline. Reviewers fix issues directly — no feedback loops back to Dev.
+description: Ships an API Notion ticket end-to-end via the single senior Dev agent. The Dev owns implementation + self-review + curl smoke test + validation on one pass — no separate Lead Dev, DevOps, or Tester agent.
 argument-hint: <Notion ticket URL or ID>
 ---
 
@@ -8,7 +8,7 @@ argument-hint: <Notion ticket URL or ID>
 
 **Backlog kanban**: `66c4450ed2d04ad68c1b06e522169e6c`
 
-Implement and validate the ticket: **$ARGUMENTS**
+Ship the ticket: **$ARGUMENTS**
 
 **Language**: all output must be in English — code, commit messages, PR titles and descriptions, Notion updates, GitHub comments.
 
@@ -17,143 +17,82 @@ Implement and validate the ticket: **$ARGUMENTS**
 
 **Status flow**: `Todo` → `In Progress` → `In Review` → `Validated`
 
-All review stages (Lead Dev, DevOps, Tester) leave the ticket at `In Review` until the Tester validates. Only the Tester moves it to `Validated`. Reviewers fix issues directly on the branch — no feedback loops back to Dev.
+The Dev agent owns every stage. It does not hand off to a Lead Dev / DevOps / Tester agent — those hats are worn by the same Dev in the same session.
 
-## Pipeline lanes
+## Notion access
 
-Two lanes exist. The lane is decided in Step 0.5 and cannot be changed mid-run.
+All Notion interactions go through the local wrapper (Notion MCP is not used):
 
-- **FULL** (default): Dev → Lead Dev → DevOps → Tester
-- **SLIM**: Dev → Tester (skips Lead Dev and DevOps)
+```bash
+node scripts/notion/notion.mjs get-page <page-id>
+node scripts/notion/notion.mjs set-status <page-id> "<status>"
+node scripts/notion/notion.mjs set-property <page-id> "<field>" "<value>"
+node scripts/notion/notion.mjs add-comment <page-id> "<text>"
+```
 
----
+Requires `NOTION_TOKEN` in the shell env.
 
-## Step 0 — Context fetch and dependency check (YOU do this, before delegating to any agent)
+## Commit + PR title convention
 
-Fetch the ticket **$ARGUMENTS** yourself using your Notion MCP tools and store its full content (description, acceptance criteria, technical notes, status, all comments).
+```
+<type>: <identifier> <short description> (<TICKET-ID>)
+```
 
-**Dependency check**: if the ticket has entries in "Blocked By", fetch each of those tickets and check their status. If any dependency is neither `Done` nor `Validated`:
-- Leave a comment listing which dependencies are not yet done/validated and their current status
-- **Stop the pipeline** and inform the user — do not proceed with implementation
+- `<type>` — Conventional Commits: `feat` | `fix` | `refactor` | `chore` | `docs` | `perf` | `test` | `style` | `build` | `ci`
+- `<identifier>` — endpoint path (`/v1/users`, `POST /v1/lists`), service (`auth.service`), or module path (`db/entities/users`)
+- `<short description>` — plain sentence, no period, no filler
+- `<TICKET-ID>` — always at the end in parens: `(KEI-N)`
 
----
-
-## Step 0.5 — Triage: choose the pipeline lane (YOU do this)
-
-Based on the ticket content (description, acceptance criteria, technical notes) and a quick read of the files it is likely to touch, classify the ticket.
-
-**Route to SLIM only if ALL of the following are true:**
-- No DB schema changes (no create/modify under `src/db/entities/`, no new migration expected)
-- No changes to authentication, authorization, or session handling (`src/features/auth/`, `src/shared/middlewares/auth.ts`, `src/shared/middlewares/require-admin.ts`, `jwt.service.ts`)
-- No new HTTP endpoint added — only behaviour changes to existing endpoints, refactors, or bug fixes
-- No handling of PII, tokens, secrets, or RGPD-relevant data
-- No changes to rate limiters, CORS, security headers, or `docker-compose.yml`
-- No cron / background job added or modified
-- Expected diff is small (roughly < 100 lines of production code, tests excluded)
-
-**Otherwise route to FULL.** When in doubt, choose FULL — the slim lane is an optimisation, not a shortcut.
-
-Record the decision:
-- Post a Notion comment on the ticket: `Pipeline lane: SLIM` or `Pipeline lane: FULL` with a one-line justification (which criterion pushed it to FULL, or a confirmation of all slim criteria).
-- Store the lane — it is referenced in Steps 2 and 3.
+Intra-branch fix-up commits reuse the parent PR's identifier.
 
 ---
 
-## Step 1 — Dev: Implementation
+## Step 0 — Context fetch and dependency check (YOU, before delegating)
 
-Delegate to the Dev agent. Pass:
-- The full ticket content (from Step 0)
+Fetch the ticket **$ARGUMENTS** yourself with the wrapper and store its full content:
 
-Dev agent tasks:
-- **Sync `dev` first** — run `git fetch origin dev` then `git checkout dev && git merge --ff-only origin/dev`. If the fast-forward fails (local `dev` has diverged), stop and report — do NOT force-update or rebase without explicit user approval.
-- Create a branch following the naming convention, from the up-to-date `dev`
-- Read existing files to understand patterns before writing any code
-- Implement in order: DB schema → service → route → tests
-- If DB schema was created or modified: run `npm run db:generate -- --name=<slug>` and confirm a `.sql` file was produced in `src/db/migrations/`
-- Run `npm test -- --run`, `npx tsc --noEmit`, `npx eslint src/` — all must be clean
-- Commit and push the branch, then create a PR targeting `dev` with `gh pr create --base dev`
-- Update ticket status → `In Review`, update the **"PR URL"** field, leave a comment with the PR URL and all files created/modified
+```bash
+node scripts/notion/notion.mjs get-page <page-id>
+```
 
-**Capture** (concise — bullet points only): branch name, PR URL, files created/modified, migration generated (yes/no).
+Extract: title, status, priority, epic, `Repo`, description, acceptance criteria, technical notes, files involved, PR URL, blocked-by, comments.
 
----
+**Repo check**: confirm `Repo` is `API`. If it targets `BackOffice`, `Frontend`, or `Extension`, stop and inform the user — the wrong build-feature skill was invoked.
 
-## Step 2 — Lead Dev: Code Review
-
-**FULL lane only.** If the lane recorded in Step 0.5 is SLIM, skip this step and continue to Step 4.
-
-Before delegating, YOU (the orchestrator) read all files listed in the Dev summary using your Read tool and include their full contents inline in the prompt. This avoids the Lead Dev agent re-reading them from scratch and reduces token consumption.
-
-Delegate to the Lead Dev agent. Pass:
-- Ticket acceptance criteria and technical notes if available (from Step 0)
-- Dev summary from Step 1
-- Full contents of every file created/modified (read by you in the step above)
-
-Lead Dev agent tasks:
-- Review the provided file contents against the project standards checklist (no need to re-read files)
-- Run `npm test -- --run`, `npx tsc --noEmit`, `npx eslint src/`
-- Produce a structured review report (✅ positives / ⚠️ suggestions / ❌ blockers)
-- Update the Notion ticket with the report and one of two outcomes:
-
-**If APPROVED** → leave status at `In Review`, leave a comment "Lead Dev approved — ready for DevOps review", continue to Step 3
-
-**If CHANGES REQUIRED** → fix the blocking issues directly, re-run checks, commit and push (`git add <files> && git commit -m "fix: address lead dev review (KEI-X)" && git push`), leave status at `In Review`, leave a comment "Lead Dev approved (after fixes) — ready for DevOps review" listing what was changed, continue to Step 3
-
-**Capture** (concise — bullet points only): verdict, files modified (if any), key issues found/fixed.
+**Dependency check**: inspect the `blocked_by` array. If any entry is not `Done` or `Validated`:
+- `add-comment` listing the blockers and their current status
+- Stop the pipeline and inform the user — do not proceed with implementation
 
 ---
 
-## Step 3 — DevOps: Security & Integrity Review
+## Step 1 — Delegate to the Dev agent
 
-**FULL lane only.** If the lane recorded in Step 0.5 is SLIM, skip this step and continue to Step 4.
+Delegate to the Dev agent. Pass in the prompt:
+- The full ticket content (from Step 0) — title, description, acceptance criteria, technical notes, files involved
+- Any comments on the ticket that add context
+- The page ID (so the Dev can update Notion via the wrapper without another fetch)
 
-Delegate to the DevOps agent. Pass:
-- Ticket acceptance criteria and technical notes if available (from Step 0)
-- Dev summary from Step 1
-- Lead Dev summary from Step 2
+The Dev agent then executes its full workflow (documented in `.claude/agents/dev.md`):
+1. Sync `dev`, create the branch, mark ticket `In Progress`
+2. Read existing patterns and the DB schema page if the ticket touches the database
+3. Implement DB schema → service → route → tests
+4. **Self-review** against the merged Lead Dev + DevOps + Tester checklist
+5. Run static checks (`npm test -- --run`, `npx tsc --noEmit`, `npx eslint src/`)
+6. If schema changed: run `npm run db:generate` and confirm the migration file
+7. Smoke-test every endpoint with curl (happy path + at least one error case)
+8. Commit, push, open the PR
+9. Mark `In Review` + attach PR URL + Files Involved on the ticket
+10. Mark `Validated` + post the test report as the final Notion comment
 
-DevOps agent tasks:
-- Review security, data integrity, and deployment readiness
-- Run `npm test -- --run` and `npx tsc --noEmit`
-- If a migration file was generated, read it and confirm it matches the schema changes
-- Produce a structured DevOps review report
-- Update the Notion ticket with one of two outcomes:
-
-**If APPROVED** → leave status at `In Review`, leave a comment "DevOps approved — ready for testing", continue to Step 4
-
-**If ISSUES FOUND** → fix the issues directly, re-run checks, commit and push (`git add <files> && git commit -m "fix: address devops review (KEI-X)" && git push`), leave status at `In Review`, leave a comment "DevOps approved (after fixes) — ready for testing" listing what was changed, continue to Step 4
-
-**Capture** (concise — bullet points only): verdict, files modified (if any), key issues found/fixed.
-
----
-
-## Step 4 — Tester: Final Validation
-
-Delegate to the Tester agent. Pass:
-- Ticket acceptance criteria (from Step 0)
-- Dev summary from Step 1 (endpoints and files)
-- The pipeline lane (SLIM or FULL) recorded in Step 0.5
-
-Tester agent tasks:
-- Run `npm test -- --run`
-- Manually test each endpoint (happy path + error cases + edge cases)
-- Check every acceptance criterion
-- **If lane is SLIM**: also verify that the actual diff still matches the slim criteria (no DB schema, no auth, no new endpoint, no security-sensitive surface). If it does not, stop, leave a Notion comment `Slim lane misclassified — re-run with FULL lane` and do NOT validate.
-- Produce a structured test report
-- Update the Notion ticket with one of two outcomes:
-
-**If VALIDATED** → update status to `Validated`
-
-**If BUGS FOUND** → fix the bugs directly, run `npm test -- --run` again to confirm clean, commit and push (`git add <files> && git commit -m "fix: address tester bugs (KEI-X)" && git push`), status → `Validated`, leave a comment with the test report listing what was fixed
+The Dev is expected to fix issues found in its own self-review directly, on the same branch, in the same session — there is no separate reviewer to bounce back to.
 
 ---
 
 ## Final Summary
 
 Once the pipeline completes, present:
-1. Notion ticket final status
-2. Pipeline lane used (SLIM or FULL)
-3. PR URL (ready to merge into `dev`)
-4. Branch name and files created/modified
-5. Commits added per stage (Dev, Lead Dev if FULL and fixes, DevOps if FULL and fixes, Tester if fixes)
-6. Test results summary
+1. Notion ticket final status (must be `Validated`)
+2. PR URL (ready to merge into `dev`)
+3. Branch name and files created/modified
+4. Static-check results + curl smoke summary
+5. Any items the Dev flagged as follow-ups (out-of-scope refactors, tech debt) — the user decides whether to file a new ticket
