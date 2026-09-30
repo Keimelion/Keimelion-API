@@ -1,9 +1,10 @@
-import { and, asc, count, eq, inArray, sql } from 'drizzle-orm'
+import { and, asc, count, eq, sql } from 'drizzle-orm'
 import { db } from '../../client.js'
 import { occasionTypes, occasionTypeTranslations } from './occasion-types.schema.js'
 import { DEFAULT_LOCALE } from '../../../shared/enums/locale.js'
 import type { Locale } from '../../../shared/enums/locale.js'
 import type { OccasionType, OccasionTypeTranslation } from './occasion-types.schema.js'
+import type { OccasionTypeRowWithTranslations } from '../../../shared/types/occasion-type.js'
 import type { PaginationInput } from '../../../shared/schemas/pagination.js'
 
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
@@ -54,39 +55,36 @@ export function listActiveOccasionTypes(locale: Locale): Promise<OccasionTypeWit
     .orderBy(asc(occasionTypes.sortOrder))
 }
 
+const OCCASION_TYPE_WITH_TRANSLATIONS = { translations: true } as const
+
 export async function findOccasionTypeById(id: string): Promise<OccasionType | undefined> {
   return db.query.occasionTypes.findFirst({ where: eq(occasionTypes.id, id) })
 }
 
-export function findAllOccasionTypes(input: PaginationInput): Promise<OccasionType[]> {
+export function findOccasionTypeByIdWithTranslations(
+  id: string,
+): Promise<OccasionTypeRowWithTranslations | undefined> {
+  return db.query.occasionTypes.findFirst({
+    where: eq(occasionTypes.id, id),
+    with: OCCASION_TYPE_WITH_TRANSLATIONS,
+  })
+}
+
+export function findAllOccasionTypesWithTranslations(
+  input: PaginationInput,
+): Promise<OccasionTypeRowWithTranslations[]> {
   const offset = (input.page - 1) * input.limit
   return db.query.occasionTypes.findMany({
     orderBy: asc(occasionTypes.sortOrder),
     limit: input.limit,
     offset,
+    with: OCCASION_TYPE_WITH_TRANSLATIONS,
   })
 }
 
 export async function countOccasionTypes(): Promise<number> {
   const [row] = await db.select({ count: count() }).from(occasionTypes)
   return row?.count ?? 0
-}
-
-export async function findTranslationsForOccasionType(
-  occasionTypeId: string,
-): Promise<OccasionTypeTranslation[]> {
-  return db.query.occasionTypeTranslations.findMany({
-    where: eq(occasionTypeTranslations.occasionTypeId, occasionTypeId),
-  })
-}
-
-export async function findTranslationsForOccasionTypes(
-  occasionTypeIds: string[],
-): Promise<OccasionTypeTranslation[]> {
-  if (occasionTypeIds.length === 0) return []
-  return db.query.occasionTypeTranslations.findMany({
-    where: inArray(occasionTypeTranslations.occasionTypeId, occasionTypeIds),
-  })
 }
 
 export async function insertOccasionType(

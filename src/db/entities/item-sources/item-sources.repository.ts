@@ -2,6 +2,7 @@ import { count, eq } from 'drizzle-orm'
 import { db } from '../../client.js'
 import { itemSources } from './item-sources.schema.js'
 import type { ItemSource } from './item-sources.schema.js'
+import type { ItemSourceWithShop } from '../../../shared/types/item.js'
 
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
@@ -23,6 +24,13 @@ export async function insertItemSource(input: InsertItemSourceInput, tx?: DbTran
 
 export function findItemSourceById(id: string): Promise<ItemSource | undefined> {
   return db.query.itemSources.findFirst({ where: eq(itemSources.id, id) })
+}
+
+export function findItemSourceByIdWithShop(id: string): Promise<ItemSourceWithShop | undefined> {
+  return db.query.itemSources.findFirst({
+    where: eq(itemSources.id, id),
+    with: { shop: true },
+  })
 }
 
 export function findItemSourcesByItemId(itemId: string): Promise<ItemSource[]> {

@@ -100,19 +100,22 @@ function mockFindListById(row: unknown): void {
   vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(row as never)
 }
 
+function mockFindListByIdWithOwner(row: unknown, owner: unknown): void {
+  const rowOut =
+    row === undefined || row === null
+      ? undefined
+      : { ...(row as object), collaborators: owner === null ? [] : [{ user: owner }] }
+  vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(rowOut as never)
+}
+
+function rowWithOwner(row: object, owner: unknown): object {
+  return { ...row, collaborators: owner === null ? [] : [{ user: owner }] }
+}
+
 function mockCountChain(total: number): void {
   const chain = {
     from: vi.fn().mockReturnThis(),
     where: vi.fn().mockResolvedValueOnce([{ count: total }]),
-  }
-  vi.mocked(db.select).mockReturnValueOnce(chain as never)
-}
-
-function mockOwnersBatchChain(rows: { listId: string; owner: unknown }[]): void {
-  const chain = {
-    from: vi.fn().mockReturnThis(),
-    leftJoin: vi.fn().mockReturnThis(),
-    where: vi.fn().mockResolvedValueOnce(rows),
   }
   vi.mocked(db.select).mockReturnValueOnce(chain as never)
 }
@@ -145,9 +148,8 @@ describe('GET /v1/admin/lists', () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
 
-    vi.mocked(db.query.lists.findMany).mockResolvedValueOnce([LIST_ROW] as never)
+    vi.mocked(db.query.lists.findMany).mockResolvedValueOnce([rowWithOwner(LIST_ROW, OWNER_USER)] as never)
     mockCountChain(1)
-    mockOwnersBatchChain([{ listId: LIST_ROW.id, owner: OWNER_USER }])
 
     const response = await apiRequest('/v1/admin/lists', { token })
 
@@ -165,9 +167,8 @@ describe('GET /v1/admin/lists', () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
 
-    vi.mocked(db.query.lists.findMany).mockResolvedValueOnce([LIST_ROW] as never)
+    vi.mocked(db.query.lists.findMany).mockResolvedValueOnce([rowWithOwner(LIST_ROW, null)] as never)
     mockCountChain(1)
-    mockOwnersBatchChain([{ listId: LIST_ROW.id, owner: null }])
 
     const response = await apiRequest('/v1/admin/lists', { token })
 
@@ -195,9 +196,8 @@ describe('GET /v1/admin/lists', () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
 
-    vi.mocked(db.query.lists.findMany).mockResolvedValueOnce([LIST_ROW] as never)
+    vi.mocked(db.query.lists.findMany).mockResolvedValueOnce([rowWithOwner(LIST_ROW, OWNER_USER)] as never)
     mockCountChain(1)
-    mockOwnersBatchChain([{ listId: LIST_ROW.id, owner: OWNER_USER }])
 
     const response = await apiRequest('/v1/admin/lists?sort=title:asc', { token })
     expect(response.status).toBe(200)
@@ -215,9 +215,8 @@ describe('GET /v1/admin/lists', () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
 
-    vi.mocked(db.query.lists.findMany).mockResolvedValueOnce([LIST_ROW] as never)
+    vi.mocked(db.query.lists.findMany).mockResolvedValueOnce([rowWithOwner(LIST_ROW, OWNER_USER)] as never)
     mockCountChain(1)
-    mockOwnersBatchChain([{ listId: LIST_ROW.id, owner: OWNER_USER }])
 
     const response = await apiRequest('/v1/admin/lists?listStatus%5Beq%5D=active', { token })
     expect(response.status).toBe(200)
@@ -227,9 +226,8 @@ describe('GET /v1/admin/lists', () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
 
-    vi.mocked(db.query.lists.findMany).mockResolvedValueOnce([LIST_ROW] as never)
+    vi.mocked(db.query.lists.findMany).mockResolvedValueOnce([rowWithOwner(LIST_ROW, OWNER_USER)] as never)
     mockCountChain(1)
-    mockOwnersBatchChain([{ listId: LIST_ROW.id, owner: OWNER_USER }])
 
     const response = await apiRequest('/v1/admin/lists', { token })
     const body = await response.json() as { items: { id: string }[] }
@@ -240,9 +238,8 @@ describe('GET /v1/admin/lists', () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
 
-    vi.mocked(db.query.lists.findMany).mockResolvedValueOnce([DELETED_LIST_ROW] as never)
+    vi.mocked(db.query.lists.findMany).mockResolvedValueOnce([rowWithOwner(DELETED_LIST_ROW, OWNER_USER)] as never)
     mockCountChain(1)
-    mockOwnersBatchChain([{ listId: DELETED_LIST_ROW.id, owner: OWNER_USER }])
 
     const response = await apiRequest('/v1/admin/lists?deletedAt%5BisNull%5D=false', { token })
     const body = await response.json() as { items: { deletedAt: string | null }[] }
@@ -255,9 +252,8 @@ describe('GET /v1/admin/lists', () => {
     mockAdminAuth()
 
     mockOwnerListIdsChain([LIST_ROW.id])
-    vi.mocked(db.query.lists.findMany).mockResolvedValueOnce([LIST_ROW] as never)
+    vi.mocked(db.query.lists.findMany).mockResolvedValueOnce([rowWithOwner(LIST_ROW, OWNER_USER)] as never)
     mockCountChain(1)
-    mockOwnersBatchChain([{ listId: LIST_ROW.id, owner: OWNER_USER }])
 
     const response = await apiRequest(`/v1/admin/lists?ownerUserId=${OWNER_USER.id}`, { token })
 
@@ -321,8 +317,7 @@ describe('GET /v1/admin/lists/:id', () => {
   it('returns 200 with list and owner', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
-    mockFindListById(LIST_ROW)
-    mockOwnersBatchChain([{ listId: LIST_ROW.id, owner: OWNER_USER }])
+    mockFindListByIdWithOwner(LIST_ROW, OWNER_USER)
 
     const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}`, { token })
 
@@ -335,8 +330,7 @@ describe('GET /v1/admin/lists/:id', () => {
   it('returns 200 with deletedAt populated for soft-deleted lists (admins see everything)', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
-    mockFindListById(DELETED_LIST_ROW)
-    mockOwnersBatchChain([{ listId: DELETED_LIST_ROW.id, owner: OWNER_USER }])
+    mockFindListByIdWithOwner(DELETED_LIST_ROW, OWNER_USER)
 
     const response = await apiRequest(`/v1/admin/lists/${DELETED_LIST_ROW.id}`, { token })
 
@@ -387,7 +381,7 @@ describe('PATCH /v1/admin/lists/:id', () => {
     mockAdminAuth()
     mockFindListById(LIST_ROW)
     mockUpdateList({ ...LIST_ROW, title: 'Updated title' })
-    mockOwnersBatchChain([{ listId: LIST_ROW.id, owner: OWNER_USER }])
+    mockFindListByIdWithOwner({ ...LIST_ROW, title: 'Updated title' }, OWNER_USER)
 
     const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}`, {
       method: 'PATCH',
@@ -405,7 +399,7 @@ describe('PATCH /v1/admin/lists/:id', () => {
     mockAdminAuth()
     mockFindListById(LIST_ROW)
     mockUpdateList({ ...LIST_ROW, listStatus: 'archived' })
-    mockOwnersBatchChain([{ listId: LIST_ROW.id, owner: OWNER_USER }])
+    mockFindListByIdWithOwner({ ...LIST_ROW, listStatus: 'archived' }, OWNER_USER)
 
     const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}`, {
       method: 'PATCH',
@@ -423,7 +417,7 @@ describe('PATCH /v1/admin/lists/:id', () => {
     mockAdminAuth()
     mockFindListById(LIST_ROW)
     mockUpdateList({ ...LIST_ROW, title: 'New title', description: 'New description' })
-    mockOwnersBatchChain([{ listId: LIST_ROW.id, owner: OWNER_USER }])
+    mockFindListByIdWithOwner({ ...LIST_ROW, title: 'New title', description: 'New description' }, OWNER_USER)
 
     await apiRequest(`/v1/admin/lists/${LIST_ROW.id}`, {
       method: 'PATCH',
@@ -681,7 +675,7 @@ describe('POST /v1/admin/lists/:id/restore', () => {
     mockAdminAuth()
     mockFindListById(DELETED_LIST_ROW)
     mockUpdateList({ ...DELETED_LIST_ROW, deletedAt: null })
-    mockOwnersBatchChain([{ listId: DELETED_LIST_ROW.id, owner: OWNER_USER }])
+    mockFindListByIdWithOwner({ ...DELETED_LIST_ROW, deletedAt: null }, OWNER_USER)
 
     const response = await apiRequest(`/v1/admin/lists/${DELETED_LIST_ROW.id}/restore`, {
       method: 'POST',
@@ -737,7 +731,7 @@ describe('POST /v1/admin/lists/:id/restore', () => {
     mockAdminAuth()
     mockFindListById(DELETED_LIST_ROW)
     mockUpdateList({ ...DELETED_LIST_ROW, deletedAt: null })
-    mockOwnersBatchChain([{ listId: DELETED_LIST_ROW.id, owner: OWNER_USER }])
+    mockFindListByIdWithOwner({ ...DELETED_LIST_ROW, deletedAt: null }, OWNER_USER)
 
     await apiRequest(`/v1/admin/lists/${DELETED_LIST_ROW.id}/restore`, {
       method: 'POST',

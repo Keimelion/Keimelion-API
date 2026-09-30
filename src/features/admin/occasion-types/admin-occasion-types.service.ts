@@ -8,10 +8,9 @@ import { runWrite } from '../../../shared/utils/admin-write.js'
 import { buildPaginatedResponse } from '../../../shared/schemas/pagination.js'
 import {
   findOccasionTypeById,
-  findAllOccasionTypes,
+  findOccasionTypeByIdWithTranslations,
+  findAllOccasionTypesWithTranslations,
   countOccasionTypes,
-  findTranslationsForOccasionType,
-  findTranslationsForOccasionTypes,
   insertOccasionType,
   updateOccasionType,
   upsertOccasionTypeTranslation,
@@ -24,7 +23,6 @@ import type { AdminOccasionType } from './admin-occasion-types.mapper.js'
 import type { ServiceResult } from '../../../shared/types/service.js'
 import type { PaginatedResponse } from '../../../shared/types/api.js'
 import type { PaginationInput } from '../../../shared/schemas/pagination.js'
-import type { OccasionTypeTranslation } from '../../../db/entities/occasion-types/occasion-types.schema.js'
 import type { OccasionTypeWrite } from '../../../shared/types/occasion-type.js'
 import type { AdminUpdateOccasionTypeInput } from './endpoints/update.js'
 
@@ -46,38 +44,31 @@ export async function createOccasionType(
 
   if ('errorCode' in outcome) return serviceError(outcome.errorCode)
 
-  const translations = await findTranslationsForOccasionType(outcome.row.id)
-  const createdRow = toAdminOccasionType(outcome.row, translations)
+  const createdRow = await findOccasionTypeByIdWithTranslations(outcome.row.id)
+  if (!createdRow) return serviceError(ErrorCode.INTERNAL_ERROR)
+
+  const adminRow = toAdminOccasionType(createdRow)
 
   logger.info({
     adminId,
     action: AdminAction.CREATE_OCCASION_TYPE,
-    occasionTypeId: createdRow.id,
-    slug: createdRow.slug,
+    occasionTypeId: adminRow.id,
+    slug: adminRow.slug,
   })
 
-  return { data: { occasionType: createdRow }, httpStatus: HttpStatus.CREATED }
+  return { data: { occasionType: adminRow }, httpStatus: HttpStatus.CREATED }
 }
 
 export async function listOccasionTypes(
   input: PaginationInput,
 ): Promise<ServiceResult<PaginatedResponse<AdminOccasionType>>> {
-  const [rows, total] = await Promise.all([findAllOccasionTypes(input), countOccasionTypes()])
-
-  const translations = await findTranslationsForOccasionTypes(rows.map((row) => row.id))
-  const translationsByOccasionType = new Map<string, OccasionTypeTranslation[]>()
-  for (const translation of translations) {
-    const list = translationsByOccasionType.get(translation.occasionTypeId) ?? []
-    list.push(translation)
-    translationsByOccasionType.set(translation.occasionTypeId, list)
-  }
-
-  const items = rows.map((row) =>
-    toAdminOccasionType(row, translationsByOccasionType.get(row.id) ?? []),
-  )
+  const [rows, total] = await Promise.all([
+    findAllOccasionTypesWithTranslations(input),
+    countOccasionTypes(),
+  ])
 
   return {
-    data: buildPaginatedResponse(items, input, total),
+    data: buildPaginatedResponse(rows.map((row) => toAdminOccasionType(row)), input, total),
     httpStatus: HttpStatus.OK,
   }
 }
@@ -120,13 +111,11 @@ export async function updateOccasionTypeById(
     }
   })
 
-  const updatedRow = await findOccasionTypeById(id)
+  const updatedRow = await findOccasionTypeByIdWithTranslations(id)
 
   if (!updatedRow) {
     return serviceError(ErrorCode.INTERNAL_ERROR)
   }
-
-  const translations = await findTranslationsForOccasionType(id)
 
   logger.info({
     adminId,
@@ -136,7 +125,7 @@ export async function updateOccasionTypeById(
     changes,
   })
 
-  return { data: { occasionType: toAdminOccasionType(updatedRow, translations) }, httpStatus: HttpStatus.OK }
+  return { data: { occasionType: toAdminOccasionType(updatedRow) }, httpStatus: HttpStatus.OK }
 }
 
 export async function deleteOccasionTypeById(

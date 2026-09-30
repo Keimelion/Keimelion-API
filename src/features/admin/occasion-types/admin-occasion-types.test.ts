@@ -89,14 +89,14 @@ function mockInsertTransaction(returnRow: unknown): void {
   })
 }
 
-function mockFindTranslations(translations: unknown[]): void {
-  vi.mocked(db.query.occasionTypeTranslations.findMany).mockResolvedValueOnce(
-    translations as never,
-  )
-}
-
 function mockFindOccasionTypeById(row: unknown): void {
   vi.mocked(db.query.occasionTypes.findFirst).mockResolvedValueOnce(row as never)
+}
+
+function mockFindOccasionTypeWithTranslations(row: unknown, translations: unknown[]): void {
+  vi.mocked(db.query.occasionTypes.findFirst).mockResolvedValueOnce(
+    row === undefined ? undefined : ({ ...(row as object), translations } as never),
+  )
 }
 
 function mockCountChain(total: number): void {
@@ -117,7 +117,7 @@ describe('POST /v1/admin/occasion-types', () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
     mockInsertTransaction(OCCASION_TYPE_ROW)
-    mockFindTranslations(OCCASION_TYPE_TRANSLATIONS)
+    mockFindOccasionTypeWithTranslations(OCCASION_TYPE_ROW, OCCASION_TYPE_TRANSLATIONS)
 
     const response = await apiRequest('/v1/admin/occasion-types', {
       method: 'POST',
@@ -266,7 +266,7 @@ describe('POST /v1/admin/occasion-types', () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
     mockInsertTransaction(OCCASION_TYPE_ROW)
-    mockFindTranslations(OCCASION_TYPE_TRANSLATIONS)
+    mockFindOccasionTypeWithTranslations(OCCASION_TYPE_ROW, OCCASION_TYPE_TRANSLATIONS)
 
     await apiRequest('/v1/admin/occasion-types', {
       method: 'POST',
@@ -295,9 +295,11 @@ describe('GET /v1/admin/occasion-types', () => {
 
     const inactiveRow = { ...OCCASION_TYPE_ROW, id: '00000000-0000-0000-0000-000000000011', isActive: false, slug: 'archived' }
 
-    vi.mocked(db.query.occasionTypes.findMany).mockResolvedValueOnce([OCCASION_TYPE_ROW, inactiveRow] as never)
+    vi.mocked(db.query.occasionTypes.findMany).mockResolvedValueOnce([
+      { ...OCCASION_TYPE_ROW, translations: OCCASION_TYPE_TRANSLATIONS },
+      { ...inactiveRow, translations: OCCASION_TYPE_TRANSLATIONS },
+    ] as never)
     mockCountChain(2)
-    mockFindTranslations(OCCASION_TYPE_TRANSLATIONS)
 
     const response = await apiRequest('/v1/admin/occasion-types', { token })
 
@@ -315,9 +317,10 @@ describe('GET /v1/admin/occasion-types', () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
 
-    vi.mocked(db.query.occasionTypes.findMany).mockResolvedValueOnce([OCCASION_TYPE_ROW] as never)
+    vi.mocked(db.query.occasionTypes.findMany).mockResolvedValueOnce([
+      { ...OCCASION_TYPE_ROW, translations: OCCASION_TYPE_TRANSLATIONS },
+    ] as never)
     mockCountChain(1)
-    mockFindTranslations(OCCASION_TYPE_TRANSLATIONS)
 
     const response = await apiRequest('/v1/admin/occasion-types', { token })
 
@@ -391,8 +394,7 @@ describe('PATCH /v1/admin/occasion-types/:id', () => {
       return callback(tx as never)
     })
 
-    mockFindOccasionTypeById(updatedRow)
-    mockFindTranslations(OCCASION_TYPE_TRANSLATIONS)
+    mockFindOccasionTypeWithTranslations(updatedRow, OCCASION_TYPE_TRANSLATIONS)
 
     const response = await apiRequest(`/v1/admin/occasion-types/${OCCASION_TYPE_ROW.id}`, {
       method: 'PATCH',
@@ -511,8 +513,7 @@ describe('PATCH /v1/admin/occasion-types/:id', () => {
       return callback(tx as never)
     })
 
-    mockFindOccasionTypeById({ ...OCCASION_TYPE_ROW, sortOrder: 99 })
-    mockFindTranslations(OCCASION_TYPE_TRANSLATIONS)
+    mockFindOccasionTypeWithTranslations({ ...OCCASION_TYPE_ROW, sortOrder: 99 }, OCCASION_TYPE_TRANSLATIONS)
 
     await apiRequest(`/v1/admin/occasion-types/${OCCASION_TYPE_ROW.id}`, {
       method: 'PATCH',

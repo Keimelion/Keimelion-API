@@ -119,6 +119,14 @@ function mockFindItemSourceById(row: unknown): void {
   vi.mocked(db.query.itemSources.findFirst).mockResolvedValueOnce(row as never)
 }
 
+function mockFindItemSourceByIdWithShop(row: unknown, shop: unknown): void {
+  const rowOut =
+    row === undefined || row === null
+      ? undefined
+      : { ...(row as object), shop }
+  vi.mocked(db.query.itemSources.findFirst).mockResolvedValueOnce(rowOut as never)
+}
+
 function mockFindShopById(row: unknown): void {
   vi.mocked(db.query.shops.findFirst).mockResolvedValueOnce(row as never)
 }
@@ -1097,6 +1105,7 @@ describe('PATCH /v1/admin/items/:id/sources/:sourceId', () => {
     mockAdminAuth()
     mockFindItemSourceById(SOURCE_ROW)
     mockUpdateItemSource({ ...SOURCE_ROW, currency: 'USD' })
+    mockFindItemSourceByIdWithShop({ ...SOURCE_ROW, currency: 'USD' }, null)
 
     const response = await apiRequest(
       `/v1/admin/items/${ITEM_ROW.id}/sources/${SOURCE_ROW.id}`,
@@ -1119,7 +1128,7 @@ describe('PATCH /v1/admin/items/:id/sources/:sourceId', () => {
     mockFindItemSourceById(SOURCE_ROW)
     mockFindShopById(SHOP_ROW)
     mockUpdateItemSource({ ...SOURCE_ROW, shopId: SHOP_ROW.id })
-    mockFindShopById(SHOP_ROW)
+    mockFindItemSourceByIdWithShop({ ...SOURCE_ROW, shopId: SHOP_ROW.id }, SHOP_ROW)
 
     const response = await apiRequest(
       `/v1/admin/items/${ITEM_ROW.id}/sources/${SOURCE_ROW.id}`,
@@ -1140,6 +1149,7 @@ describe('PATCH /v1/admin/items/:id/sources/:sourceId', () => {
     mockAdminAuth()
     mockFindItemSourceById(SOURCE_ROW)
     mockUpdateItemSource({ ...SOURCE_ROW, currency: 'USD' })
+    mockFindItemSourceByIdWithShop({ ...SOURCE_ROW, currency: 'USD' }, null)
 
     await apiRequest(
       `/v1/admin/items/${ITEM_ROW.id}/sources/${SOURCE_ROW.id}`,
