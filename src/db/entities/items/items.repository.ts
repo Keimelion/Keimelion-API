@@ -1,8 +1,8 @@
-import { and, count, eq, isNull } from 'drizzle-orm'
+import { and, count, desc, eq, isNull } from 'drizzle-orm'
 import { db } from '../../client.js'
 import { items } from './items.schema.js'
 import { listItems } from '../list-items/list-items.schema.js'
-import type { ModerationStatus } from '../../../shared/enums/moderation-status.js'
+import type { PaginationInput } from '../../../shared/schemas/pagination.js'
 import type { Item } from './items.schema.js'
 
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
@@ -12,14 +12,13 @@ interface InsertItemInput {
   description: string | null
   imageUrl: string | null
   createdByUserId: string | null
-  moderationStatus: ModerationStatus
 }
 
 interface FindItemByIdOptions {
   includeDeleted?: boolean
 }
 
-type UpdateItemFields = Partial<Pick<typeof items.$inferInsert, 'name' | 'description' | 'imageUrl' | 'moderationStatus'>>
+type UpdateItemFields = Partial<Pick<typeof items.$inferInsert, 'name' | 'description' | 'imageUrl'>>
 
 export async function insertItem(input: InsertItemInput, tx?: DbTransaction): Promise<Item | undefined> {
   const client = tx ?? db
@@ -71,5 +70,23 @@ export async function countListItemsReferencing(itemId: string, tx?: DbTransacti
     .select({ total: count() })
     .from(listItems)
     .where(eq(listItems.itemId, itemId))
+  return row?.total ?? 0
+}
+
+export function findLiveItems(pagination: PaginationInput): Promise<Item[]> {
+  const offset = (pagination.page - 1) * pagination.limit
+  return db.query.items.findMany({
+    where: isNull(items.deletedAt),
+    orderBy: [desc(items.createdAt)],
+    limit: pagination.limit,
+    offset,
+  })
+}
+
+export async function countLiveItems(): Promise<number> {
+  const [row] = await db
+    .select({ total: count() })
+    .from(items)
+    .where(isNull(items.deletedAt))
   return row?.total ?? 0
 }

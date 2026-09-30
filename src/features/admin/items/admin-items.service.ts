@@ -34,7 +34,7 @@ import type { UpdateItemInput } from './endpoints/update.js'
 
 const URL_FIELDS = new Set(['imageUrl'])
 
-type ItemUpdateFields = Partial<Pick<typeof items.$inferInsert, 'name' | 'description' | 'imageUrl' | 'moderationStatus'>>
+type ItemUpdateFields = Partial<Pick<typeof items.$inferInsert, 'name' | 'description' | 'imageUrl'>>
 
 export async function createItem(
   adminId: string,
@@ -48,7 +48,6 @@ export async function createItem(
           description: input.description,
           imageUrl: input.imageUrl,
           createdByUserId: null,
-          moderationStatus: input.moderationStatus,
         },
         tx,
       )
@@ -123,7 +122,6 @@ export async function updateItemById(
     name: input.name,
     description: input.description,
     imageUrl: input.imageUrl,
-    moderationStatus: input.moderationStatus,
   })
 
   if (Object.keys(fieldPatch).length === 0) {

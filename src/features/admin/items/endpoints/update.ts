@@ -7,7 +7,6 @@ import { getAuthUser } from '../../../../shared/middlewares/auth.js'
 import { RATE_LIMITS } from '../../../../shared/utils/rate-limiter.js'
 import { uuidParamSchema } from '../../../../shared/schemas/params.js'
 import { logoUrlSchema } from '../../../../db/entities/shops/shops.schemas.js'
-import { MODERATION_STATUS_VALUES } from '../../../../shared/enums/moderation-status.js'
 import type { FeatureRouter } from '../../../../shared/types/app.js'
 import { updateItemById } from '../admin-items.service.js'
 
@@ -25,7 +24,6 @@ const adminUpdateItemSchema = z
       .optional()
       .transform((value) => (value === '' ? null : value)),
     imageUrl: logoUrlSchema.optional(),
-    moderationStatus: z.enum(MODERATION_STATUS_VALUES).optional(),
   })
   .strict()
 

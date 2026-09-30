@@ -85,6 +85,13 @@
       "when": 1790755855516,
       "tag": "0011_drop-item-sources-is-primary",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1790757069813,
+      "tag": "0012_drop-item-moderation-status",
+      "breakpoints": true
     }
   ]
 }

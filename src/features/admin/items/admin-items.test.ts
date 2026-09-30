@@ -49,7 +49,6 @@ const ITEM_ROW = {
   description: 'A test item',
   imageUrl: null,
   createdByUserId: null,
-  moderationStatus: 'approved' as const,
   deletedAt: null,
   createdAt: new Date('2024-01-01'),
   updatedAt: new Date('2024-01-01'),
@@ -253,42 +252,6 @@ describe('POST /v1/admin/items', () => {
     expect(body.item.sources[0]?.itemId).toBe(ITEM_ROW.id)
   })
 
-  it('returns 201 with default moderationStatus=approved when not specified', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
-    mockAdminAuth()
-    mockCreateItemTransaction(ITEM_ROW, [SOURCE_ROW])
-
-    const response = await apiRequest('/v1/admin/items', {
-      method: 'POST',
-      token,
-      body: { name: 'Test Item', sources: [{ currency: 'EUR' }] },
-    })
-
-    const body = await response.json() as { item: { moderationStatus: string } }
-    expect(response.status).toBe(201)
-    expect(body.item.moderationStatus).toBe('approved')
-  })
-
-  it('returns 201 with custom moderationStatus', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
-    mockAdminAuth()
-    mockCreateItemTransaction({ ...ITEM_ROW, moderationStatus: 'pending' }, [SOURCE_ROW])
-
-    const response = await apiRequest('/v1/admin/items', {
-      method: 'POST',
-      token,
-      body: {
-        name: 'Test Item',
-        moderationStatus: 'pending',
-        sources: [{ currency: 'EUR' }],
-      },
-    })
-
-    const body = await response.json() as { item: { moderationStatus: string } }
-    expect(response.status).toBe(201)
-    expect(body.item.moderationStatus).toBe('pending')
-  })
-
   it('logs at info level on successful creation', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
@@ -353,19 +316,6 @@ describe('POST /v1/admin/items', () => {
       method: 'POST',
       token,
       body: { name: '', sources: [{ currency: 'EUR' }] },
-    })
-
-    expect(response.status).toBe(422)
-  })
-
-  it('returns 422 when moderationStatus is invalid', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
-    mockAdminAuth()
-
-    const response = await apiRequest('/v1/admin/items', {
-      method: 'POST',
-      token,
-      body: { name: 'Test', moderationStatus: 'invalid', sources: [{ currency: 'EUR' }] },
     })
 
     expect(response.status).toBe(422)
@@ -506,18 +456,6 @@ describe('GET /v1/admin/items', () => {
     mockFindItemSourcesByItemIdOnce([])
 
     const response = await apiRequest('/v1/admin/items', { token })
-    expect(response.status).toBe(200)
-  })
-
-  it('filters by moderationStatus[eq]', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
-    mockAdminAuth()
-
-    vi.mocked(db.query.items.findMany).mockResolvedValueOnce([ITEM_ROW] as never)
-    mockCountChain(1)
-    mockFindItemSourcesByItemIdOnce([])
-
-    const response = await apiRequest('/v1/admin/items?moderationStatus%5Beq%5D=approved', { token })
     expect(response.status).toBe(200)
   })
 
@@ -678,24 +616,6 @@ describe('PATCH /v1/admin/items/:id', () => {
     expect(body.item.sources).toHaveLength(1)
   })
 
-  it('returns 200 when patching moderationStatus', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
-    mockAdminAuth()
-    mockFindItemById(ITEM_ROW)
-    mockUpdateItem({ ...ITEM_ROW, moderationStatus: 'rejected' })
-    mockFindItemSourcesByItemIdOnce([])
-
-    const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}`, {
-      method: 'PATCH',
-      token,
-      body: { moderationStatus: 'rejected' },
-    })
-
-    const body = await response.json() as { item: { moderationStatus: string } }
-    expect(response.status).toBe(200)
-    expect(body.item.moderationStatus).toBe('rejected')
-  })
-
   it('logs with url fields redacted in changes diff', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
@@ -743,19 +663,6 @@ describe('PATCH /v1/admin/items/:id', () => {
     })
 
     expect(response.status).toBe(404)
-  })
-
-  it('returns 422 when moderationStatus is invalid enum value', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
-    mockAdminAuth()
-
-    const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}`, {
-      method: 'PATCH',
-      token,
-      body: { moderationStatus: 'banned' },
-    })
-
-    expect(response.status).toBe(422)
   })
 
   it('returns 422 when imageUrl uses HTTP', async () => {

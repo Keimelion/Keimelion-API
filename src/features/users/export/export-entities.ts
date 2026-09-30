@@ -63,7 +63,6 @@ const itemsEntityDescriptor: ExportEntityDescriptor = {
     'name',
     'description',
     'imageUrl',
-    'moderationStatus',
     'createdAt',
     'updatedAt',
   ],

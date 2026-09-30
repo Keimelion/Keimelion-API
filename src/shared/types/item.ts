@@ -8,7 +8,6 @@ export interface ItemDetail {
   description: string | null
   imageUrl: string | null
   createdByUserId: string | null
-  moderationStatus: string
   createdAt: Date
   updatedAt: Date
 }
@@ -56,7 +55,6 @@ export function toItemDetail(item: Item): ItemDetail {
     description: item.description ?? null,
     imageUrl: item.imageUrl ?? null,
     createdByUserId: item.createdByUserId ?? null,
-    moderationStatus: item.moderationStatus,
     createdAt: item.createdAt,
     updatedAt: item.updatedAt,
   }

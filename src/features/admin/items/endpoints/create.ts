@@ -6,7 +6,6 @@ import { validationErrorHandler } from '../../../../shared/utils/validation.js'
 import { getAuthUser } from '../../../../shared/middlewares/auth.js'
 import { RATE_LIMITS } from '../../../../shared/utils/rate-limiter.js'
 import { logoUrlSchema } from '../../../../db/entities/shops/shops.schemas.js'
-import { MODERATION_STATUS_VALUES } from '../../../../shared/enums/moderation-status.js'
 import {
   currencySchema,
   httpsSourceUrlSchema,
@@ -39,7 +38,6 @@ const adminCreateItemSchema = z
       .optional()
       .transform((value) => (value === '' ? null : (value ?? null))),
     imageUrl: logoUrlSchema.optional().transform((value) => value ?? null),
-    moderationStatus: z.enum(MODERATION_STATUS_VALUES).default('approved'),
     sources: z.array(createItemSourceInputSchema).min(1),
   })
   .strict()
