@@ -1,4 +1,7 @@
-import type { OccasionType } from '../../db/entities/occasion-types/occasion-types.schema.js'
+import type {
+  OccasionType,
+  OccasionTypeTranslation,
+} from '../../db/entities/occasion-types/occasion-types.schema.js'
 import type { Locale } from '../enums/locale.js'
 
 export interface OccasionTypeDetail {
@@ -9,6 +12,10 @@ export interface OccasionTypeDetail {
   isActive: boolean
   createdAt: Date
   updatedAt: Date
+}
+
+export interface OccasionTypeRowWithTranslations extends OccasionType {
+  translations: OccasionTypeTranslation[]
 }
 
 export interface OccasionTypeTranslationWrite {

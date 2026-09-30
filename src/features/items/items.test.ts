@@ -31,7 +31,19 @@ const SHOP_ROW = {
   updatedAt: new Date('2024-01-01'),
 }
 
-const SOURCE_ROW = {
+interface SourceRow {
+  id: string
+  itemId: string
+  shopId: string | null
+  sourceUrl: string | null
+  price: string | null
+  currency: string
+  createdAt: Date
+  updatedAt: Date
+  shop: typeof SHOP_ROW | null
+}
+
+const SOURCE_ROW: SourceRow = {
   id: '00000000-0000-0000-0000-000000000030',
   itemId: ITEM_ROW.id,
   shopId: null,
@@ -40,12 +52,18 @@ const SOURCE_ROW = {
   currency: 'EUR',
   createdAt: new Date('2024-01-01'),
   updatedAt: new Date('2024-01-01'),
+  shop: null,
 }
 
 const SOURCE_WITH_SHOP_ROW = {
   ...SOURCE_ROW,
   id: '00000000-0000-0000-0000-000000000031',
   shopId: SHOP_ROW.id,
+  shop: SHOP_ROW,
+}
+
+function itemWith(sources: SourceRow[]): typeof ITEM_ROW & { sources: SourceRow[] } {
+  return { ...ITEM_ROW, sources }
 }
 
 function mockCountAllChain(total: number): void {
@@ -61,9 +79,11 @@ describe('GET /v1/items', () => {
   })
 
   it('returns 200 with paginated items and embedded sources', async () => {
-    vi.mocked(db.query.items.findMany).mockResolvedValueOnce([ITEM_ROW, OTHER_ITEM_ROW] as never)
+    vi.mocked(db.query.items.findMany).mockResolvedValueOnce([
+      itemWith([SOURCE_ROW]),
+      { ...OTHER_ITEM_ROW, sources: [] },
+    ] as never)
     mockCountAllChain(2)
-    vi.mocked(db.query.itemSources.findMany).mockResolvedValueOnce([SOURCE_ROW] as never)
 
     const response = await apiRequest('/v1/items')
 
@@ -80,10 +100,10 @@ describe('GET /v1/items', () => {
   })
 
   it('embeds shop object on sources that reference a shop', async () => {
-    vi.mocked(db.query.items.findMany).mockResolvedValueOnce([ITEM_ROW] as never)
+    vi.mocked(db.query.items.findMany).mockResolvedValueOnce([
+      itemWith([SOURCE_WITH_SHOP_ROW]),
+    ] as never)
     mockCountAllChain(1)
-    vi.mocked(db.query.itemSources.findMany).mockResolvedValueOnce([SOURCE_WITH_SHOP_ROW] as never)
-    vi.mocked(db.query.shops.findMany).mockResolvedValueOnce([SHOP_ROW] as never)
 
     const response = await apiRequest('/v1/items')
 
@@ -97,9 +117,8 @@ describe('GET /v1/items', () => {
   })
 
   it('returns shop=null when the source has no shopId', async () => {
-    vi.mocked(db.query.items.findMany).mockResolvedValueOnce([ITEM_ROW] as never)
+    vi.mocked(db.query.items.findMany).mockResolvedValueOnce([itemWith([SOURCE_ROW])] as never)
     mockCountAllChain(1)
-    vi.mocked(db.query.itemSources.findMany).mockResolvedValueOnce([SOURCE_ROW] as never)
 
     const response = await apiRequest('/v1/items')
 
@@ -111,10 +130,20 @@ describe('GET /v1/items', () => {
     expect(body.items[0]?.sources[0]?.shop).toBeNull()
   })
 
-  it('honours pagination query params', async () => {
-    vi.mocked(db.query.items.findMany).mockResolvedValueOnce([ITEM_ROW] as never)
+  it('issues a single query for items with embedded sources+shop (no batch reloads)', async () => {
+    vi.mocked(db.query.items.findMany).mockResolvedValueOnce([itemWith([SOURCE_WITH_SHOP_ROW])] as never)
     mockCountAllChain(1)
-    vi.mocked(db.query.itemSources.findMany).mockResolvedValueOnce([] as never)
+
+    await apiRequest('/v1/items')
+
+    expect(vi.mocked(db.query.items.findMany)).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(db.query.itemSources.findMany)).not.toHaveBeenCalled()
+    expect(vi.mocked(db.query.shops.findMany)).not.toHaveBeenCalled()
+  })
+
+  it('honours pagination query params', async () => {
+    vi.mocked(db.query.items.findMany).mockResolvedValueOnce([itemWith([])] as never)
+    mockCountAllChain(1)
 
     const response = await apiRequest('/v1/items?page=2&limit=5')
 
@@ -125,9 +154,8 @@ describe('GET /v1/items', () => {
   })
 
   it('does not require authentication', async () => {
-    vi.mocked(db.query.items.findMany).mockResolvedValueOnce([ITEM_ROW] as never)
+    vi.mocked(db.query.items.findMany).mockResolvedValueOnce([itemWith([])] as never)
     mockCountAllChain(1)
-    vi.mocked(db.query.itemSources.findMany).mockResolvedValueOnce([] as never)
 
     const response = await apiRequest('/v1/items')
     expect(response.status).toBe(200)
@@ -140,8 +168,7 @@ describe('GET /v1/items/:id', () => {
   })
 
   it('returns 200 with item and embedded sources', async () => {
-    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(ITEM_ROW as never)
-    vi.mocked(db.query.itemSources.findMany).mockResolvedValueOnce([SOURCE_ROW] as never)
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(itemWith([SOURCE_ROW]) as never)
 
     const response = await apiRequest(`/v1/items/${ITEM_ROW.id}`)
 
@@ -154,9 +181,7 @@ describe('GET /v1/items/:id', () => {
   })
 
   it('embeds shop on sources that reference one', async () => {
-    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(ITEM_ROW as never)
-    vi.mocked(db.query.itemSources.findMany).mockResolvedValueOnce([SOURCE_WITH_SHOP_ROW] as never)
-    vi.mocked(db.query.shops.findMany).mockResolvedValueOnce([SHOP_ROW] as never)
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(itemWith([SOURCE_WITH_SHOP_ROW]) as never)
 
     const response = await apiRequest(`/v1/items/${ITEM_ROW.id}`)
 
@@ -180,8 +205,7 @@ describe('GET /v1/items/:id', () => {
   })
 
   it('does not require authentication', async () => {
-    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(ITEM_ROW as never)
-    vi.mocked(db.query.itemSources.findMany).mockResolvedValueOnce([] as never)
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(itemWith([]) as never)
 
     const response = await apiRequest(`/v1/items/${ITEM_ROW.id}`)
     expect(response.status).toBe(200)

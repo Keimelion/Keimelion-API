@@ -1,4 +1,6 @@
 import type { List } from '../../db/entities/lists/lists.schema.js'
+import type { ListCollaborator } from '../../db/entities/list-collaborators/list-collaborators.schema.js'
+import type { User } from '../../db/entities/users/users.schema.js'
 import type { UserDetail } from './user.js'
 
 export interface ListDetail {
@@ -10,6 +12,14 @@ export interface ListDetail {
   owner: UserDetail | null
   createdAt: Date
   updatedAt: Date
+}
+
+export interface ListCollaboratorWithUser extends ListCollaborator {
+  user: User | null
+}
+
+export interface ListRowWithOwner extends List {
+  collaborators: ListCollaboratorWithUser[]
 }
 
 export function toListDetail(list: List, owner: UserDetail | null): ListDetail {

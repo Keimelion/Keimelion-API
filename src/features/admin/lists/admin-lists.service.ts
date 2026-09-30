@@ -5,25 +5,22 @@ import { logger } from '../../../shared/utils/logger.js'
 import { pickDefined } from '../../../shared/utils/partial-update.js'
 import { runWrite, buildChanges } from '../../../shared/utils/admin-write.js'
 import { buildPaginatedResponse } from '../../../shared/schemas/pagination.js'
-import { toUserDetail } from '../../../shared/types/user.js'
 import {
   updateList,
   softDeleteList,
   restoreList,
 } from '../../../db/entities/lists/lists.repository.js'
 import {
-  findAllLists,
+  findAllListsWithOwner,
   countLists,
   findAdminListById,
+  findAdminListByIdWithOwner,
   findListIdsByOwnerUserId,
-  findOwnersByListIds,
 } from './admin-lists.repository.js'
 import { toAdminListDetail } from './admin-lists.mapper.js'
 import { AdminAction } from '../admin.enums.js'
 import type { List } from '../../../db/entities/lists/lists.schema.js'
 import type { UpdateListFields } from '../../../db/entities/lists/lists.repository.js'
-import type { User } from '../../../db/entities/users/users.schema.js'
-import type { UserDetail } from '../../../shared/types/user.js'
 import type { AdminListDetail } from './admin-lists.mapper.js'
 import type { ServiceResult } from '../../../shared/types/service.js'
 import type { PaginatedResponse } from '../../../shared/types/api.js'
@@ -41,26 +38,20 @@ export async function listLists(
   }
 
   const filters = { sort: input.sort, genericFilters: input.genericFilters, ownerListIds }
-  const [rows, total] = await Promise.all([findAllLists(input, filters), countLists(filters)])
-  const ownersMap = await findOwnersByListIds(rows.map((row) => row.id))
+  const [rows, total] = await Promise.all([findAllListsWithOwner(input, filters), countLists(filters)])
 
   return {
-    data: buildPaginatedResponse(
-      rows.map((row) => toAdminListDetail(row, resolveOwnerDetail(ownersMap, row.id))),
-      input,
-      total,
-    ),
+    data: buildPaginatedResponse(rows.map((row) => toAdminListDetail(row)), input, total),
     httpStatus: HttpStatus.OK,
   }
 }
 
 export async function getListById(id: string): Promise<ServiceResult<{ list: AdminListDetail }>> {
-  const row = await findAdminListById(id)
+  const row = await findAdminListByIdWithOwner(id)
   if (!row) return serviceError(ErrorCode.NOT_FOUND)
 
-  const ownersMap = await findOwnersByListIds([id])
   return {
-    data: { list: toAdminListDetail(row, resolveOwnerDetail(ownersMap, id)) },
+    data: { list: toAdminListDetail(row) },
     httpStatus: HttpStatus.OK,
   }
 }
@@ -91,9 +82,11 @@ export async function updateListById(
 
   logChanges(adminId, id, existingRow, fieldPatch)
 
-  const ownersMap = await findOwnersByListIds([id])
+  const updatedRow = await findAdminListByIdWithOwner(id)
+  if (!updatedRow) return serviceError(ErrorCode.INTERNAL_ERROR)
+
   return {
-    data: { list: toAdminListDetail(outcome.row, resolveOwnerDetail(ownersMap, id)) },
+    data: { list: toAdminListDetail(updatedRow) },
     httpStatus: HttpStatus.OK,
   }
 }
@@ -115,21 +108,18 @@ export async function restoreListById(
   const existingRow = await findAdminListById(id)
   if (!existingRow?.deletedAt) return serviceError(ErrorCode.NOT_FOUND)
 
-  const row = await restoreList(id)
-  if (!row) return serviceError(ErrorCode.INTERNAL_ERROR)
+  const restored = await restoreList(id)
+  if (!restored) return serviceError(ErrorCode.INTERNAL_ERROR)
 
   logger.info({ adminId, action: AdminAction.RESTORE_LIST, listId: id })
 
-  const ownersMap = await findOwnersByListIds([id])
+  const restoredRow = await findAdminListByIdWithOwner(id)
+  if (!restoredRow) return serviceError(ErrorCode.INTERNAL_ERROR)
+
   return {
-    data: { list: toAdminListDetail(row, resolveOwnerDetail(ownersMap, id)) },
+    data: { list: toAdminListDetail(restoredRow) },
     httpStatus: HttpStatus.OK,
   }
-}
-
-function resolveOwnerDetail(ownersMap: Map<string, User>, listId: string): UserDetail | null {
-  const owner = ownersMap.get(listId)
-  return owner ? toUserDetail(owner) : null
 }
 
 function logChanges(adminId: string, listId: string, existingRow: List, fieldPatch: UpdateListFields): void {

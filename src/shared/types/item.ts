@@ -37,6 +37,14 @@ export interface ItemSourceDetail {
   updatedAt: Date
 }
 
+export interface ItemSourceWithShop extends ItemSource {
+  shop: Shop | null
+}
+
+export interface ItemRowWithSources extends Item {
+  sources: ItemSourceWithShop[]
+}
+
 export interface ListItemDetail {
   id: string
   listId: string
@@ -68,12 +76,12 @@ export function toItemDetail(item: Item): ItemDetail {
   }
 }
 
-export function toItemSourceDetail(source: ItemSource, shop: Shop | null): ItemSourceDetail {
+export function toItemSourceDetail(source: ItemSourceWithShop): ItemSourceDetail {
   return {
     id: source.id,
     itemId: source.itemId,
     shopId: source.shopId ?? null,
-    shop: shop ? toShopPublic(shop) : null,
+    shop: source.shop ? toShopPublic(source.shop) : null,
     sourceUrl: source.sourceUrl ?? null,
     price: source.price ?? null,
     currency: source.currency,
@@ -82,20 +90,11 @@ export function toItemSourceDetail(source: ItemSource, shop: Shop | null): ItemS
   }
 }
 
-export function toItemWithSources(
-  item: Item,
-  sources: ItemSource[],
-  shopsById: Map<string, Shop>,
-): ItemWithSources {
+export function toItemWithSources(item: ItemRowWithSources): ItemWithSources {
   return {
     ...toItemDetail(item),
-    sources: sources.map((source) => toItemSourceDetail(source, resolveShop(source, shopsById))),
+    sources: item.sources.map((source) => toItemSourceDetail(source)),
   }
-}
-
-function resolveShop(source: ItemSource, shopsById: Map<string, Shop>): Shop | null {
-  if (!source.shopId) return null
-  return shopsById.get(source.shopId) ?? null
 }
 
 export function toListItemDetail(listItem: ListItem): ListItemDetail {

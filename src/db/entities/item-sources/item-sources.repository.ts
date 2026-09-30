@@ -1,7 +1,8 @@
-import { count, eq, inArray } from 'drizzle-orm'
+import { count, eq } from 'drizzle-orm'
 import { db } from '../../client.js'
 import { itemSources } from './item-sources.schema.js'
 import type { ItemSource } from './item-sources.schema.js'
+import type { ItemSourceWithShop } from '../../../shared/types/item.js'
 
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
@@ -25,24 +26,15 @@ export function findItemSourceById(id: string): Promise<ItemSource | undefined> 
   return db.query.itemSources.findFirst({ where: eq(itemSources.id, id) })
 }
 
-export function findItemSourcesByItemId(itemId: string): Promise<ItemSource[]> {
-  return db.query.itemSources.findMany({ where: eq(itemSources.itemId, itemId) })
+export function findItemSourceByIdWithShop(id: string): Promise<ItemSourceWithShop | undefined> {
+  return db.query.itemSources.findFirst({
+    where: eq(itemSources.id, id),
+    with: { shop: true },
+  })
 }
 
-export async function findItemSourcesByItemIds(itemIds: string[]): Promise<Map<string, ItemSource[]>> {
-  if (itemIds.length === 0) return new Map()
-
-  const rows = await db.query.itemSources.findMany({
-    where: inArray(itemSources.itemId, itemIds),
-  })
-
-  const grouped = new Map<string, ItemSource[]>()
-  for (const id of itemIds) grouped.set(id, [])
-  for (const row of rows) {
-    const bucket = grouped.get(row.itemId)
-    if (bucket) bucket.push(row)
-  }
-  return grouped
+export function findItemSourcesByItemId(itemId: string): Promise<ItemSource[]> {
+  return db.query.itemSources.findMany({ where: eq(itemSources.itemId, itemId) })
 }
 
 export async function updateItemSource(

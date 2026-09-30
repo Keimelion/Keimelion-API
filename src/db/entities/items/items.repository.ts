@@ -4,6 +4,7 @@ import { items } from './items.schema.js'
 import { listItems } from '../list-items/list-items.schema.js'
 import type { PaginationInput } from '../../../shared/schemas/pagination.js'
 import type { Item } from './items.schema.js'
+import type { ItemRowWithSources } from '../../../shared/types/item.js'
 
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
@@ -16,6 +17,10 @@ interface InsertItemInput {
 
 type UpdateItemFields = Partial<Pick<typeof items.$inferInsert, 'name' | 'description' | 'imageUrl'>>
 
+const ITEM_WITH_SOURCES_WITH = {
+  sources: { with: { shop: true } },
+} as const
+
 export async function insertItem(input: InsertItemInput, tx?: DbTransaction): Promise<Item | undefined> {
   const client = tx ?? db
   const [item] = await client.insert(items).values(input).returning()
@@ -24,6 +29,13 @@ export async function insertItem(input: InsertItemInput, tx?: DbTransaction): Pr
 
 export function findItemById(id: string): Promise<Item | undefined> {
   return db.query.items.findFirst({ where: eq(items.id, id) })
+}
+
+export function findItemByIdWithSources(id: string): Promise<ItemRowWithSources | undefined> {
+  return db.query.items.findFirst({
+    where: eq(items.id, id),
+    with: ITEM_WITH_SOURCES_WITH,
+  })
 }
 
 export async function updateItem(
@@ -51,12 +63,13 @@ export async function countListItemsReferencing(itemId: string, tx?: DbTransacti
   return row?.total ?? 0
 }
 
-export function findAllItems(pagination: PaginationInput): Promise<Item[]> {
+export function findAllItemsWithSources(pagination: PaginationInput): Promise<ItemRowWithSources[]> {
   const offset = (pagination.page - 1) * pagination.limit
   return db.query.items.findMany({
     orderBy: [desc(items.createdAt)],
     limit: pagination.limit,
     offset,
+    with: ITEM_WITH_SOURCES_WITH,
   })
 }
 

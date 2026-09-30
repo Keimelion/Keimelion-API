@@ -77,6 +77,6 @@ function buildListItemResponse(record: CreatedListItemRecord): ListItemResponse 
   return {
     ...toListItemDetail(record.listItem),
     item: toItemDetail(record.item),
-    source: record.source ? toItemSourceDetail(record.source, null) : null,
+    source: record.source ? toItemSourceDetail({ ...record.source, shop: null }) : null,
   }
 }
