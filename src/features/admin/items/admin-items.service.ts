@@ -18,15 +18,18 @@ import {
   findItemSourcesByItemIds,
   insertItemSource,
 } from '../../../db/entities/item-sources/item-sources.repository.js'
-import { findShopsByIds } from '../../../db/entities/shops/shops.repository.js'
+import {
+  collectAllSources,
+  loadShopsForSources,
+  resolveSourcesForItem,
+} from '../../../db/entities/item-sources/item-sources.hydrate.js'
 import { findAllItems, countItems } from './admin-items.repository.js'
-import { toAdminItemDetail } from './admin-items.mapper.js'
+import { toItemWithSources } from '../../../shared/types/item.js'
 import { AdminAction } from '../admin.enums.js'
 import type { items } from '../../../db/entities/items/items.schema.js'
 import type { Item } from '../../../db/entities/items/items.schema.js'
 import type { ItemSource } from '../../../db/entities/item-sources/item-sources.schema.js'
-import type { Shop } from '../../../db/entities/shops/shops.schema.js'
-import type { AdminItemDetail } from './admin-items.mapper.js'
+import type { ItemWithSources } from '../../../shared/types/item.js'
 import type { ServiceResult } from '../../../shared/types/service.js'
 import type { PaginatedResponse } from '../../../shared/types/api.js'
 import type { ListItemsInput } from './endpoints/list.js'
@@ -40,7 +43,7 @@ type ItemUpdateFields = Partial<Pick<typeof items.$inferInsert, 'name' | 'descri
 export async function createItem(
   adminId: string,
   input: CreateItemInput,
-): Promise<ServiceResult<{ item: AdminItemDetail }>> {
+): Promise<ServiceResult<{ item: ItemWithSources }>> {
   const outcome = await runWrite(() =>
     db.transaction(async (tx) => {
       const item = await insertItem(
@@ -77,22 +80,22 @@ export async function createItem(
   if ('errorCode' in outcome) return serviceError(outcome.errorCode)
 
   const shopsById = await loadShopsForSources(outcome.row.sources)
-  const item = toAdminItemDetail(outcome.row.item, outcome.row.sources, shopsById)
+  const item = toItemWithSources(outcome.row.item, outcome.row.sources, shopsById)
   logger.info({ adminId, action: AdminAction.CREATE_ITEM, itemId: item.id })
   return { data: { item }, httpStatus: HttpStatus.CREATED }
 }
 
 export async function listItems(
   input: ListItemsInput,
-): Promise<ServiceResult<PaginatedResponse<AdminItemDetail>>> {
+): Promise<ServiceResult<PaginatedResponse<ItemWithSources>>> {
   const [rows, total] = await Promise.all([findAllItems(input, input), countItems(input)])
 
   const sourcesByItemId = await findItemSourcesByItemIds(rows.map((row) => row.id))
-  const shopsById = await loadShopsForSources(collectSources(sourcesByItemId))
+  const shopsById = await loadShopsForSources(collectAllSources(sourcesByItemId))
 
   return {
     data: buildPaginatedResponse(
-      rows.map((row) => toAdminItemDetail(row, resolveSources(sourcesByItemId, row.id), shopsById)),
+      rows.map((row) => toItemWithSources(row, resolveSourcesForItem(sourcesByItemId, row.id), shopsById)),
       input,
       total,
     ),
@@ -102,7 +105,7 @@ export async function listItems(
 
 export async function getItemById(
   id: string,
-): Promise<ServiceResult<{ item: AdminItemDetail }>> {
+): Promise<ServiceResult<{ item: ItemWithSources }>> {
   const row = await findItemById(id)
   if (!row) return serviceError(ErrorCode.NOT_FOUND)
 
@@ -116,7 +119,7 @@ export async function updateItemById(
   adminId: string,
   id: string,
   input: UpdateItemInput,
-): Promise<ServiceResult<{ item: AdminItemDetail }>> {
+): Promise<ServiceResult<{ item: ItemWithSources }>> {
   const existingRow = await findItemById(id)
   if (!existingRow) return serviceError(ErrorCode.NOT_FOUND)
 
@@ -160,31 +163,8 @@ export async function deleteItemById(
   return { data: { message: 'Item deleted successfully' }, httpStatus: HttpStatus.OK }
 }
 
-async function hydrateItem(item: Item): Promise<AdminItemDetail> {
+async function hydrateItem(item: Item): Promise<ItemWithSources> {
   const sources = await findItemSourcesByItemId(item.id)
   const shopsById = await loadShopsForSources(sources)
-  return toAdminItemDetail(item, sources, shopsById)
-}
-
-function resolveSources(map: Map<string, ItemSource[]>, itemId: string): ItemSource[] {
-  return map.get(itemId) ?? []
-}
-
-function collectSources(map: Map<string, ItemSource[]>): ItemSource[] {
-  const all: ItemSource[] = []
-  for (const bucket of map.values()) all.push(...bucket)
-  return all
-}
-
-async function loadShopsForSources(sources: ItemSource[]): Promise<Map<string, Shop>> {
-  const shopIds = uniqueShopIds(sources)
-  return findShopsByIds(shopIds)
-}
-
-function uniqueShopIds(sources: ItemSource[]): string[] {
-  const seen = new Set<string>()
-  for (const source of sources) {
-    if (source.shopId) seen.add(source.shopId)
-  }
-  return [...seen]
+  return toItemWithSources(item, sources, shopsById)
 }

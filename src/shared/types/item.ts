@@ -15,6 +15,10 @@ export interface ItemDetail {
   updatedAt: Date
 }
 
+export interface ItemWithSources extends ItemDetail {
+  sources: ItemSourceDetail[]
+}
+
 export interface ItemWrite {
   name: string
   description: string | null
@@ -76,6 +80,22 @@ export function toItemSourceDetail(source: ItemSource, shop: Shop | null): ItemS
     createdAt: source.createdAt,
     updatedAt: source.updatedAt,
   }
+}
+
+export function toItemWithSources(
+  item: Item,
+  sources: ItemSource[],
+  shopsById: Map<string, Shop>,
+): ItemWithSources {
+  return {
+    ...toItemDetail(item),
+    sources: sources.map((source) => toItemSourceDetail(source, resolveShop(source, shopsById))),
+  }
+}
+
+function resolveShop(source: ItemSource, shopsById: Map<string, Shop>): Shop | null {
+  if (!source.shopId) return null
+  return shopsById.get(source.shopId) ?? null
 }
 
 export function toListItemDetail(listItem: ListItem): ListItemDetail {

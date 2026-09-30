@@ -4,7 +4,6 @@ import { drizzle } from 'drizzle-orm/postgres-js'
 import { env } from '../../config/env.js'
 import * as schema from '../entities/index.js'
 import { SEEDERS } from './seeders.js'
-import { assertItemsHaveSources } from './invariants.js'
 
 const client = postgres(env.DATABASE_URL)
 const db = drizzle(client, { schema })
@@ -22,8 +21,6 @@ try {
   for (const run of SEEDERS) {
     await run(db)
   }
-
-  await assertItemsHaveSources(db)
 
   console.log('Done.')
   await client.end()

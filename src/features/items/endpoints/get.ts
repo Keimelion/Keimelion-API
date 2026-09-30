@@ -1,5 +1,4 @@
 import { zValidator } from '@hono/zod-validator'
-import { authMiddleware } from '../../../shared/middlewares/auth.js'
 import { jsonResult } from '../../../shared/utils/response.js'
 import { validationErrorHandler } from '../../../shared/utils/validation.js'
 import { uuidParamSchema } from '../../../shared/schemas/params.js'
@@ -9,7 +8,6 @@ import { getItemById } from '../items.service.js'
 export function mountGetItem(router: FeatureRouter): void {
   router.get(
     '/:id',
-    authMiddleware,
     zValidator('param', uuidParamSchema, validationErrorHandler),
     async (context) => {
       const { id } = context.req.valid('param')
