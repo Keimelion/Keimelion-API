@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, uuid, varchar } from 'drizzle-orm/pg-core'
+import { pgTable, text, uuid, varchar } from 'drizzle-orm/pg-core'
 import { timestamps, uuidPrimaryKey } from '../../../shared/db/columns.js'
 import { users } from '../users/users.schema.js'
 
@@ -8,7 +8,6 @@ export const items = pgTable('items', {
   description: text('description'),
   imageUrl: text('image_url'),
   createdByUserId: uuid('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
-  deletedAt: timestamp('deleted_at', { withTimezone: true }),
   ...timestamps(),
 })
 

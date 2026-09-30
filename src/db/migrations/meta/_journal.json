@@ -61,36 +61,8 @@
     {
       "idx": 8,
       "version": "7",
-      "when": 1789830306270,
-      "tag": "0008_add-items-list-items",
-      "breakpoints": true
-    },
-    {
-      "idx": 9,
-      "version": "7",
-      "when": 1789921895815,
-      "tag": "0009_add_shops_and_item_sources_shop_id",
-      "breakpoints": true
-    },
-    {
-      "idx": 10,
-      "version": "7",
-      "when": 1790179034151,
-      "tag": "0010_admin_items_and_moderation_enum",
-      "breakpoints": true
-    },
-    {
-      "idx": 11,
-      "version": "7",
-      "when": 1790755855516,
-      "tag": "0011_drop-item-sources-is-primary",
-      "breakpoints": true
-    },
-    {
-      "idx": 12,
-      "version": "7",
-      "when": 1790757069813,
-      "tag": "0012_drop-item-moderation-status",
+      "when": 1790758355886,
+      "tag": "0008_add-items-lists-shops-item-sources",
       "breakpoints": true
     }
   ]

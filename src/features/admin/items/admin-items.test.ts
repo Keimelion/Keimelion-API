@@ -49,15 +49,8 @@ const ITEM_ROW = {
   description: 'A test item',
   imageUrl: null,
   createdByUserId: null,
-  deletedAt: null,
   createdAt: new Date('2024-01-01'),
   updatedAt: new Date('2024-01-01'),
-}
-
-const DELETED_ITEM_ROW = {
-  ...ITEM_ROW,
-  id: '00000000-0000-0000-0000-000000000011',
-  deletedAt: new Date('2024-06-01'),
 }
 
 const SHOP_ROW = {
@@ -84,6 +77,12 @@ const SOURCE_ROW = {
   updatedAt: new Date('2024-01-01'),
 }
 
+const SOURCE_WITH_SHOP_ROW = {
+  ...SOURCE_ROW,
+  id: '00000000-0000-0000-0000-000000000031',
+  shopId: SHOP_ROW.id,
+}
+
 const ACCESS_TOKEN_ENTRY = makeAccessTokenEntry(ADMIN_USER.id)
 
 function mockAdminAuth(): void {
@@ -104,6 +103,14 @@ function mockFindItemById(row: unknown): void {
 
 function mockFindItemSourceById(row: unknown): void {
   vi.mocked(db.query.itemSources.findFirst).mockResolvedValueOnce(row as never)
+}
+
+function mockFindShopById(row: unknown): void {
+  vi.mocked(db.query.shops.findFirst).mockResolvedValueOnce(row as never)
+}
+
+function mockFindShopsByIds(rows: unknown[]): void {
+  vi.mocked(db.query.shops.findMany).mockResolvedValueOnce(rows as never)
 }
 
 function buildTxInsertMock(rows: unknown[]): ReturnType<typeof vi.fn> {
@@ -176,24 +183,22 @@ function mockCountChain(total: number): void {
   vi.mocked(db.select).mockReturnValueOnce(chain as never)
 }
 
-function mockDeleteTransaction(refCount: number, returnRow: unknown): void {
-  const txUpdateReturnValue = {
-    set: vi.fn().mockReturnValue({
-      where: vi.fn().mockReturnValue({
-        returning: vi.fn().mockResolvedValue([returnRow]),
-      }),
-    }),
-  }
+function mockHardDeleteTransaction(refCount: number, deletedRow: unknown): void {
   const txSelectChain = {
     from: vi.fn().mockReturnThis(),
     where: vi.fn().mockResolvedValueOnce([{ total: refCount }]),
   }
+  const txDeleteChain = {
+    where: vi.fn().mockReturnValue({
+      returning: vi.fn().mockResolvedValue([deletedRow]),
+    }),
+  }
   vi.mocked(db.transaction).mockImplementationOnce((callback) => {
     const tx = {
       select: vi.fn().mockReturnValueOnce(txSelectChain),
-      update: vi.fn().mockReturnValueOnce(txUpdateReturnValue),
+      update: vi.fn(),
       insert: vi.fn(),
-      delete: vi.fn(),
+      delete: vi.fn().mockReturnValueOnce(txDeleteChain),
     }
     return callback(tx as never) as never
   })
@@ -250,6 +255,26 @@ describe('POST /v1/admin/items', () => {
     expect(body.item.createdByUserId).toBeNull()
     expect(body.item.sources).toHaveLength(1)
     expect(body.item.sources[0]?.itemId).toBe(ITEM_ROW.id)
+  })
+
+  it('embeds shop object on source when shopId is provided', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockCreateItemTransaction(ITEM_ROW, [SOURCE_WITH_SHOP_ROW])
+    mockFindShopsByIds([SHOP_ROW])
+
+    const response = await apiRequest('/v1/admin/items', {
+      method: 'POST',
+      token,
+      body: { name: 'Test Item', sources: [{ shopId: SHOP_ROW.id, currency: 'EUR' }] },
+    })
+
+    const body = await response.json() as {
+      item: { sources: { shopId: string | null; shop: { slug: string } | null }[] }
+    }
+    expect(response.status).toBe(201)
+    expect(body.item.sources[0]?.shopId).toBe(SHOP_ROW.id)
+    expect(body.item.sources[0]?.shop?.slug).toBe(SHOP_ROW.slug)
   })
 
   it('logs at info level on successful creation', async () => {
@@ -401,7 +426,26 @@ describe('GET /v1/admin/items', () => {
     expect(body.items[0]?.sources[0]?.itemId).toBe(ITEM_ROW.id)
   })
 
-  it('returns items with deletedAt and sources fields in response', async () => {
+  it('embeds shop object on sources that reference a shop', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    vi.mocked(db.query.items.findMany).mockResolvedValueOnce([ITEM_ROW] as never)
+    mockCountChain(1)
+    mockFindItemSourcesByItemIdOnce([SOURCE_WITH_SHOP_ROW])
+    mockFindShopsByIds([SHOP_ROW])
+
+    const response = await apiRequest('/v1/admin/items', { token })
+
+    const body = await response.json() as {
+      items: { sources: { shopId: string | null; shop: { slug: string } | null }[] }[]
+    }
+    expect(response.status).toBe(200)
+    expect(body.items[0]?.sources[0]?.shop?.slug).toBe(SHOP_ROW.slug)
+    expect(body.items[0]?.sources[0]?.shop).not.toHaveProperty('isActive')
+  })
+
+  it('does not expose deletedAt on items in response', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
 
@@ -412,9 +456,8 @@ describe('GET /v1/admin/items', () => {
     const response = await apiRequest('/v1/admin/items', { token })
 
     const body = await response.json() as { items: Record<string, unknown>[] }
-    expect(body.items[0]).toHaveProperty('deletedAt')
+    expect(body.items[0]).not.toHaveProperty('deletedAt')
     expect(body.items[0]).toHaveProperty('sources')
-    expect(Array.isArray(body.items[0]?.sources)).toBe(true)
   })
 
   it('returns an empty sources array for legacy items with zero sources', async () => {
@@ -511,6 +554,14 @@ describe('GET /v1/admin/items', () => {
     expect(response.status).toBe(422)
   })
 
+  it('returns 422 when deletedAt filter is provided (filter removed)', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    const response = await apiRequest('/v1/admin/items?deletedAt%5BisNull%5D=false', { token })
+    expect(response.status).toBe(422)
+  })
+
   it('returns 403 when user is not admin', async () => {
     const token = await generateTestToken(NON_ADMIN_USER.id)
     mockNonAdminAuth()
@@ -547,17 +598,17 @@ describe('GET /v1/admin/items/:id', () => {
     expect(body.item.sources).toHaveLength(1)
   })
 
-  it('returns 200 with deletedAt populated for soft-deleted items', async () => {
+  it('does not expose deletedAt on item', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
-    mockFindItemById(DELETED_ITEM_ROW)
+    mockFindItemById(ITEM_ROW)
     vi.mocked(db.query.itemSources.findMany).mockResolvedValueOnce([] as never)
 
-    const response = await apiRequest(`/v1/admin/items/${DELETED_ITEM_ROW.id}`, { token })
+    const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}`, { token })
 
-    const body = await response.json() as { item: { deletedAt: string | null } }
+    const body = await response.json() as { item: Record<string, unknown> }
     expect(response.status).toBe(200)
-    expect(body.item.deletedAt).not.toBeNull()
+    expect(body.item).not.toHaveProperty('deletedAt')
   })
 
   it('returns 404 when item does not exist', async () => {
@@ -727,33 +778,31 @@ describe('PATCH /v1/admin/items/:id', () => {
   })
 })
 
-describe('DELETE /v1/admin/items/:id (soft delete)', () => {
+describe('DELETE /v1/admin/items/:id (hard delete)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
   })
 
-  it('returns 200 with soft-deleted item (with sources) when no list_items reference it', async () => {
+  it('returns 200 with success message when no list_items reference it', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
-    mockDeleteTransaction(0, { ...ITEM_ROW, deletedAt: new Date() })
-    mockFindItemSourcesByItemIdOnce([SOURCE_ROW])
+    mockHardDeleteTransaction(0, ITEM_ROW)
 
     const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}`, {
       method: 'DELETE',
       token,
     })
 
-    const body = await response.json() as { item: { deletedAt: string | null; sources: unknown[] } }
+    const body = await response.json() as { message: string }
     expect(response.status).toBe(200)
-    expect(body.item.deletedAt).not.toBeNull()
-    expect(body.item.sources).toHaveLength(1)
+    expect(body.message).toContain('deleted')
   })
 
   it('returns 409 when list_items reference the item', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
-    mockDeleteTransaction(3, ITEM_ROW)
+    mockHardDeleteTransaction(3, ITEM_ROW)
 
     const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}`, {
       method: 'DELETE',
@@ -765,11 +814,23 @@ describe('DELETE /v1/admin/items/:id (soft delete)', () => {
     expect(body.metadata.message).toContain('3')
   })
 
-  it('logs at warn level on successful soft-delete', async () => {
+  it('returns 404 when the item does not exist', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
-    mockDeleteTransaction(0, { ...ITEM_ROW, deletedAt: new Date() })
-    mockFindItemSourcesByItemIdOnce([])
+    mockHardDeleteTransaction(0, undefined)
+
+    const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}`, {
+      method: 'DELETE',
+      token,
+    })
+
+    expect(response.status).toBe(404)
+  })
+
+  it('logs at warn level on successful delete', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockHardDeleteTransaction(0, ITEM_ROW)
 
     await apiRequest(`/v1/admin/items/${ITEM_ROW.id}`, {
       method: 'DELETE',
@@ -814,91 +875,20 @@ describe('DELETE /v1/admin/items/:id (soft delete)', () => {
   })
 })
 
-describe('POST /v1/admin/items/:id/restore', () => {
+describe('POST /v1/admin/items/:id/restore (removed)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
   })
 
-  it('returns 200 with restored item (with sources)', async () => {
+  it('returns 404 because the endpoint no longer exists', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
-    mockAdminAuth()
-    mockFindItemById(DELETED_ITEM_ROW)
-    mockUpdateItem({ ...DELETED_ITEM_ROW, deletedAt: null })
-    mockFindItemSourcesByItemIdOnce([])
-
-    const response = await apiRequest(`/v1/admin/items/${DELETED_ITEM_ROW.id}/restore`, {
-      method: 'POST',
-      token,
-    })
-
-    const body = await response.json() as { item: { deletedAt: null; sources: unknown[] } }
-    expect(response.status).toBe(200)
-    expect(body.item.deletedAt).toBeNull()
-    expect(body.item.sources).toEqual([])
-  })
-
-  it('returns 404 when item is not soft-deleted (live item)', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
-    mockAdminAuth()
-    mockFindItemById(ITEM_ROW)
 
     const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}/restore`, {
       method: 'POST',
       token,
     })
-
     expect(response.status).toBe(404)
-  })
-
-  it('returns 404 when item does not exist', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
-    mockAdminAuth()
-    mockFindItemById(undefined)
-
-    const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}/restore`, {
-      method: 'POST',
-      token,
-    })
-
-    expect(response.status).toBe(404)
-  })
-
-  it('logs at info level on successful restore', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
-    mockAdminAuth()
-    mockFindItemById(DELETED_ITEM_ROW)
-    mockUpdateItem({ ...DELETED_ITEM_ROW, deletedAt: null })
-    mockFindItemSourcesByItemIdOnce([])
-
-    await apiRequest(`/v1/admin/items/${DELETED_ITEM_ROW.id}/restore`, {
-      method: 'POST',
-      token,
-    })
-
-    expect(vi.mocked(logger.info)).toHaveBeenCalledWith(
-      expect.objectContaining({ action: 'admin_restore_item' }),
-    )
-  })
-
-  it('returns 403 when user is not admin', async () => {
-    const token = await generateTestToken(NON_ADMIN_USER.id)
-    mockNonAdminAuth()
-
-    const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}/restore`, {
-      method: 'POST',
-      token,
-    })
-
-    expect(response.status).toBe(403)
-  })
-
-  it('returns 401 when no token is provided', async () => {
-    const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}/restore`, {
-      method: 'POST',
-    })
-
-    expect(response.status).toBe(401)
   })
 })
 
@@ -936,12 +926,31 @@ describe('POST /v1/admin/items/:id/sources', () => {
       body: { currency: 'EUR' },
     })
 
-    const body = await response.json() as { source: { itemId: string } }
+    const body = await response.json() as { source: { itemId: string; shop: unknown } }
     expect(response.status).toBe(201)
     expect(body.source.itemId).toBe(ITEM_ROW.id)
+    expect(body.source.shop).toBeNull()
   })
 
-  it('returns 404 when parent item is soft-deleted', async () => {
+  it('returns 201 with embedded shop when shopId is provided', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindItemById(ITEM_ROW)
+    mockFindShopById(SHOP_ROW)
+    mockInsertItemSource(SOURCE_WITH_SHOP_ROW)
+
+    const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}/sources`, {
+      method: 'POST',
+      token,
+      body: { shopId: SHOP_ROW.id, currency: 'EUR' },
+    })
+
+    const body = await response.json() as { source: { shop: { slug: string } | null } }
+    expect(response.status).toBe(201)
+    expect(body.source.shop?.slug).toBe(SHOP_ROW.slug)
+  })
+
+  it('returns 404 when parent item does not exist', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
     mockFindItemById(undefined)
@@ -959,7 +968,7 @@ describe('POST /v1/admin/items/:id/sources', () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
     mockFindItemById(ITEM_ROW)
-    vi.mocked(db.query.shops.findFirst).mockResolvedValueOnce(undefined)
+    mockFindShopById(undefined)
 
     const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}/sources`, {
       method: 'POST',
@@ -1083,9 +1092,32 @@ describe('PATCH /v1/admin/items/:id/sources/:sourceId', () => {
       },
     )
 
-    const body = await response.json() as { source: { currency: string } }
+    const body = await response.json() as { source: { currency: string; shop: unknown } }
     expect(response.status).toBe(200)
     expect(body.source.currency).toBe('USD')
+    expect(body.source.shop).toBeNull()
+  })
+
+  it('embeds the updated shop when shopId is patched to a valid shop', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindItemSourceById(SOURCE_ROW)
+    mockFindShopById(SHOP_ROW)
+    mockUpdateItemSource({ ...SOURCE_ROW, shopId: SHOP_ROW.id })
+    mockFindShopById(SHOP_ROW)
+
+    const response = await apiRequest(
+      `/v1/admin/items/${ITEM_ROW.id}/sources/${SOURCE_ROW.id}`,
+      {
+        method: 'PATCH',
+        token,
+        body: { shopId: SHOP_ROW.id },
+      },
+    )
+
+    const body = await response.json() as { source: { shop: { slug: string } | null } }
+    expect(response.status).toBe(200)
+    expect(body.source.shop?.slug).toBe(SHOP_ROW.slug)
   })
 
   it('logs at info level on successful update', async () => {

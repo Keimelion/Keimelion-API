@@ -1,6 +1,9 @@
 import type { Item } from '../../db/entities/items/items.schema.js'
 import type { ItemSource } from '../../db/entities/item-sources/item-sources.schema.js'
 import type { ListItem } from '../../db/entities/list-items/list-items.schema.js'
+import type { Shop } from '../../db/entities/shops/shops.schema.js'
+import type { ShopPublic } from './shop.js'
+import { toShopPublic } from './shop.js'
 
 export interface ItemDetail {
   id: string
@@ -22,6 +25,7 @@ export interface ItemSourceDetail {
   id: string
   itemId: string
   shopId: string | null
+  shop: ShopPublic | null
   sourceUrl: string | null
   price: string | null
   currency: string
@@ -60,11 +64,12 @@ export function toItemDetail(item: Item): ItemDetail {
   }
 }
 
-export function toItemSourceDetail(source: ItemSource): ItemSourceDetail {
+export function toItemSourceDetail(source: ItemSource, shop: Shop | null): ItemSourceDetail {
   return {
     id: source.id,
     itemId: source.itemId,
     shopId: source.shopId ?? null,
+    shop: shop ? toShopPublic(shop) : null,
     sourceUrl: source.sourceUrl ?? null,
     price: source.price ?? null,
     currency: source.currency,

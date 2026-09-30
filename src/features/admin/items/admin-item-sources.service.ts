@@ -16,6 +16,8 @@ import {
 import { findShopById } from '../../../db/entities/shops/shops.repository.js'
 import { toItemSourceDetail } from '../../../shared/types/item.js'
 import { AdminAction } from '../admin.enums.js'
+import type { Shop } from '../../../db/entities/shops/shops.schema.js'
+import type { ItemSource } from '../../../db/entities/item-sources/item-sources.schema.js'
 import type { ItemSourceDetail } from '../../../shared/types/item.js'
 import type { ServiceResult } from '../../../shared/types/service.js'
 import type { CreateItemSourceInput } from './endpoints/create-source.js'
@@ -29,9 +31,11 @@ export async function createItemSource(
   const item = await findItemById(itemId)
   if (!item) return serviceError(ErrorCode.NOT_FOUND)
 
+  let shop: Shop | null = null
   if (input.shopId !== null) {
-    const shop = await findShopById(input.shopId)
-    if (!shop?.isActive) return serviceError(ErrorCode.NOT_FOUND)
+    const found = await findShopById(input.shopId)
+    if (!found?.isActive) return serviceError(ErrorCode.NOT_FOUND)
+    shop = found
   }
 
   const outcome = await runWrite(() =>
@@ -45,7 +49,7 @@ export async function createItemSource(
   )
   if ('errorCode' in outcome) return serviceError(outcome.errorCode)
 
-  const source = toItemSourceDetail(outcome.row)
+  const source = toItemSourceDetail(outcome.row, shop)
   logger.info({ adminId, action: AdminAction.CREATE_ITEM_SOURCE, itemId, sourceId: source.id })
   return { data: { source }, httpStatus: HttpStatus.CREATED }
 }
@@ -74,8 +78,14 @@ export async function updateItemSourceById(
   const outcome = await runWrite(() => updateItemSource(sourceId, fields))
   if ('errorCode' in outcome) return serviceError(outcome.errorCode)
 
+  const shop = await resolveShopForSource(outcome.row)
   logger.info({ adminId, action: AdminAction.UPDATE_ITEM_SOURCE, itemId, sourceId })
-  return { data: { source: toItemSourceDetail(outcome.row) }, httpStatus: HttpStatus.OK }
+  return { data: { source: toItemSourceDetail(outcome.row, shop) }, httpStatus: HttpStatus.OK }
+}
+
+async function resolveShopForSource(source: ItemSource): Promise<Shop | null> {
+  if (!source.shopId) return null
+  return (await findShopById(source.shopId)) ?? null
 }
 
 export async function deleteItemSourceById(

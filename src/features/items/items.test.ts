@@ -33,7 +33,6 @@ const ITEM_ROW = {
   description: 'A test item',
   imageUrl: null,
   createdByUserId: null,
-  deletedAt: null,
   createdAt: new Date('2024-01-01'),
   updatedAt: new Date('2024-01-01'),
 }
@@ -42,6 +41,19 @@ const OTHER_ITEM_ROW = {
   ...ITEM_ROW,
   id: '00000000-0000-0000-0000-000000000011',
   name: 'Other Item',
+}
+
+const SHOP_ROW = {
+  id: '00000000-0000-0000-0000-000000000020',
+  slug: 'amazon',
+  name: 'Amazon',
+  domain: 'amazon.com',
+  logoUrl: null,
+  isAffiliated: false,
+  sortOrder: 0,
+  isActive: true,
+  createdAt: new Date('2024-01-01'),
+  updatedAt: new Date('2024-01-01'),
 }
 
 const SOURCE_ROW = {
@@ -55,6 +67,12 @@ const SOURCE_ROW = {
   updatedAt: new Date('2024-01-01'),
 }
 
+const SOURCE_WITH_SHOP_ROW = {
+  ...SOURCE_ROW,
+  id: '00000000-0000-0000-0000-000000000031',
+  shopId: SHOP_ROW.id,
+}
+
 const ACCESS_TOKEN_ENTRY = makeAccessTokenEntry(AUTH_USER.id)
 
 function mockAuth(): void {
@@ -62,10 +80,9 @@ function mockAuth(): void {
   vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(AUTH_USER as never)
 }
 
-function mockCountChain(total: number): void {
+function mockCountAllChain(total: number): void {
   const chain = {
-    from: vi.fn().mockReturnThis(),
-    where: vi.fn().mockResolvedValueOnce([{ total }]),
+    from: vi.fn().mockResolvedValueOnce([{ total }]),
   }
   vi.mocked(db.select).mockReturnValueOnce(chain as never)
 }
@@ -80,7 +97,7 @@ describe('GET /v1/items', () => {
     mockAuth()
 
     vi.mocked(db.query.items.findMany).mockResolvedValueOnce([ITEM_ROW, OTHER_ITEM_ROW] as never)
-    mockCountChain(2)
+    mockCountAllChain(2)
     vi.mocked(db.query.itemSources.findMany).mockResolvedValueOnce([SOURCE_ROW] as never)
 
     const response = await apiRequest('/v1/items', { token })
@@ -97,12 +114,50 @@ describe('GET /v1/items', () => {
     expect(body.items[1]?.sources).toHaveLength(0)
   })
 
-  it('does not expose moderationStatus on response items', async () => {
+  it('embeds shop object on sources that reference a shop', async () => {
     const token = await generateTestToken(AUTH_USER.id)
     mockAuth()
 
     vi.mocked(db.query.items.findMany).mockResolvedValueOnce([ITEM_ROW] as never)
-    mockCountChain(1)
+    mockCountAllChain(1)
+    vi.mocked(db.query.itemSources.findMany).mockResolvedValueOnce([SOURCE_WITH_SHOP_ROW] as never)
+    vi.mocked(db.query.shops.findMany).mockResolvedValueOnce([SHOP_ROW] as never)
+
+    const response = await apiRequest('/v1/items', { token })
+
+    const body = await response.json() as {
+      items: { sources: { shopId: string | null; shop: { id: string; slug: string } | null }[] }[]
+    }
+    expect(response.status).toBe(200)
+    expect(body.items[0]?.sources[0]?.shopId).toBe(SHOP_ROW.id)
+    expect(body.items[0]?.sources[0]?.shop?.slug).toBe(SHOP_ROW.slug)
+    expect(body.items[0]?.sources[0]?.shop).not.toHaveProperty('isActive')
+  })
+
+  it('returns shop=null when the source has no shopId', async () => {
+    const token = await generateTestToken(AUTH_USER.id)
+    mockAuth()
+
+    vi.mocked(db.query.items.findMany).mockResolvedValueOnce([ITEM_ROW] as never)
+    mockCountAllChain(1)
+    vi.mocked(db.query.itemSources.findMany).mockResolvedValueOnce([SOURCE_ROW] as never)
+
+    const response = await apiRequest('/v1/items', { token })
+
+    const body = await response.json() as {
+      items: { sources: { shopId: string | null; shop: unknown }[] }[]
+    }
+    expect(response.status).toBe(200)
+    expect(body.items[0]?.sources[0]?.shopId).toBeNull()
+    expect(body.items[0]?.sources[0]?.shop).toBeNull()
+  })
+
+  it('does not expose moderationStatus or deletedAt on response items', async () => {
+    const token = await generateTestToken(AUTH_USER.id)
+    mockAuth()
+
+    vi.mocked(db.query.items.findMany).mockResolvedValueOnce([ITEM_ROW] as never)
+    mockCountAllChain(1)
     vi.mocked(db.query.itemSources.findMany).mockResolvedValueOnce([] as never)
 
     const response = await apiRequest('/v1/items', { token })
@@ -110,21 +165,7 @@ describe('GET /v1/items', () => {
     const body = await response.json() as { items: Record<string, unknown>[] }
     expect(response.status).toBe(200)
     expect(body.items[0]).not.toHaveProperty('moderationStatus')
-  })
-
-  it('excludes soft-deleted items (repository filter)', async () => {
-    const token = await generateTestToken(AUTH_USER.id)
-    mockAuth()
-
-    vi.mocked(db.query.items.findMany).mockResolvedValueOnce([] as never)
-    mockCountChain(0)
-
-    const response = await apiRequest('/v1/items', { token })
-
-    const body = await response.json() as { items: unknown[]; pagination: { total: number } }
-    expect(response.status).toBe(200)
-    expect(body.items).toHaveLength(0)
-    expect(body.pagination.total).toBe(0)
+    expect(body.items[0]).not.toHaveProperty('deletedAt')
   })
 
   it('honours pagination query params', async () => {
@@ -132,7 +173,7 @@ describe('GET /v1/items', () => {
     mockAuth()
 
     vi.mocked(db.query.items.findMany).mockResolvedValueOnce([ITEM_ROW] as never)
-    mockCountChain(1)
+    mockCountAllChain(1)
     vi.mocked(db.query.itemSources.findMany).mockResolvedValueOnce([] as never)
 
     const response = await apiRequest('/v1/items?page=2&limit=5', { token })
@@ -163,14 +204,32 @@ describe('GET /v1/items/:id', () => {
 
     const response = await apiRequest(`/v1/items/${ITEM_ROW.id}`, { token })
 
-    const body = await response.json() as { item: { id: string; sources: { itemId: string }[] } }
+    const body = await response.json() as { item: { id: string; sources: { itemId: string; shop: unknown }[] } }
     expect(response.status).toBe(200)
     expect(body.item.id).toBe(ITEM_ROW.id)
     expect(body.item.sources).toHaveLength(1)
     expect(body.item.sources[0]?.itemId).toBe(ITEM_ROW.id)
+    expect(body.item.sources[0]?.shop).toBeNull()
   })
 
-  it('does not expose moderationStatus on response item', async () => {
+  it('embeds shop on sources that reference one', async () => {
+    const token = await generateTestToken(AUTH_USER.id)
+    mockAuth()
+
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(ITEM_ROW as never)
+    vi.mocked(db.query.itemSources.findMany).mockResolvedValueOnce([SOURCE_WITH_SHOP_ROW] as never)
+    vi.mocked(db.query.shops.findMany).mockResolvedValueOnce([SHOP_ROW] as never)
+
+    const response = await apiRequest(`/v1/items/${ITEM_ROW.id}`, { token })
+
+    const body = await response.json() as {
+      item: { sources: { shop: { slug: string } | null }[] }
+    }
+    expect(response.status).toBe(200)
+    expect(body.item.sources[0]?.shop?.slug).toBe(SHOP_ROW.slug)
+  })
+
+  it('does not expose moderationStatus or deletedAt on response item', async () => {
     const token = await generateTestToken(AUTH_USER.id)
     mockAuth()
 
@@ -182,19 +241,10 @@ describe('GET /v1/items/:id', () => {
     const body = await response.json() as { item: Record<string, unknown> }
     expect(response.status).toBe(200)
     expect(body.item).not.toHaveProperty('moderationStatus')
+    expect(body.item).not.toHaveProperty('deletedAt')
   })
 
   it('returns 404 when item does not exist', async () => {
-    const token = await generateTestToken(AUTH_USER.id)
-    mockAuth()
-
-    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(undefined)
-
-    const response = await apiRequest(`/v1/items/${ITEM_ROW.id}`, { token })
-    expect(response.status).toBe(404)
-  })
-
-  it('returns 404 for soft-deleted items (repository excludes them)', async () => {
     const token = await generateTestToken(AUTH_USER.id)
     mockAuth()
 
@@ -217,3 +267,4 @@ describe('GET /v1/items/:id', () => {
     expect(response.status).toBe(401)
   })
 })
+

@@ -479,7 +479,6 @@ describe('GET /v1/users/me/export', () => {
       description: null,
       imageUrl: null,
       createdByUserId: SAFE_USER.id,
-      deletedAt: null,
       createdAt: new Date('2024-01-01'),
       updatedAt: new Date('2024-01-01'),
     }

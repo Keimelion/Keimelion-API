@@ -40,3 +40,14 @@ export function toShopDetail(row: Shop): ShopDetail {
     updatedAt: row.updatedAt,
   }
 }
+
+export function toShopPublic(row: Shop): ShopPublic {
+  return {
+    id: row.id,
+    slug: row.slug,
+    name: row.name,
+    domain: row.domain ?? null,
+    logoUrl: row.logoUrl ?? null,
+    isAffiliated: row.isAffiliated,
+  }
+}
