@@ -25,7 +25,6 @@ const createItemSourceInputSchema = z
     sourceUrl: httpsSourceUrlSchema.optional().transform((value) => value ?? null),
     price: priceSchema.optional().transform((value) => value ?? null),
     currency: currencySchema.default('EUR'),
-    isPrimary: z.boolean().default(false),
   })
   .strict()
 
@@ -41,13 +40,7 @@ const adminCreateItemSchema = z
       .transform((value) => (value === '' ? null : (value ?? null))),
     imageUrl: logoUrlSchema.optional().transform((value) => value ?? null),
     moderationStatus: z.enum(MODERATION_STATUS_VALUES).default('approved'),
-    sources: z
-      .array(createItemSourceInputSchema)
-      .min(1)
-      .refine(
-        (sources) => sources.filter((source) => source.isPrimary).length <= 1,
-        { message: 'At most one source can be marked as primary' },
-      ),
+    sources: z.array(createItemSourceInputSchema).min(1),
   })
   .strict()
 

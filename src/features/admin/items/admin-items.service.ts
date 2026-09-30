@@ -63,7 +63,6 @@ export async function createItem(
             sourceUrl: source.sourceUrl,
             price: source.price,
             currency: source.currency,
-            isPrimary: source.isPrimary,
           },
           tx,
         )

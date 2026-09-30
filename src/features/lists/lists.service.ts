@@ -62,7 +62,6 @@ async function createManualListItem(
     sourceUrl: null,
     price: String(input.price),
     currency: DEFAULT_CURRENCY,
-    isPrimary: true,
   }, tx)) ?? null
 
   const listItem = await insertListItem({

@@ -21,7 +21,6 @@ const adminCreateItemSourceSchema = z
     sourceUrl: httpsSourceUrlSchema.optional().transform((value) => value ?? null),
     price: priceSchema.optional().transform((value) => value ?? null),
     currency: currencySchema.default('EUR'),
-    isPrimary: z.boolean().default(false),
   })
   .strict()
 

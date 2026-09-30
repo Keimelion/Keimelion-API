@@ -82,7 +82,6 @@ const itemSourcesEntityDescriptor: ExportEntityDescriptor = {
     'sourceUrl',
     'price',
     'currency',
-    'isPrimary',
     'createdAt',
     'updatedAt',
   ],

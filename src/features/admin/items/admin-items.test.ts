@@ -81,7 +81,6 @@ const SOURCE_ROW = {
   sourceUrl: null,
   price: null,
   currency: 'EUR',
-  isPrimary: false,
   createdAt: new Date('2024-01-01'),
   updatedAt: new Date('2024-01-01'),
 }
@@ -143,6 +142,24 @@ function mockFindItemSourcesByItemIdOnce(rows: unknown[]): void {
 }
 
 function mockUpdateItem(returnRow: unknown): void {
+  vi.mocked(db.update).mockReturnValueOnce({
+    set: vi.fn().mockReturnValueOnce({
+      where: vi.fn().mockReturnValueOnce({
+        returning: vi.fn().mockResolvedValueOnce([returnRow]),
+      }),
+    }),
+  } as never)
+}
+
+function mockInsertItemSource(returnRow: unknown): void {
+  vi.mocked(db.insert).mockReturnValueOnce({
+    values: vi.fn().mockReturnValueOnce({
+      returning: vi.fn().mockResolvedValueOnce([returnRow]),
+    }),
+  } as never)
+}
+
+function mockUpdateItemSource(returnRow: unknown): void {
   vi.mocked(db.update).mockReturnValueOnce({
     set: vi.fn().mockReturnValueOnce({
       where: vi.fn().mockReturnValueOnce({
@@ -223,7 +240,7 @@ describe('POST /v1/admin/items', () => {
     const response = await apiRequest('/v1/admin/items', {
       method: 'POST',
       token,
-      body: { name: 'Test Item', sources: [{ currency: 'EUR', isPrimary: false }] },
+      body: { name: 'Test Item', sources: [{ currency: 'EUR' }] },
     })
 
     const body = await response.json() as {
@@ -244,7 +261,7 @@ describe('POST /v1/admin/items', () => {
     const response = await apiRequest('/v1/admin/items', {
       method: 'POST',
       token,
-      body: { name: 'Test Item', sources: [{ currency: 'EUR', isPrimary: false }] },
+      body: { name: 'Test Item', sources: [{ currency: 'EUR' }] },
     })
 
     const body = await response.json() as { item: { moderationStatus: string } }
@@ -263,7 +280,7 @@ describe('POST /v1/admin/items', () => {
       body: {
         name: 'Test Item',
         moderationStatus: 'pending',
-        sources: [{ currency: 'EUR', isPrimary: false }],
+        sources: [{ currency: 'EUR' }],
       },
     })
 
@@ -280,7 +297,7 @@ describe('POST /v1/admin/items', () => {
     await apiRequest('/v1/admin/items', {
       method: 'POST',
       token,
-      body: { name: 'Test Item', sources: [{ currency: 'EUR', isPrimary: false }] },
+      body: { name: 'Test Item', sources: [{ currency: 'EUR' }] },
     })
 
     expect(vi.mocked(logger.info)).toHaveBeenCalledWith(
@@ -314,25 +331,6 @@ describe('POST /v1/admin/items', () => {
     expect(response.status).toBe(422)
   })
 
-  it('returns 422 when more than one source is marked as primary', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
-    mockAdminAuth()
-
-    const response = await apiRequest('/v1/admin/items', {
-      method: 'POST',
-      token,
-      body: {
-        name: 'Test Item',
-        sources: [
-          { currency: 'EUR', isPrimary: true },
-          { currency: 'USD', isPrimary: true },
-        ],
-      },
-    })
-
-    expect(response.status).toBe(422)
-  })
-
   it('returns 500 and rolls back when a source insert fails', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
@@ -341,7 +339,7 @@ describe('POST /v1/admin/items', () => {
     const response = await apiRequest('/v1/admin/items', {
       method: 'POST',
       token,
-      body: { name: 'Test Item', sources: [{ currency: 'EUR', isPrimary: false }] },
+      body: { name: 'Test Item', sources: [{ currency: 'EUR' }] },
     })
 
     expect(response.status).toBe(500)
@@ -354,7 +352,7 @@ describe('POST /v1/admin/items', () => {
     const response = await apiRequest('/v1/admin/items', {
       method: 'POST',
       token,
-      body: { name: '', sources: [{ currency: 'EUR', isPrimary: false }] },
+      body: { name: '', sources: [{ currency: 'EUR' }] },
     })
 
     expect(response.status).toBe(422)
@@ -367,7 +365,7 @@ describe('POST /v1/admin/items', () => {
     const response = await apiRequest('/v1/admin/items', {
       method: 'POST',
       token,
-      body: { name: 'Test', moderationStatus: 'invalid', sources: [{ currency: 'EUR', isPrimary: false }] },
+      body: { name: 'Test', moderationStatus: 'invalid', sources: [{ currency: 'EUR' }] },
     })
 
     expect(response.status).toBe(422)
@@ -383,7 +381,7 @@ describe('POST /v1/admin/items', () => {
       body: {
         name: 'Test',
         imageUrl: 'http://example.com/image.jpg',
-        sources: [{ currency: 'EUR', isPrimary: false }],
+        sources: [{ currency: 'EUR' }],
       },
     })
 
@@ -397,7 +395,7 @@ describe('POST /v1/admin/items', () => {
     const response = await apiRequest('/v1/admin/items', {
       method: 'POST',
       token,
-      body: { name: 'Test', unknownField: 'value', sources: [{ currency: 'EUR', isPrimary: false }] },
+      body: { name: 'Test', unknownField: 'value', sources: [{ currency: 'EUR' }] },
     })
 
     expect(response.status).toBe(422)
@@ -410,7 +408,7 @@ describe('POST /v1/admin/items', () => {
     const response = await apiRequest('/v1/admin/items', {
       method: 'POST',
       token,
-      body: { name: 'Test', sources: [{ currency: 'EUR', isPrimary: false }] },
+      body: { name: 'Test', sources: [{ currency: 'EUR' }] },
     })
 
     expect(response.status).toBe(403)
@@ -419,7 +417,7 @@ describe('POST /v1/admin/items', () => {
   it('returns 401 when no token is provided', async () => {
     const response = await apiRequest('/v1/admin/items', {
       method: 'POST',
-      body: { name: 'Test', sources: [{ currency: 'EUR', isPrimary: false }] },
+      body: { name: 'Test', sources: [{ currency: 'EUR' }] },
     })
 
     expect(response.status).toBe(401)
@@ -1023,31 +1021,12 @@ describe('POST /v1/admin/items/:id/sources', () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
     mockFindItemById(ITEM_ROW)
-
-    vi.mocked(db.transaction).mockImplementationOnce((callback) => {
-      const tx = {
-        insert: vi.fn().mockReturnValueOnce({
-          values: vi.fn().mockReturnValueOnce({
-            returning: vi.fn().mockResolvedValueOnce([SOURCE_ROW]),
-          }),
-        }),
-        update: vi.fn().mockReturnValue({
-          set: vi.fn().mockReturnValue({
-            where: vi.fn().mockReturnValue({
-              returning: vi.fn().mockResolvedValue([]),
-            }),
-          }),
-        }),
-        delete: vi.fn(),
-        select: vi.fn(),
-      }
-      return callback(tx as never) as never
-    })
+    mockInsertItemSource(SOURCE_ROW)
 
     const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}/sources`, {
       method: 'POST',
       token,
-      body: { currency: 'EUR', isPrimary: false },
+      body: { currency: 'EUR' },
     })
 
     const body = await response.json() as { source: { itemId: string } }
@@ -1063,47 +1042,10 @@ describe('POST /v1/admin/items/:id/sources', () => {
     const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}/sources`, {
       method: 'POST',
       token,
-      body: { currency: 'EUR', isPrimary: false },
+      body: { currency: 'EUR' },
     })
 
     expect(response.status).toBe(404)
-  })
-
-  it('demotes existing primary when isPrimary=true', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
-    mockAdminAuth()
-    mockFindItemById(ITEM_ROW)
-
-    const demoteUpdateMock = vi.fn().mockReturnValue({
-      where: vi.fn().mockReturnValue({
-        returning: vi.fn().mockResolvedValue([]),
-      }),
-    })
-    const insertMock = vi.fn().mockReturnValueOnce({
-      values: vi.fn().mockReturnValueOnce({
-        returning: vi.fn().mockResolvedValueOnce([{ ...SOURCE_ROW, isPrimary: true }]),
-      }),
-    })
-    const setMock = vi.fn().mockReturnValueOnce(demoteUpdateMock())
-    const updateMock = vi.fn().mockReturnValueOnce({ set: setMock })
-
-    vi.mocked(db.transaction).mockImplementationOnce((callback) => {
-      const tx = {
-        insert: insertMock,
-        update: updateMock,
-        delete: vi.fn(),
-        select: vi.fn(),
-      }
-      return callback(tx as never) as never
-    })
-
-    await apiRequest(`/v1/admin/items/${ITEM_ROW.id}/sources`, {
-      method: 'POST',
-      token,
-      body: { isPrimary: true },
-    })
-
-    expect(updateMock).toHaveBeenCalledOnce()
   })
 
   it('returns 404 when shopId does not exist or is inactive', async () => {
@@ -1115,7 +1057,7 @@ describe('POST /v1/admin/items/:id/sources', () => {
     const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}/sources`, {
       method: 'POST',
       token,
-      body: { shopId: SHOP_ROW.id, isPrimary: false },
+      body: { shopId: SHOP_ROW.id },
     })
 
     expect(response.status).toBe(404)
@@ -1177,22 +1119,7 @@ describe('POST /v1/admin/items/:id/sources', () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
     mockFindItemById(ITEM_ROW)
-
-    vi.mocked(db.transaction).mockImplementationOnce((callback) => {
-      const tx = {
-        insert: vi.fn().mockReturnValueOnce({
-          values: vi.fn().mockReturnValueOnce({
-            returning: vi.fn().mockResolvedValueOnce([SOURCE_ROW]),
-          }),
-        }),
-        update: vi.fn().mockReturnValue({
-          set: vi.fn().mockReturnValue({ where: vi.fn().mockReturnValue({ returning: vi.fn().mockResolvedValue([]) }) }),
-        }),
-        delete: vi.fn(),
-        select: vi.fn(),
-      }
-      return callback(tx as never) as never
-    })
+    mockInsertItemSource(SOURCE_ROW)
 
     await apiRequest(`/v1/admin/items/${ITEM_ROW.id}/sources`, {
       method: 'POST',
@@ -1238,22 +1165,7 @@ describe('PATCH /v1/admin/items/:id/sources/:sourceId', () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
     mockFindItemSourceById(SOURCE_ROW)
-
-    vi.mocked(db.transaction).mockImplementationOnce((callback) => {
-      const tx = {
-        update: vi.fn().mockReturnValueOnce({
-          set: vi.fn().mockReturnValueOnce({
-            where: vi.fn().mockReturnValueOnce({
-              returning: vi.fn().mockResolvedValueOnce([{ ...SOURCE_ROW, currency: 'USD' }]),
-            }),
-          }),
-        }),
-        insert: vi.fn(),
-        delete: vi.fn(),
-        select: vi.fn(),
-      }
-      return callback(tx as never) as never
-    })
+    mockUpdateItemSource({ ...SOURCE_ROW, currency: 'USD' })
 
     const response = await apiRequest(
       `/v1/admin/items/${ITEM_ROW.id}/sources/${SOURCE_ROW.id}`,
@@ -1273,22 +1185,7 @@ describe('PATCH /v1/admin/items/:id/sources/:sourceId', () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
     mockFindItemSourceById(SOURCE_ROW)
-
-    vi.mocked(db.transaction).mockImplementationOnce((callback) => {
-      const tx = {
-        update: vi.fn().mockReturnValueOnce({
-          set: vi.fn().mockReturnValueOnce({
-            where: vi.fn().mockReturnValueOnce({
-              returning: vi.fn().mockResolvedValueOnce([{ ...SOURCE_ROW, currency: 'USD' }]),
-            }),
-          }),
-        }),
-        insert: vi.fn(),
-        delete: vi.fn(),
-        select: vi.fn(),
-      }
-      return callback(tx as never) as never
-    })
+    mockUpdateItemSource({ ...SOURCE_ROW, currency: 'USD' })
 
     await apiRequest(
       `/v1/admin/items/${ITEM_ROW.id}/sources/${SOURCE_ROW.id}`,

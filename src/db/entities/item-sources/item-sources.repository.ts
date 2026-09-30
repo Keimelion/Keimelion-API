@@ -1,4 +1,4 @@
-import { and, count, eq, inArray } from 'drizzle-orm'
+import { count, eq, inArray } from 'drizzle-orm'
 import { db } from '../../client.js'
 import { itemSources } from './item-sources.schema.js'
 import type { ItemSource } from './item-sources.schema.js'
@@ -11,10 +11,9 @@ interface InsertItemSourceInput {
   sourceUrl: string | null
   price: string | null
   currency: string
-  isPrimary: boolean
 }
 
-type UpdateItemSourceFields = Partial<Pick<typeof itemSources.$inferInsert, 'shopId' | 'sourceUrl' | 'price' | 'currency' | 'isPrimary'>>
+type UpdateItemSourceFields = Partial<Pick<typeof itemSources.$inferInsert, 'shopId' | 'sourceUrl' | 'price' | 'currency'>>
 
 export async function insertItemSource(input: InsertItemSourceInput, tx?: DbTransaction): Promise<ItemSource | undefined> {
   const client = tx ?? db
@@ -69,24 +68,4 @@ export async function countItemSourcesByItemId(itemId: string, tx?: DbTransactio
     .from(itemSources)
     .where(eq(itemSources.itemId, itemId))
   return row?.total ?? 0
-}
-
-export async function demotePrimaryItemSource(itemId: string, tx: DbTransaction): Promise<void> {
-  await tx
-    .update(itemSources)
-    .set({ isPrimary: false })
-    .where(and(eq(itemSources.itemId, itemId), eq(itemSources.isPrimary, true)))
-}
-
-export async function setPrimaryItemSource(
-  itemId: string,
-  sourceId: string,
-  tx: DbTransaction,
-): Promise<void> {
-  await demotePrimaryItemSource(itemId, tx)
-
-  await tx
-    .update(itemSources)
-    .set({ isPrimary: true })
-    .where(and(eq(itemSources.id, sourceId), eq(itemSources.itemId, itemId)))
 }

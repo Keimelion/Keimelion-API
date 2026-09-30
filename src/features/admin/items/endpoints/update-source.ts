@@ -21,7 +21,6 @@ const adminUpdateItemSourceSchema = z
     sourceUrl: httpsSourceUrlSchema.optional(),
     price: priceSchema.optional(),
     currency: currencySchema.optional(),
-    isPrimary: z.boolean().optional(),
   })
   .strict()
 

@@ -26,7 +26,6 @@ export interface ItemSourceDetail {
   sourceUrl: string | null
   price: string | null
   currency: string
-  isPrimary: boolean
   createdAt: Date
   updatedAt: Date
 }
@@ -71,7 +70,6 @@ export function toItemSourceDetail(source: ItemSource): ItemSourceDetail {
     sourceUrl: source.sourceUrl ?? null,
     price: source.price ?? null,
     currency: source.currency,
-    isPrimary: source.isPrimary,
     createdAt: source.createdAt,
     updatedAt: source.updatedAt,
   }
