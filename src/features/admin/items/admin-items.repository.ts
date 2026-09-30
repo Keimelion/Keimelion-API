@@ -2,7 +2,7 @@ import { count, type SQL } from 'drizzle-orm'
 import { db } from '../../../db/client.js'
 import { items } from '../../../db/entities/items/items.schema.js'
 import { defineEntity } from '../../../shared/db/entity-descriptor.js'
-import type { Item } from '../../../db/entities/items/items.schema.js'
+import type { ItemRowWithSources } from '../../../shared/types/item.js'
 import type { PaginationInput } from '../../../shared/schemas/pagination.js'
 import type { SortInput } from '../../../shared/schemas/sort.js'
 import type { FilterInput } from '../../../shared/db/filter-parser.js'
@@ -33,13 +33,17 @@ function buildItemsWhere(filters: ListItemsFilters): SQL | undefined {
   return generic.length > 0 ? itemsEntity.buildWhere(generic) : undefined
 }
 
-export function findAllItems(input: PaginationInput, filters: ListItemsFilters): Promise<Item[]> {
+export function findAllItemsWithSources(
+  input: PaginationInput,
+  filters: ListItemsFilters,
+): Promise<ItemRowWithSources[]> {
   const offset = (input.page - 1) * input.limit
   return db.query.items.findMany({
     where: buildItemsWhere(filters),
     orderBy: itemsEntity.buildOrderBy(filters.sort),
     limit: input.limit,
     offset,
+    with: { sources: { with: { shop: true } } },
   })
 }
 

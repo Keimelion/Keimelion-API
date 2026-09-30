@@ -8,27 +8,17 @@ import { runWrite, buildChanges } from '../../../shared/utils/admin-write.js'
 import { buildPaginatedResponse } from '../../../shared/schemas/pagination.js'
 import {
   findItemById,
+  findItemByIdWithSources,
   insertItem,
   updateItem,
   deleteItem,
   countListItemsReferencing,
 } from '../../../db/entities/items/items.repository.js'
-import {
-  findItemSourcesByItemId,
-  findItemSourcesByItemIds,
-  insertItemSource,
-} from '../../../db/entities/item-sources/item-sources.repository.js'
-import {
-  collectAllSources,
-  loadShopsForSources,
-  resolveSourcesForItem,
-} from '../../../db/entities/item-sources/item-sources.hydrate.js'
-import { findAllItems, countItems } from './admin-items.repository.js'
+import { insertItemSource } from '../../../db/entities/item-sources/item-sources.repository.js'
+import { findAllItemsWithSources, countItems } from './admin-items.repository.js'
 import { toItemWithSources } from '../../../shared/types/item.js'
 import { AdminAction } from '../admin.enums.js'
 import type { items } from '../../../db/entities/items/items.schema.js'
-import type { Item } from '../../../db/entities/items/items.schema.js'
-import type { ItemSource } from '../../../db/entities/item-sources/item-sources.schema.js'
 import type { ItemWithSources } from '../../../shared/types/item.js'
 import type { ServiceResult } from '../../../shared/types/service.js'
 import type { PaginatedResponse } from '../../../shared/types/api.js'
@@ -57,7 +47,6 @@ export async function createItem(
       )
       if (!item) return undefined
 
-      const sources: ItemSource[] = []
       for (const source of input.sources) {
         const inserted = await insertItemSource(
           {
@@ -70,17 +59,18 @@ export async function createItem(
           tx,
         )
         if (!inserted) throw new Error('item_source_insert_failed')
-        sources.push(inserted)
       }
 
-      return { item, sources }
+      return item
     }),
   )
 
   if ('errorCode' in outcome) return serviceError(outcome.errorCode)
 
-  const shopsById = await loadShopsForSources(outcome.row.sources)
-  const item = toItemWithSources(outcome.row.item, outcome.row.sources, shopsById)
+  const hydrated = await findItemByIdWithSources(outcome.row.id)
+  if (!hydrated) return serviceError(ErrorCode.INTERNAL_ERROR)
+
+  const item = toItemWithSources(hydrated)
   logger.info({ adminId, action: AdminAction.CREATE_ITEM, itemId: item.id })
   return { data: { item }, httpStatus: HttpStatus.CREATED }
 }
@@ -88,17 +78,10 @@ export async function createItem(
 export async function listItems(
   input: ListItemsInput,
 ): Promise<ServiceResult<PaginatedResponse<ItemWithSources>>> {
-  const [rows, total] = await Promise.all([findAllItems(input, input), countItems(input)])
-
-  const sourcesByItemId = await findItemSourcesByItemIds(rows.map((row) => row.id))
-  const shopsById = await loadShopsForSources(collectAllSources(sourcesByItemId))
+  const [rows, total] = await Promise.all([findAllItemsWithSources(input, input), countItems(input)])
 
   return {
-    data: buildPaginatedResponse(
-      rows.map((row) => toItemWithSources(row, resolveSourcesForItem(sourcesByItemId, row.id), shopsById)),
-      input,
-      total,
-    ),
+    data: buildPaginatedResponse(rows.map((row) => toItemWithSources(row)), input, total),
     httpStatus: HttpStatus.OK,
   }
 }
@@ -106,11 +89,11 @@ export async function listItems(
 export async function getItemById(
   id: string,
 ): Promise<ServiceResult<{ item: ItemWithSources }>> {
-  const row = await findItemById(id)
+  const row = await findItemByIdWithSources(id)
   if (!row) return serviceError(ErrorCode.NOT_FOUND)
 
   return {
-    data: { item: await hydrateItem(row) },
+    data: { item: toItemWithSources(row) },
     httpStatus: HttpStatus.OK,
   }
 }
@@ -136,9 +119,12 @@ export async function updateItemById(
   const outcome = await runWrite(() => updateItem(id, fieldPatch))
   if ('errorCode' in outcome) return serviceError(outcome.errorCode)
 
+  const hydrated = await findItemByIdWithSources(outcome.row.id)
+  if (!hydrated) return serviceError(ErrorCode.INTERNAL_ERROR)
+
   const changes = buildChanges(existingRow, fieldPatch, { redactFields: URL_FIELDS, redactedValue: '<url>' })
   logger.info({ adminId, action: AdminAction.UPDATE_ITEM, itemId: id, changes })
-  return { data: { item: await hydrateItem(outcome.row) }, httpStatus: HttpStatus.OK }
+  return { data: { item: toItemWithSources(hydrated) }, httpStatus: HttpStatus.OK }
 }
 
 export async function deleteItemById(
@@ -161,10 +147,4 @@ export async function deleteItemById(
 
   logger.warn({ adminId, action: AdminAction.DELETE_ITEM, itemId: id })
   return { data: { message: 'Item deleted successfully' }, httpStatus: HttpStatus.OK }
-}
-
-async function hydrateItem(item: Item): Promise<ItemWithSources> {
-  const sources = await findItemSourcesByItemId(item.id)
-  const shopsById = await loadShopsForSources(sources)
-  return toItemWithSources(item, sources, shopsById)
 }

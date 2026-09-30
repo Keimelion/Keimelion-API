@@ -49,7 +49,7 @@ export async function createItemSource(
   )
   if ('errorCode' in outcome) return serviceError(outcome.errorCode)
 
-  const source = toItemSourceDetail(outcome.row, shop)
+  const source = toItemSourceDetail({ ...outcome.row, shop })
   logger.info({ adminId, action: AdminAction.CREATE_ITEM_SOURCE, itemId, sourceId: source.id })
   return { data: { source }, httpStatus: HttpStatus.CREATED }
 }
@@ -80,12 +80,7 @@ export async function updateItemSourceById(
 
   const shop = await resolveShopForSource(outcome.row)
   logger.info({ adminId, action: AdminAction.UPDATE_ITEM_SOURCE, itemId, sourceId })
-  return { data: { source: toItemSourceDetail(outcome.row, shop) }, httpStatus: HttpStatus.OK }
-}
-
-async function resolveShopForSource(source: ItemSource): Promise<Shop | null> {
-  if (!source.shopId) return null
-  return (await findShopById(source.shopId)) ?? null
+  return { data: { source: toItemSourceDetail({ ...outcome.row, shop }) }, httpStatus: HttpStatus.OK }
 }
 
 export async function deleteItemSourceById(
@@ -110,4 +105,9 @@ export async function deleteItemSourceById(
 
   logger.warn({ adminId, action: AdminAction.DELETE_ITEM_SOURCE, itemId, sourceId })
   return { data: { message: 'Item source deleted successfully' }, httpStatus: HttpStatus.OK }
+}
+
+async function resolveShopForSource(source: ItemSource): Promise<Shop | null> {
+  if (!source.shopId) return null
+  return (await findShopById(source.shopId)) ?? null
 }

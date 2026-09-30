@@ -86,7 +86,7 @@ const itemSourcesEntityDescriptor: ExportEntityDescriptor = {
   ],
   fetchRows: async (userId: string) => {
     const sources = await findItemSourcesByCreator(userId)
-    return sources.map((source) => toItemSourceDetail(source, null))
+    return sources.map((source) => toItemSourceDetail({ ...source, shop: null }))
   },
 }
 

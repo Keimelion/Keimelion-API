@@ -66,7 +66,19 @@ const SHOP_ROW = {
   updatedAt: new Date('2024-01-01'),
 }
 
-const SOURCE_ROW = {
+interface SourceRow {
+  id: string
+  itemId: string
+  shopId: string | null
+  sourceUrl: string | null
+  price: string | null
+  currency: string
+  createdAt: Date
+  updatedAt: Date
+  shop: typeof SHOP_ROW | null
+}
+
+const SOURCE_ROW: SourceRow = {
   id: '00000000-0000-0000-0000-000000000030',
   itemId: ITEM_ROW.id,
   shopId: null,
@@ -75,12 +87,14 @@ const SOURCE_ROW = {
   currency: 'EUR',
   createdAt: new Date('2024-01-01'),
   updatedAt: new Date('2024-01-01'),
+  shop: null,
 }
 
 const SOURCE_WITH_SHOP_ROW = {
   ...SOURCE_ROW,
   id: '00000000-0000-0000-0000-000000000031',
   shopId: SHOP_ROW.id,
+  shop: SHOP_ROW,
 }
 
 const ACCESS_TOKEN_ENTRY = makeAccessTokenEntry(ADMIN_USER.id)
@@ -109,8 +123,8 @@ function mockFindShopById(row: unknown): void {
   vi.mocked(db.query.shops.findFirst).mockResolvedValueOnce(row as never)
 }
 
-function mockFindShopsByIds(rows: unknown[]): void {
-  vi.mocked(db.query.shops.findMany).mockResolvedValueOnce(rows as never)
+function itemWith(sources: SourceRow[]): typeof ITEM_ROW & { sources: SourceRow[] } {
+  return { ...ITEM_ROW, sources }
 }
 
 function buildTxInsertMock(rows: unknown[]): ReturnType<typeof vi.fn> {
@@ -141,10 +155,6 @@ function mockCreateItemTransactionFailure(): void {
   vi.mocked(db.transaction).mockImplementationOnce(() => {
     throw new Error('insert failed')
   })
-}
-
-function mockFindItemSourcesByItemIdOnce(rows: unknown[]): void {
-  vi.mocked(db.query.itemSources.findMany).mockResolvedValueOnce(rows as never)
 }
 
 function mockUpdateItem(returnRow: unknown): void {
@@ -240,6 +250,7 @@ describe('POST /v1/admin/items', () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
     mockCreateItemTransaction(ITEM_ROW, [SOURCE_ROW])
+    mockFindItemById(itemWith([SOURCE_ROW]))
 
     const response = await apiRequest('/v1/admin/items', {
       method: 'POST',
@@ -261,7 +272,7 @@ describe('POST /v1/admin/items', () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
     mockCreateItemTransaction(ITEM_ROW, [SOURCE_WITH_SHOP_ROW])
-    mockFindShopsByIds([SHOP_ROW])
+    mockFindItemById(itemWith([SOURCE_WITH_SHOP_ROW]))
 
     const response = await apiRequest('/v1/admin/items', {
       method: 'POST',
@@ -281,6 +292,7 @@ describe('POST /v1/admin/items', () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
     mockCreateItemTransaction(ITEM_ROW, [SOURCE_ROW])
+    mockFindItemById(itemWith([SOURCE_ROW]))
 
     await apiRequest('/v1/admin/items', {
       method: 'POST',
@@ -409,9 +421,8 @@ describe('GET /v1/admin/items', () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
 
-    vi.mocked(db.query.items.findMany).mockResolvedValueOnce([ITEM_ROW] as never)
+    vi.mocked(db.query.items.findMany).mockResolvedValueOnce([itemWith([SOURCE_ROW])] as never)
     mockCountChain(1)
-    mockFindItemSourcesByItemIdOnce([SOURCE_ROW])
 
     const response = await apiRequest('/v1/admin/items', { token })
 
@@ -430,10 +441,8 @@ describe('GET /v1/admin/items', () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
 
-    vi.mocked(db.query.items.findMany).mockResolvedValueOnce([ITEM_ROW] as never)
+    vi.mocked(db.query.items.findMany).mockResolvedValueOnce([itemWith([SOURCE_WITH_SHOP_ROW])] as never)
     mockCountChain(1)
-    mockFindItemSourcesByItemIdOnce([SOURCE_WITH_SHOP_ROW])
-    mockFindShopsByIds([SHOP_ROW])
 
     const response = await apiRequest('/v1/admin/items', { token })
 
@@ -449,9 +458,8 @@ describe('GET /v1/admin/items', () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
 
-    vi.mocked(db.query.items.findMany).mockResolvedValueOnce([ITEM_ROW] as never)
+    vi.mocked(db.query.items.findMany).mockResolvedValueOnce([itemWith([])] as never)
     mockCountChain(1)
-    mockFindItemSourcesByItemIdOnce([])
 
     const response = await apiRequest('/v1/admin/items', { token })
 
@@ -464,9 +472,8 @@ describe('GET /v1/admin/items', () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
 
-    vi.mocked(db.query.items.findMany).mockResolvedValueOnce([ITEM_ROW] as never)
+    vi.mocked(db.query.items.findMany).mockResolvedValueOnce([itemWith([])] as never)
     mockCountChain(1)
-    mockFindItemSourcesByItemIdOnce([])
 
     const response = await apiRequest('/v1/admin/items', { token })
 
@@ -490,13 +497,26 @@ describe('GET /v1/admin/items', () => {
     expect(body.pagination.total).toBe(0)
   })
 
+  it('issues a single query for items with embedded sources+shop (no batch reloads)', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    vi.mocked(db.query.items.findMany).mockResolvedValueOnce([itemWith([SOURCE_WITH_SHOP_ROW])] as never)
+    mockCountChain(1)
+
+    await apiRequest('/v1/admin/items', { token })
+
+    expect(vi.mocked(db.query.items.findMany)).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(db.query.itemSources.findMany)).not.toHaveBeenCalled()
+    expect(vi.mocked(db.query.shops.findMany)).not.toHaveBeenCalled()
+  })
+
   it('sorts by createdAt:desc by default', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
 
-    vi.mocked(db.query.items.findMany).mockResolvedValueOnce([ITEM_ROW] as never)
+    vi.mocked(db.query.items.findMany).mockResolvedValueOnce([itemWith([])] as never)
     mockCountChain(1)
-    mockFindItemSourcesByItemIdOnce([])
 
     const response = await apiRequest('/v1/admin/items', { token })
     expect(response.status).toBe(200)
@@ -506,9 +526,8 @@ describe('GET /v1/admin/items', () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
 
-    vi.mocked(db.query.items.findMany).mockResolvedValueOnce([ITEM_ROW] as never)
+    vi.mocked(db.query.items.findMany).mockResolvedValueOnce([itemWith([])] as never)
     mockCountChain(1)
-    mockFindItemSourcesByItemIdOnce([])
 
     const response = await apiRequest('/v1/admin/items?name%5Bilike%5D=test', { token })
     expect(response.status).toBe(200)
@@ -518,9 +537,8 @@ describe('GET /v1/admin/items', () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
 
-    vi.mocked(db.query.items.findMany).mockResolvedValueOnce([ITEM_ROW] as never)
+    vi.mocked(db.query.items.findMany).mockResolvedValueOnce([itemWith([])] as never)
     mockCountChain(1)
-    mockFindItemSourcesByItemIdOnce([])
 
     const response = await apiRequest('/v1/admin/items?createdByUserId%5BisNull%5D=true', { token })
     expect(response.status).toBe(200)
@@ -530,9 +548,8 @@ describe('GET /v1/admin/items', () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
 
-    vi.mocked(db.query.items.findMany).mockResolvedValueOnce([ITEM_ROW] as never)
+    vi.mocked(db.query.items.findMany).mockResolvedValueOnce([itemWith([])] as never)
     mockCountChain(1)
-    mockFindItemSourcesByItemIdOnce([])
 
     const response = await apiRequest('/v1/admin/items?sort=name:asc', { token })
     expect(response.status).toBe(200)
@@ -585,8 +602,7 @@ describe('GET /v1/admin/items/:id', () => {
   it('returns 200 with item and sources', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
-    mockFindItemById(ITEM_ROW)
-    vi.mocked(db.query.itemSources.findMany).mockResolvedValueOnce([SOURCE_ROW] as never)
+    mockFindItemById(itemWith([SOURCE_ROW]))
 
     const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}`, { token })
 
@@ -601,8 +617,7 @@ describe('GET /v1/admin/items/:id', () => {
   it('does not expose deletedAt on item', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
-    mockFindItemById(ITEM_ROW)
-    vi.mocked(db.query.itemSources.findMany).mockResolvedValueOnce([] as never)
+    mockFindItemById(itemWith([]))
 
     const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}`, { token })
 
@@ -653,7 +668,7 @@ describe('PATCH /v1/admin/items/:id', () => {
     mockAdminAuth()
     mockFindItemById(ITEM_ROW)
     mockUpdateItem({ ...ITEM_ROW, name: 'Updated Name' })
-    mockFindItemSourcesByItemIdOnce([SOURCE_ROW])
+    mockFindItemById({ ...itemWith([SOURCE_ROW]), name: 'Updated Name' })
 
     const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}`, {
       method: 'PATCH',
@@ -672,7 +687,7 @@ describe('PATCH /v1/admin/items/:id', () => {
     mockAdminAuth()
     mockFindItemById({ ...ITEM_ROW, imageUrl: 'https://old.example.com/img.jpg' })
     mockUpdateItem({ ...ITEM_ROW, imageUrl: 'https://new.example.com/img.jpg' })
-    mockFindItemSourcesByItemIdOnce([])
+    mockFindItemById(itemWith([]))
 
     await apiRequest(`/v1/admin/items/${ITEM_ROW.id}`, {
       method: 'PATCH',
