@@ -1,11 +1,13 @@
-import { count, type SQL } from 'drizzle-orm'
+import { count, desc, eq, type SQL } from 'drizzle-orm'
 import { db } from '../../../db/client.js'
 import { shops } from '../../../db/entities/shops/shops.schema.js'
+import { itemSources } from '../../../db/entities/item-sources/item-sources.schema.js'
 import { defineEntity } from '../../../shared/db/entity-descriptor.js'
 import type { Shop } from '../../../db/entities/shops/shops.schema.js'
 import type { PaginationInput } from '../../../shared/schemas/pagination.js'
 import type { SortInput } from '../../../shared/schemas/sort.js'
 import type { FilterInput } from '../../../shared/db/filter-parser.js'
+import type { ItemSourceWithItem } from './admin-shops.mapper.js'
 
 export const shopsEntity = defineEntity({
   sortable: {
@@ -56,5 +58,27 @@ export async function countShops(filters: ListShopsFilters): Promise<number> {
     .select({ count: count() })
     .from(shops)
     .where(buildShopsWhere(filters))
+  return row?.count ?? 0
+}
+
+export function findItemSourcesByShopId(
+  shopId: string,
+  input: PaginationInput,
+): Promise<ItemSourceWithItem[]> {
+  const offset = (input.page - 1) * input.limit
+  return db.query.itemSources.findMany({
+    where: eq(itemSources.shopId, shopId),
+    with: { item: { columns: { id: true, name: true } } },
+    orderBy: desc(itemSources.createdAt),
+    limit: input.limit,
+    offset,
+  })
+}
+
+export async function countItemSourcesByShopId(shopId: string): Promise<number> {
+  const [row] = await db
+    .select({ count: count() })
+    .from(itemSources)
+    .where(eq(itemSources.shopId, shopId))
   return row?.count ?? 0
 }

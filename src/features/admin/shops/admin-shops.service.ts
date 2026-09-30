@@ -11,13 +11,27 @@ import {
   updateShop,
   deleteShop,
 } from '../../../db/entities/shops/shops.repository.js'
-import { findAllShops, countShops } from './admin-shops.repository.js'
+import {
+  findAllShops,
+  countShops,
+  findItemSourcesByShopId,
+  countItemSourcesByShopId,
+} from './admin-shops.repository.js'
 import { toShopDetail } from '../../../shared/types/shop.js'
+import { toAdminShopItemSource } from './admin-shops.mapper.js'
 import { AdminAction } from '../admin.enums.js'
 import type { ShopDetail, ShopWrite } from '../../../shared/types/shop.js'
 import type { ServiceResult } from '../../../shared/types/service.js'
 import type { PaginatedResponse, PartialWrite } from '../../../shared/types/api.js'
+import type { PaginationInput } from '../../../shared/schemas/pagination.js'
 import type { ListShopsInput } from './endpoints/list.js'
+import type { AdminShopItemSource } from './admin-shops.mapper.js'
+
+export interface GetShopResponse {
+  shop: ShopDetail
+  items: AdminShopItemSource[]
+  itemsCount: number
+}
 
 type ShopFieldPatch = Partial<ShopWrite>
 
@@ -51,6 +65,28 @@ export async function listShops(
 
   return {
     data: buildPaginatedResponse(rows.map(toShopDetail), input, total),
+    httpStatus: HttpStatus.OK,
+  }
+}
+
+export async function getShopById(
+  id: string,
+  pagination: PaginationInput,
+): Promise<ServiceResult<GetShopResponse>> {
+  const shopRow = await findShopById(id)
+  if (!shopRow) return serviceError(ErrorCode.NOT_FOUND)
+
+  const [sourceRows, itemsCount] = await Promise.all([
+    findItemSourcesByShopId(id, pagination),
+    countItemSourcesByShopId(id),
+  ])
+
+  return {
+    data: {
+      shop: toShopDetail(shopRow),
+      items: sourceRows.map(toAdminShopItemSource),
+      itemsCount,
+    },
     httpStatus: HttpStatus.OK,
   }
 }
