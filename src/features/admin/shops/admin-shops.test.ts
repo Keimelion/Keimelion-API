@@ -555,6 +555,126 @@ describe('GET /v1/admin/shops', () => {
   })
 })
 
+describe('GET /v1/admin/shops/:id', () => {
+  const ITEM_SOURCE_ROW = {
+    id: '00000000-0000-0000-0000-000000000100',
+    itemId: '00000000-0000-0000-0000-000000000200',
+    shopId: SHOP_ROW.id,
+    sourceUrl: 'https://amazon.com/dp/B0123',
+    price: '19.99',
+    currency: 'EUR',
+    createdAt: new Date('2024-02-01'),
+    updatedAt: new Date('2024-02-01'),
+    item: { id: '00000000-0000-0000-0000-000000000200', name: 'Kindle' },
+  }
+
+  function mockFindItemSources(rows: unknown[]): void {
+    vi.mocked(db.query.itemSources.findMany).mockResolvedValueOnce(rows as never)
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+  })
+
+  it('returns 200 with shop and its item sources', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindShopById(SHOP_ROW)
+    mockFindItemSources([ITEM_SOURCE_ROW])
+    mockCountChain(1)
+
+    const response = await apiRequest(`/v1/admin/shops/${SHOP_ROW.id}`, { token })
+
+    const body = await response.json() as {
+      shop: { id: string; slug: string }
+      items: { id: string; itemId: string; itemName: string; sourceUrl: string | null }[]
+      itemsCount: number
+    }
+    expect(response.status).toBe(200)
+    expect(body.shop.id).toBe(SHOP_ROW.id)
+    expect(body.shop.slug).toBe('amazon')
+    expect(body.items).toHaveLength(1)
+    expect(body.items[0]?.id).toBe(ITEM_SOURCE_ROW.id)
+    expect(body.items[0]?.itemId).toBe(ITEM_SOURCE_ROW.itemId)
+    expect(body.items[0]?.itemName).toBe('Kindle')
+    expect(body.items[0]?.sourceUrl).toBe('https://amazon.com/dp/B0123')
+    expect(body.itemsCount).toBe(1)
+  })
+
+  it('returns 200 with empty items when shop has no sources', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindShopById(SHOP_ROW)
+    mockFindItemSources([])
+    mockCountChain(0)
+
+    const response = await apiRequest(`/v1/admin/shops/${SHOP_ROW.id}`, { token })
+
+    const body = await response.json() as { items: unknown[]; itemsCount: number }
+    expect(response.status).toBe(200)
+    expect(body.items).toHaveLength(0)
+    expect(body.itemsCount).toBe(0)
+  })
+
+  it('returns 404 when shop does not exist', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindShopById(undefined)
+
+    const response = await apiRequest(`/v1/admin/shops/${SHOP_ROW.id}`, { token })
+
+    expect(response.status).toBe(404)
+  })
+
+  it('returns 422 when id is not a UUID', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    const response = await apiRequest('/v1/admin/shops/not-a-uuid', { token })
+
+    expect(response.status).toBe(422)
+  })
+
+  it('returns 422 when limit exceeds 100', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    const response = await apiRequest(`/v1/admin/shops/${SHOP_ROW.id}?limit=101`, { token })
+
+    expect(response.status).toBe(422)
+  })
+
+  it('respects pagination params on the items collection', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindShopById(SHOP_ROW)
+    mockFindItemSources([ITEM_SOURCE_ROW])
+    mockCountChain(120)
+
+    const response = await apiRequest(`/v1/admin/shops/${SHOP_ROW.id}?page=2&limit=10`, { token })
+
+    const body = await response.json() as { items: unknown[]; itemsCount: number }
+    expect(response.status).toBe(200)
+    expect(body.items).toHaveLength(1)
+    expect(body.itemsCount).toBe(120)
+  })
+
+  it('returns 403 when user does not have admin role', async () => {
+    const token = await generateTestToken(NON_ADMIN_USER.id)
+    mockNonAdminAuth()
+
+    const response = await apiRequest(`/v1/admin/shops/${SHOP_ROW.id}`, { token })
+
+    expect(response.status).toBe(403)
+  })
+
+  it('returns 401 when no authorization header is provided', async () => {
+    const response = await apiRequest(`/v1/admin/shops/${SHOP_ROW.id}`)
+    expect(response.status).toBe(401)
+  })
+})
+
 describe('PATCH /v1/admin/shops/:id', () => {
   beforeEach(() => {
     vi.clearAllMocks()
