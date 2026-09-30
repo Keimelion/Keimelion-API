@@ -681,6 +681,38 @@ export async function registerUser(input: RegisterInput) {
 
 ---
 
+## FK hydration — Drizzle `relations()`, no manual batch-load
+
+Cross-entity data (item → sources, list → owner, occasion_type → translations…) is fetched in one query via Drizzle `relations()` + `db.query.X.findMany({ with: {...} })`. Do not extract FK ids and issue a second `findByIds` → `Map<id, Entity>` in the service.
+
+Wiring:
+- `src/db/entities/<entity>/<entity>.relations.ts` declares the `relations()` — one file per entity
+- `src/db/entities/index.ts` registers each relations export alongside the schema
+- The repository exposes a dedicated variant per hydration shape, named `findXWithY` (e.g. `findItemByIdWithSources`, `findAdminListByIdWithOwner`, `findOccasionTypeByIdWithTranslations`)
+- The row-with-relations type lives in `src/shared/types/<entity>.ts` (e.g. `ItemRowWithSources`, `ListRowWithOwner`) — used as the repository return type and the mapper input type
+- Mappers take a **single argument** of that type — no `(row, hydratedRelation)` two-arg signatures
+
+**Call sites that don't hydrate** (e.g. RGPD export, which streams rows without the shop) pass `{ ...row, shop: null }` — the mapper stays single-arg.
+
+**After a write** (`insert`/`update`/`.returning()` gives a bare row without relations), refetch via `findXByIdWithY(id)` before mapping — do not manually reload one relation at a time.
+
+```typescript
+// ✅ — one query, hydrated shape, single-arg mapper
+const item = await findItemByIdWithSources(id)  // .sources[*].shop populated
+if (!item) return serviceError(NOT_FOUND)
+return toItemWithSources(item)
+
+// ❌ — manual batch-load, two-arg mapper
+const item = await findItemById(id)
+const sources = await findItemSourcesByItemId(id)
+const shopsById = await findShopsByIds(sources.map(s => s.shopId).filter(Boolean))
+return toItemWithSources(item, sources, shopsById)
+```
+
+Declare a relation in `*.relations.ts` as soon as one place needs to hydrate it — the file cost is trivial and it removes the temptation to reintroduce the batch-load pattern next time.
+
+---
+
 ## Routes must stay clean
 
 Route files (`src/features/<feature>/<feature>.routes.ts`) contain only route definitions, validators, and service calls. Any logic or configuration is extracted:
