@@ -9,8 +9,8 @@ import { listItemsRouter } from './list-items/list-items.routes.js'
 import { itemsRouter } from './items/items.routes.js'
 
 export function mountRoutes(app: Hono): void {
+  app.route('/health', healthRouter)
   const v1 = new Hono()
-  v1.route('/health', healthRouter)
   v1.route('/auth', authRouter)
   v1.route('/users', usersRouter)
   v1.route('/admin', adminRouter)

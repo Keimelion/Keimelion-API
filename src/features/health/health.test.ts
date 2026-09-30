@@ -3,7 +3,7 @@ import { app } from '../../app.js'
 import { db } from '../../db/client.js'
 import type { HealthResult } from './health.service.js'
 
-describe('GET /v1/health', () => {
+describe('GET /health', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
@@ -11,7 +11,7 @@ describe('GET /v1/health', () => {
   it('returns 200 with ok status when database is healthy', async () => {
     vi.mocked(db.execute).mockResolvedValueOnce([] as never)
 
-    const res = await app.request('/v1/health')
+    const res = await app.request('/health')
     const body = await res.json() as HealthResult
 
     expect(res.status).toBe(200)
@@ -24,7 +24,7 @@ describe('GET /v1/health', () => {
   it('returns 500 with degraded status when database fails', async () => {
     vi.mocked(db.execute).mockRejectedValueOnce(new Error('Connection refused'))
 
-    const res = await app.request('/v1/health')
+    const res = await app.request('/health')
     const body = await res.json() as HealthResult
 
     expect(res.status).toBe(500)
