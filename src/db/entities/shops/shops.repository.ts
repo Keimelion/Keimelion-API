@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm'
+import { eq, inArray } from 'drizzle-orm'
 import { db } from '../../client.js'
 import { shops } from './shops.schema.js'
 import type { Shop } from './shops.schema.js'
@@ -18,6 +18,15 @@ type UpdateShopFields = Partial<ShopWriteFields>
 
 export async function findShopById(id: string): Promise<Shop | undefined> {
   return db.query.shops.findFirst({ where: eq(shops.id, id) })
+}
+
+export async function findShopsByIds(ids: string[]): Promise<Map<string, Shop>> {
+  if (ids.length === 0) return new Map()
+
+  const rows = await db.query.shops.findMany({ where: inArray(shops.id, ids) })
+  const grouped = new Map<string, Shop>()
+  for (const row of rows) grouped.set(row.id, row)
+  return grouped
 }
 
 export async function insertShop(fields: InsertShopFields): Promise<Shop | undefined> {

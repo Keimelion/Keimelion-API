@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
 import { db } from '../../../db/client.js'
 import { items } from '../../../db/entities/items/items.schema.js'
 import { itemSources } from '../../../db/entities/item-sources/item-sources.schema.js'
@@ -11,7 +11,7 @@ import type { ListItem } from '../../../db/entities/list-items/list-items.schema
 
 export async function findItemsByCreator(userId: string): Promise<Item[]> {
   return db.query.items.findMany({
-    where: and(eq(items.createdByUserId, userId), isNull(items.deletedAt)),
+    where: eq(items.createdByUserId, userId),
   })
 }
 

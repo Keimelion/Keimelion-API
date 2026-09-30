@@ -63,7 +63,6 @@ const itemsEntityDescriptor: ExportEntityDescriptor = {
     'name',
     'description',
     'imageUrl',
-    'moderationStatus',
     'createdAt',
     'updatedAt',
   ],
@@ -82,13 +81,12 @@ const itemSourcesEntityDescriptor: ExportEntityDescriptor = {
     'sourceUrl',
     'price',
     'currency',
-    'isPrimary',
     'createdAt',
     'updatedAt',
   ],
   fetchRows: async (userId: string) => {
     const sources = await findItemSourcesByCreator(userId)
-    return sources.map((source) => toItemSourceDetail(source))
+    return sources.map((source) => toItemSourceDetail(source, null))
   },
 }
 

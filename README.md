@@ -38,7 +38,7 @@ The API is available at **http://localhost:3000**.
 ### Quick check
 
 ```bash
-curl http://localhost:3000/v1/health
+curl http://localhost:3000/health
 # { "status": "ok", "database": "ok", "version": "1.0.0", ... }
 ```
 

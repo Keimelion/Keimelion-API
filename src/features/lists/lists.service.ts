@@ -2,7 +2,6 @@ import { db } from '../../db/client.js'
 import { HttpStatus } from '../../shared/enums/http.js'
 import { ErrorCode } from '../../shared/enums/error-code.js'
 import { ItemStatuses } from '../../shared/enums/item-status.js'
-import { ModerationStatuses } from '../../shared/enums/moderation-status.js'
 import { serviceError } from '../../shared/utils/response.js'
 import { insertItem } from '../../db/entities/items/items.repository.js'
 import { insertItemSource } from '../../db/entities/item-sources/item-sources.repository.js'
@@ -16,7 +15,6 @@ import type { ServiceResult } from '../../shared/types/service.js'
 import type { ItemWrite } from '../../shared/types/item.js'
 import type { AddItemInput } from './endpoints/add-item.js'
 
-const DEFAULT_MODERATION_STATUS = ModerationStatuses.APPROVED
 const DEFAULT_QUANTITY_DESIRED = 1
 const DEFAULT_CURRENCY = 'EUR'
 
@@ -53,7 +51,6 @@ async function createManualListItem(
   const item = await insertItem({
     ...itemWrite,
     createdByUserId: userId,
-    moderationStatus: DEFAULT_MODERATION_STATUS,
   }, tx)
   if (!item) return null
 
@@ -62,7 +59,6 @@ async function createManualListItem(
     sourceUrl: null,
     price: String(input.price),
     currency: DEFAULT_CURRENCY,
-    isPrimary: true,
   }, tx)) ?? null
 
   const listItem = await insertListItem({
@@ -81,6 +77,6 @@ function buildListItemResponse(record: CreatedListItemRecord): ListItemResponse 
   return {
     ...toListItemDetail(record.listItem),
     item: toItemDetail(record.item),
-    source: record.source ? toItemSourceDetail(record.source) : null,
+    source: record.source ? toItemSourceDetail(record.source, null) : null,
   }
 }

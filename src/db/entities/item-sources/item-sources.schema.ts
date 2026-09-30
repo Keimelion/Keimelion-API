@@ -1,5 +1,4 @@
-import { boolean, char, index, numeric, pgTable, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
-import { eq } from 'drizzle-orm'
+import { char, index, numeric, pgTable, text, uuid } from 'drizzle-orm/pg-core'
 import { timestamps, uuidPrimaryKey } from '../../../shared/db/columns.js'
 import { items } from '../items/items.schema.js'
 import { shops } from '../shops/shops.schema.js'
@@ -13,11 +12,9 @@ export const itemSources = pgTable(
     sourceUrl: text('source_url'),
     price: numeric('price', { precision: 10, scale: 2 }),
     currency: char('currency', { length: 3 }).notNull().default('EUR'),
-    isPrimary: boolean('is_primary').notNull().default(false),
     ...timestamps(),
   },
   (table) => [
-    uniqueIndex('item_sources_primary_idx').on(table.itemId).where(eq(table.isPrimary, true)),
     index('item_sources_shop_id_idx').on(table.shopId),
   ],
 )

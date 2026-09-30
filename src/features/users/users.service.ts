@@ -124,7 +124,7 @@ export async function exportUserData(userId: string, format: ExportFormat): Prom
     payload: {
       profile,
       items: rawItems.map(toItemDetail),
-      itemSources: rawItemSources.map(toItemSourceDetail),
+      itemSources: rawItemSources.map((source) => toItemSourceDetail(source, null)),
       listItems: rawListItems.map(toListItemDetail),
     },
     contentType: EXPORT_JSON_CONTENT_TYPE,
