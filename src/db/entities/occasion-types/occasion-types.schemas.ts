@@ -1,6 +1,8 @@
 import { z } from 'zod'
 import { LOCALES } from '../../../shared/enums/locale.js'
 
+export { sortOrderSchema } from '../../../shared/schemas/sort-order.js'
+
 const SLUG_REGEX = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 const MIN_SLUG_LENGTH = 2
 const MAX_SLUG_LENGTH = 60
@@ -10,9 +12,6 @@ const MAX_EMOJI_LENGTH = 10
 
 const MIN_LABEL_LENGTH = 1
 const MAX_LABEL_LENGTH = 100
-
-const MIN_SORT_ORDER = 0
-const MAX_SORT_ORDER = 32767
 
 export const slugSchema = z
   .string()
@@ -24,12 +23,6 @@ export const slugSchema = z
 export const emojiSchema = z.string().trim().min(MIN_EMOJI_LENGTH).max(MAX_EMOJI_LENGTH)
 
 export const labelSchema = z.string().trim().min(MIN_LABEL_LENGTH).max(MAX_LABEL_LENGTH)
-
-export const sortOrderSchema = z
-  .number()
-  .int('sortOrder must be an integer')
-  .min(MIN_SORT_ORDER, `sortOrder must be at least ${String(MIN_SORT_ORDER)}`)
-  .max(MAX_SORT_ORDER, `sortOrder must be at most ${String(MAX_SORT_ORDER)}`)
 
 export const localeSchema = z.enum(LOCALES)
 

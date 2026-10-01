@@ -2,6 +2,8 @@ import { z } from 'zod'
 import { ASCII_HOSTNAME_REGEX, normalizeDomain } from '../../../shared/utils/domain.js'
 import { httpsUrlSchema } from '../../../shared/schemas/url.js'
 
+export { sortOrderSchema } from '../../../shared/schemas/sort-order.js'
+
 const SLUG_REGEX = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 const MIN_SLUG_LENGTH = 2
 const MAX_SLUG_LENGTH = 60
@@ -11,9 +13,6 @@ const MAX_NAME_LENGTH = 120
 
 const MAX_DOMAIN_LENGTH = 253
 const MAX_LOGO_URL_LENGTH = 2048
-
-const MIN_SORT_ORDER = 0
-const MAX_SORT_ORDER = 32767
 
 export const shopSlugSchema = z
   .string()
@@ -42,9 +41,3 @@ export const shopDomainSchema = z
 export const logoUrlSchema = httpsUrlSchema('logoUrl', MAX_LOGO_URL_LENGTH).nullable()
 
 export const isAffiliatedSchema = z.boolean().default(false)
-
-export const sortOrderSchema = z
-  .number()
-  .int('sortOrder must be an integer')
-  .min(MIN_SORT_ORDER, `sortOrder must be at least ${String(MIN_SORT_ORDER)}`)
-  .max(MAX_SORT_ORDER, `sortOrder must be at most ${String(MAX_SORT_ORDER)}`)
