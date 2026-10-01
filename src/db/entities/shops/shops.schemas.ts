@@ -50,5 +50,5 @@ export const isAffiliatedSchema = z.boolean().default(false)
 export const sortOrderSchema = z
   .number()
   .int('sortOrder must be an integer')
-  .min(MIN_SORT_ORDER, 'sortOrder must be at least 0')
-  .max(MAX_SORT_ORDER, 'sortOrder must be at most 32767')
+  .min(MIN_SORT_ORDER, `sortOrder must be at least ${String(MIN_SORT_ORDER)}`)
+  .max(MAX_SORT_ORDER, `sortOrder must be at most ${String(MAX_SORT_ORDER)}`)
