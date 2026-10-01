@@ -7,10 +7,11 @@ import { validationErrorHandler } from '../../../../shared/utils/validation.js'
 import { USER_ROLE_VALUES } from '../../../../shared/enums/user-role.js'
 import { adminOnly } from '../../../../shared/middlewares/admin-only.js'
 import { jsonResult } from '../../../../shared/utils/response.js'
+import { urlSchema } from '../../../../shared/schemas/url.js'
 import { updateUser } from '../admin-users.service.js'
 
 const adminUpdateUserSchema = z.object({
-  avatarUrl: z.string().url('avatarUrl must be a valid URL').nullable().optional(),
+  avatarUrl: urlSchema('avatarUrl').nullable().optional(),
   isMarketingOptedIn: z.boolean().optional(),
   role: z.enum(USER_ROLE_VALUES).optional(),
 })

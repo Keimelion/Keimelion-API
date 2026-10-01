@@ -4,17 +4,14 @@ import { RATE_LIMITS } from '../../../shared/utils/rate-limiter.js'
 import { validationErrorHandler } from '../../../shared/utils/validation.js'
 import { jsonResult } from '../../../shared/utils/response.js'
 import { registerUser } from '../auth.service.js'
-import { USERNAME_REGEX } from '../../users/users.constants.js'
+import { usernameSchema } from '../../../shared/schemas/username.js'
 import { passwordSchema } from '../../../shared/schemas/password.js'
 import type { FeatureRouter } from '../../../shared/types/app.js'
 
 const registerSchema = z.object({
   email: z.string().email().transform(v => v.toLowerCase().trim()),
   password: passwordSchema,
-  username: z
-    .string()
-    .trim()
-    .regex(USERNAME_REGEX, 'username must be 1-100 letters, digits, underscores, or dashes')
+  username: usernameSchema
     .nullable()
     .optional()
     .transform((value) => value ?? null),

@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { ASCII_HOSTNAME_REGEX, normalizeDomain } from '../../../shared/utils/domain.js'
+import { httpsUrlSchema } from '../../../shared/schemas/url.js'
 
 const SLUG_REGEX = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 const MIN_SLUG_LENGTH = 2
@@ -38,12 +39,7 @@ export const shopDomainSchema = z
   )
   .nullable()
 
-export const logoUrlSchema = z
-  .string()
-  .url('logoUrl must be a valid URL')
-  .max(MAX_LOGO_URL_LENGTH)
-  .refine((value) => value.startsWith('https://'), 'logoUrl must use HTTPS')
-  .nullable()
+export const logoUrlSchema = httpsUrlSchema('logoUrl', MAX_LOGO_URL_LENGTH).nullable()
 
 export const isAffiliatedSchema = z.boolean().default(false)
 
