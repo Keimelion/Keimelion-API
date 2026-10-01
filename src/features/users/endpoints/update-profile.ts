@@ -8,8 +8,13 @@ import { updateProfile } from '../users.service.js'
 import { USERNAME_REGEX } from '../users.constants.js'
 
 const updateProfileSchema = z.object({
-  username: z.string().trim().regex(USERNAME_REGEX).nullable().optional(),
-  avatarUrl: z.string().url().nullable().optional(),
+  username: z
+    .string()
+    .trim()
+    .regex(USERNAME_REGEX, 'username must be 1-100 letters, digits, underscores, or dashes')
+    .nullable()
+    .optional(),
+  avatarUrl: z.string().url('avatarUrl must be a valid URL').nullable().optional(),
   isMarketingOptedIn: z.boolean().optional(),
 })
 

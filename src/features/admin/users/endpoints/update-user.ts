@@ -10,7 +10,7 @@ import { jsonResult } from '../../../../shared/utils/response.js'
 import { updateUser } from '../admin-users.service.js'
 
 const adminUpdateUserSchema = z.object({
-  avatarUrl: z.string().url().nullable().optional(),
+  avatarUrl: z.string().url('avatarUrl must be a valid URL').nullable().optional(),
   isMarketingOptedIn: z.boolean().optional(),
   role: z.enum(USER_ROLE_VALUES).optional(),
 })

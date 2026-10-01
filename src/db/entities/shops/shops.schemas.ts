@@ -19,7 +19,7 @@ export const shopSlugSchema = z
   .trim()
   .min(MIN_SLUG_LENGTH)
   .max(MAX_SLUG_LENGTH)
-  .regex(SLUG_REGEX)
+  .regex(SLUG_REGEX, 'slug must be lowercase letters, digits, and dashes (e.g. my-shop)')
 
 export const shopNameSchema = z.string().trim().min(MIN_NAME_LENGTH).max(MAX_NAME_LENGTH)
 
@@ -27,16 +27,28 @@ export const shopDomainSchema = z
   .string()
   .trim()
   .transform(normalizeDomain)
-  .pipe(z.string().max(MAX_DOMAIN_LENGTH).regex(ASCII_HOSTNAME_REGEX))
+  .pipe(
+    z
+      .string()
+      .max(MAX_DOMAIN_LENGTH)
+      .regex(
+        ASCII_HOSTNAME_REGEX,
+        'domain must be a valid hostname (lowercase letters, digits, dots, and dashes)',
+      ),
+  )
   .nullable()
 
 export const logoUrlSchema = z
   .string()
-  .url()
+  .url('logoUrl must be a valid URL')
   .max(MAX_LOGO_URL_LENGTH)
-  .refine((value) => value.startsWith('https://'), 'logo_url must use HTTPS')
+  .refine((value) => value.startsWith('https://'), 'logoUrl must use HTTPS')
   .nullable()
 
 export const isAffiliatedSchema = z.boolean().default(false)
 
-export const sortOrderSchema = z.number().int().min(MIN_SORT_ORDER).max(MAX_SORT_ORDER)
+export const sortOrderSchema = z
+  .number()
+  .int('sortOrder must be an integer')
+  .min(MIN_SORT_ORDER, 'sortOrder must be at least 0')
+  .max(MAX_SORT_ORDER, 'sortOrder must be at most 32767')

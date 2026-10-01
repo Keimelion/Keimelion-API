@@ -11,7 +11,13 @@ import type { FeatureRouter } from '../../../shared/types/app.js'
 const registerSchema = z.object({
   email: z.string().email().transform(v => v.toLowerCase().trim()),
   password: passwordSchema,
-  username: z.string().trim().regex(USERNAME_REGEX).nullable().optional().transform(v => v ?? null),
+  username: z
+    .string()
+    .trim()
+    .regex(USERNAME_REGEX, 'username must be 1-100 letters, digits, underscores, or dashes')
+    .nullable()
+    .optional()
+    .transform((value) => value ?? null),
   isMarketingOptedIn: z.boolean().default(false),
 })
 

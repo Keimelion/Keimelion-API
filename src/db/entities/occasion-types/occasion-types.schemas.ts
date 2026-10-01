@@ -17,7 +17,7 @@ const MAX_SORT_ORDER = 32767
 export const slugSchema = z
   .string()
   .trim()
-  .regex(SLUG_REGEX)
+  .regex(SLUG_REGEX, 'slug must be lowercase letters, digits, and dashes (e.g. my-slug)')
   .min(MIN_SLUG_LENGTH)
   .max(MAX_SLUG_LENGTH)
 
@@ -25,7 +25,11 @@ export const emojiSchema = z.string().trim().min(MIN_EMOJI_LENGTH).max(MAX_EMOJI
 
 export const labelSchema = z.string().trim().min(MIN_LABEL_LENGTH).max(MAX_LABEL_LENGTH)
 
-export const sortOrderSchema = z.number().int().min(MIN_SORT_ORDER).max(MAX_SORT_ORDER)
+export const sortOrderSchema = z
+  .number()
+  .int('sortOrder must be an integer')
+  .min(MIN_SORT_ORDER, 'sortOrder must be at least 0')
+  .max(MAX_SORT_ORDER, 'sortOrder must be at most 32767')
 
 export const localeSchema = z.enum(LOCALES)
 

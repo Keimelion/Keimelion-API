@@ -214,6 +214,17 @@ describe('POST /v1/admin/shops', () => {
     })
 
     expect(response.status).toBe(422)
+    const body = await response.json() as {
+      metadata: { issues: { path: string; message: string; code: string }[] }
+    }
+    expect(body.metadata.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: 'slug',
+          message: expect.stringContaining('lowercase letters, digits, and dashes') as unknown,
+        }),
+      ]),
+    )
   })
 
   it('returns 422 when slug is too short', async () => {
@@ -227,9 +238,13 @@ describe('POST /v1/admin/shops', () => {
     })
 
     expect(response.status).toBe(422)
+    const body = await response.json() as {
+      metadata: { issues: { path: string }[] }
+    }
+    expect(body.metadata.issues[0]?.path).toBe('slug')
   })
 
-  it('returns 422 when logo_url uses HTTP instead of HTTPS', async () => {
+  it('returns 422 when logoUrl uses HTTP instead of HTTPS', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
 
@@ -245,9 +260,49 @@ describe('POST /v1/admin/shops', () => {
     })
 
     expect(response.status).toBe(422)
+    const body = await response.json() as {
+      metadata: { issues: { path: string; message: string }[] }
+    }
+    expect(body.metadata.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: 'logoUrl',
+          message: expect.stringContaining('HTTPS') as unknown,
+        }),
+      ]),
+    )
   })
 
-  it('returns 422 when sort_order exceeds 32767', async () => {
+  it('returns 422 when domain fails hostname regex', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    const response = await apiRequest('/v1/admin/shops', {
+      method: 'POST',
+      token,
+      body: {
+        slug: 'test-shop',
+        name: 'Test Shop',
+        isAffiliated: false,
+        domain: 'not a valid domain!',
+      },
+    })
+
+    expect(response.status).toBe(422)
+    const body = await response.json() as {
+      metadata: { issues: { path: string; message: string }[] }
+    }
+    expect(body.metadata.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: 'domain',
+          message: expect.stringContaining('valid hostname') as unknown,
+        }),
+      ]),
+    )
+  })
+
+  it('returns 422 when sortOrder exceeds 32767', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
 
@@ -258,6 +313,17 @@ describe('POST /v1/admin/shops', () => {
     })
 
     expect(response.status).toBe(422)
+    const body = await response.json() as {
+      metadata: { issues: { path: string; message: string }[] }
+    }
+    expect(body.metadata.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: 'sortOrder',
+          message: expect.stringContaining('at most') as unknown,
+        }),
+      ]),
+    )
   })
 
   it('returns 422 when unknown field is provided (strict schema)', async () => {

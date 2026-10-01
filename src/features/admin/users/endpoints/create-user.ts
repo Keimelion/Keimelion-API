@@ -16,7 +16,7 @@ const adminCreateUserSchema = z
     username: z
       .string()
       .trim()
-      .regex(USERNAME_REGEX)
+      .regex(USERNAME_REGEX, 'username must be 1-100 letters, digits, underscores, or dashes')
       .nullish()
       .transform((value) => value ?? null),
     role: z.enum(USER_ROLE_VALUES),
