@@ -5,11 +5,12 @@ import { validationErrorHandler } from '../../../shared/utils/validation.js'
 import { jsonResult } from '../../../shared/utils/response.js'
 import type { FeatureRouter } from '../../../shared/types/app.js'
 import { updateProfile } from '../users.service.js'
-import { USERNAME_REGEX } from '../users.constants.js'
+import { usernameSchema } from '../../../shared/schemas/username.js'
+import { urlSchema } from '../../../shared/schemas/url.js'
 
 const updateProfileSchema = z.object({
-  username: z.string().trim().regex(USERNAME_REGEX).nullable().optional(),
-  avatarUrl: z.string().url().nullable().optional(),
+  username: usernameSchema.nullable().optional(),
+  avatarUrl: urlSchema('avatarUrl').nullable().optional(),
   isMarketingOptedIn: z.boolean().optional(),
 })
 

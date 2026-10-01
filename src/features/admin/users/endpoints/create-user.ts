@@ -7,18 +7,13 @@ import { getAuthUser } from '../../../../shared/middlewares/auth.js'
 import { adminOnly } from '../../../../shared/middlewares/admin-only.js'
 import { jsonResult } from '../../../../shared/utils/response.js'
 import type { FeatureRouter } from '../../../../shared/types/app.js'
-import { USERNAME_REGEX } from '../../../users/users.constants.js'
+import { usernameSchema } from '../../../../shared/schemas/username.js'
 import { createUser } from '../admin-users.service.js'
 
 const adminCreateUserSchema = z
   .object({
     email: z.string().email().transform((value) => value.toLowerCase().trim()),
-    username: z
-      .string()
-      .trim()
-      .regex(USERNAME_REGEX)
-      .nullish()
-      .transform((value) => value ?? null),
+    username: usernameSchema.nullish().transform((value) => value ?? null),
     role: z.enum(USER_ROLE_VALUES),
   })
   .strict()
