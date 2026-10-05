@@ -10,6 +10,7 @@ import {
   currencySchema,
   httpsSourceUrlSchema,
   priceSchema,
+  reportDuplicateSourceShopIds,
   shopIdSchema,
 } from '../../../../db/entities/item-sources/item-sources.schemas.js'
 import type { FeatureRouter } from '../../../../shared/types/app.js'
@@ -41,6 +42,9 @@ const adminCreateItemSchema = z
     sources: z.array(createItemSourceInputSchema).min(1),
   })
   .strict()
+  .superRefine((value, ctx) => {
+    reportDuplicateSourceShopIds(value.sources, ctx)
+  })
 
 export type CreateItemInput = z.infer<typeof adminCreateItemSchema>
 export type CreateItemSourceEntry = z.infer<typeof createItemSourceInputSchema>

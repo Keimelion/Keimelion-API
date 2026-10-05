@@ -1,4 +1,4 @@
-import { count, eq } from 'drizzle-orm'
+import { and, count, eq, ne } from 'drizzle-orm'
 import { db } from '../../client.js'
 import { itemSources } from './item-sources.schema.js'
 import type { ItemSource } from './item-sources.schema.js'
@@ -51,6 +51,25 @@ export async function deleteItemSource(id: string, tx?: DbTransaction): Promise<
   const client = tx ?? db
   const [row] = await client.delete(itemSources).where(eq(itemSources.id, id)).returning()
   return row
+}
+
+export async function existsItemSourceForShop(
+  itemId: string,
+  shopId: string,
+  excludeSourceId?: string,
+): Promise<boolean> {
+  const condition = excludeSourceId === undefined
+    ? and(eq(itemSources.itemId, itemId), eq(itemSources.shopId, shopId))
+    : and(
+      eq(itemSources.itemId, itemId),
+      eq(itemSources.shopId, shopId),
+      ne(itemSources.id, excludeSourceId),
+    )
+  const row = await db.query.itemSources.findFirst({
+    columns: { id: true },
+    where: condition,
+  })
+  return row !== undefined
 }
 
 export async function countItemSourcesByItemId(itemId: string, tx?: DbTransaction): Promise<number> {
