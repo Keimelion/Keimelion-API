@@ -84,5 +84,6 @@ ALTER TABLE "list_items" ADD CONSTRAINT "list_items_list_id_lists_id_fk" FOREIGN
 ALTER TABLE "list_items" ADD CONSTRAINT "list_items_item_id_items_id_fk" FOREIGN KEY ("item_id") REFERENCES "public"."items"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "lists" ADD CONSTRAINT "lists_occasion_type_id_occasion_types_id_fk" FOREIGN KEY ("occasion_type_id") REFERENCES "public"."occasion_types"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "item_sources_shop_id_idx" ON "item_sources" USING btree ("shop_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "item_sources_item_shop_unique_idx" ON "item_sources" USING btree ("item_id","shop_id") WHERE "item_sources"."shop_id" is not null;--> statement-breakpoint
 CREATE UNIQUE INDEX "shops_domain_unique_idx" ON "shops" USING btree ("domain") WHERE "shops"."domain" is not null;--> statement-breakpoint
 CREATE INDEX "shops_sort_order_idx" ON "shops" USING btree ("sort_order");

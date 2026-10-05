@@ -1,5 +1,5 @@
 {
-  "id": "5233aac1-3ed2-48ea-87ac-3e62c2f30149",
+  "id": "91d02d88-839c-46b4-95eb-019b265ca714",
   "prevId": "1c69b0be-07b5-4a71-bc10-c9972485be52",
   "version": "7",
   "dialect": "postgresql",
@@ -134,6 +134,28 @@
             }
           ],
           "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "item_sources_item_shop_unique_idx": {
+          "name": "item_sources_item_shop_unique_idx",
+          "columns": [
+            {
+              "expression": "item_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "shop_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"item_sources\".\"shop_id\" is not null",
           "concurrently": false,
           "method": "btree",
           "with": {}
