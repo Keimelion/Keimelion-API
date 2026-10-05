@@ -13,8 +13,10 @@ import {
   updateItemSource,
   deleteItemSource,
   countItemSourcesByItemId,
+  existsItemSourceForShop,
 } from '../../../db/entities/item-sources/item-sources.repository.js'
 import { findShopById } from '../../../db/entities/shops/shops.repository.js'
+import { DUPLICATE_SHOP_IN_SOURCES_MESSAGE } from '../../../db/entities/item-sources/item-sources.schemas.js'
 import { toItemSourceDetail } from '../../../shared/types/item.js'
 import { AdminAction } from '../admin.enums.js'
 import type { Shop } from '../../../db/entities/shops/shops.schema.js'
@@ -36,6 +38,11 @@ export async function createItemSource(
     const found = await findShopById(input.shopId)
     if (!found?.isActive) return serviceError(ErrorCode.NOT_FOUND)
     shop = found
+
+    const alreadyUsed = await existsItemSourceForShop(itemId, input.shopId)
+    if (alreadyUsed) {
+      return serviceError(ErrorCode.CONFLICT, { message: DUPLICATE_SHOP_IN_SOURCES_MESSAGE })
+    }
   }
 
   const outcome = await runWrite(() =>
@@ -47,7 +54,12 @@ export async function createItemSource(
       currency: input.currency,
     }),
   )
-  if ('errorCode' in outcome) return serviceError(outcome.errorCode)
+  if ('errorCode' in outcome) {
+    if (outcome.errorCode === ErrorCode.CONFLICT) {
+      return serviceError(ErrorCode.CONFLICT, { message: DUPLICATE_SHOP_IN_SOURCES_MESSAGE })
+    }
+    return serviceError(outcome.errorCode)
+  }
 
   const source = toItemSourceDetail({ ...outcome.row, shop })
   logger.info({ adminId, action: AdminAction.CREATE_ITEM_SOURCE, itemId, sourceId: source.id })
@@ -66,6 +78,13 @@ export async function updateItemSourceById(
   if (input.shopId !== null && input.shopId !== undefined) {
     const shop = await findShopById(input.shopId)
     if (!shop?.isActive) return serviceError(ErrorCode.NOT_FOUND)
+
+    if (input.shopId !== existingSource.shopId) {
+      const alreadyUsed = await existsItemSourceForShop(itemId, input.shopId, sourceId)
+      if (alreadyUsed) {
+        return serviceError(ErrorCode.CONFLICT, { message: DUPLICATE_SHOP_IN_SOURCES_MESSAGE })
+      }
+    }
   }
 
   const fields = pickDefined({
@@ -76,7 +95,12 @@ export async function updateItemSourceById(
   })
 
   const outcome = await runWrite(() => updateItemSource(sourceId, fields))
-  if ('errorCode' in outcome) return serviceError(outcome.errorCode)
+  if ('errorCode' in outcome) {
+    if (outcome.errorCode === ErrorCode.CONFLICT) {
+      return serviceError(ErrorCode.CONFLICT, { message: DUPLICATE_SHOP_IN_SOURCES_MESSAGE })
+    }
+    return serviceError(outcome.errorCode)
+  }
 
   const updatedSource = await findItemSourceByIdWithShop(sourceId)
   if (!updatedSource) return serviceError(ErrorCode.INTERNAL_ERROR)

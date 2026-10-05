@@ -131,6 +131,36 @@ function mockFindShopById(row: unknown): void {
   vi.mocked(db.query.shops.findFirst).mockResolvedValueOnce(row as never)
 }
 
+function mockExistsItemSourceForShop(exists: boolean): void {
+  vi.mocked(db.query.itemSources.findFirst).mockResolvedValueOnce(
+    (exists ? { id: 'any-id' } : undefined) as never,
+  )
+}
+
+function mockInsertItemSourceUniqueViolation(): void {
+  const error = Object.assign(new Error('duplicate key value violates unique constraint'), {
+    code: '23505',
+  })
+  vi.mocked(db.insert).mockReturnValueOnce({
+    values: vi.fn().mockReturnValueOnce({
+      returning: vi.fn().mockRejectedValueOnce(error),
+    }),
+  } as never)
+}
+
+function mockUpdateItemSourceUniqueViolation(): void {
+  const error = Object.assign(new Error('duplicate key value violates unique constraint'), {
+    code: '23505',
+  })
+  vi.mocked(db.update).mockReturnValueOnce({
+    set: vi.fn().mockReturnValueOnce({
+      where: vi.fn().mockReturnValueOnce({
+        returning: vi.fn().mockRejectedValueOnce(error),
+      }),
+    }),
+  } as never)
+}
+
 function itemWith(sources: SourceRow[]): typeof ITEM_ROW & { sources: SourceRow[] } {
   return { ...ITEM_ROW, sources }
 }
@@ -416,6 +446,54 @@ describe('POST /v1/admin/items', () => {
     })
 
     expect(response.status).toBe(401)
+  })
+
+  it('returns 422 when two sources share the same non-null shopId (Zod refine)', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    const response = await apiRequest('/v1/admin/items', {
+      method: 'POST',
+      token,
+      body: {
+        name: 'Test Item',
+        sources: [
+          { shopId: SHOP_ROW.id, currency: 'EUR' },
+          { shopId: SHOP_ROW.id, currency: 'USD' },
+        ],
+      },
+    })
+
+    const body = await response.json() as {
+      code: string
+      metadata: { issues: { path: string; message: string }[] }
+    }
+    expect(response.status).toBe(422)
+    expect(body.code).toBe('UNPROCESSABLE_ENTITY')
+    const paths = body.metadata.issues.map((issue) => issue.path).sort()
+    expect(paths).toEqual(['sources.0.shopId', 'sources.1.shopId'])
+    expect(body.metadata.issues[0]?.message).toContain('already used by another source')
+  })
+
+  it('returns 201 when multiple sources share shopId = null (allowed)', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockCreateItemTransaction(ITEM_ROW, [SOURCE_ROW, { ...SOURCE_ROW, id: 'another-id' }])
+    mockFindItemById(itemWith([SOURCE_ROW, { ...SOURCE_ROW, id: 'another-id' }]))
+
+    const response = await apiRequest('/v1/admin/items', {
+      method: 'POST',
+      token,
+      body: {
+        name: 'Test Item',
+        sources: [
+          { shopId: null, currency: 'EUR' },
+          { shopId: null, currency: 'USD' },
+        ],
+      },
+    })
+
+    expect(response.status).toBe(201)
   })
 })
 
@@ -1092,6 +1170,62 @@ describe('POST /v1/admin/items/:id/sources', () => {
 
     expect(response.status).toBe(401)
   })
+
+  it('returns 409 when the item already has a source for the same shop', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindItemById(ITEM_ROW)
+    mockFindShopById(SHOP_ROW)
+    mockExistsItemSourceForShop(true)
+
+    const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}/sources`, {
+      method: 'POST',
+      token,
+      body: { shopId: SHOP_ROW.id, currency: 'EUR' },
+    })
+
+    const body = await response.json() as { code: string; metadata: { message: string } }
+    expect(response.status).toBe(409)
+    expect(body.code).toBe('CONFLICT')
+    expect(body.metadata.message).toBe('This shop is already used by another source of this item.')
+  })
+
+  it('returns 409 when the DB unique index rejects a concurrent duplicate insert', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindItemById(ITEM_ROW)
+    mockFindShopById(SHOP_ROW)
+    mockExistsItemSourceForShop(false)
+    mockInsertItemSourceUniqueViolation()
+
+    const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}/sources`, {
+      method: 'POST',
+      token,
+      body: { shopId: SHOP_ROW.id, currency: 'EUR' },
+    })
+
+    const body = await response.json() as { code: string; metadata: { message: string } }
+    expect(response.status).toBe(409)
+    expect(body.code).toBe('CONFLICT')
+    expect(body.metadata.message).toBe('This shop is already used by another source of this item.')
+  })
+
+  it('skips the uniqueness probe when shopId is null (any number allowed)', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindItemById(ITEM_ROW)
+    mockInsertItemSource(SOURCE_ROW)
+
+    const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}/sources`, {
+      method: 'POST',
+      token,
+      body: { shopId: null, currency: 'EUR' },
+    })
+
+    expect(response.status).toBe(201)
+    // Only the auth findFirst runs; the uniqueness probe is not reached.
+    expect(vi.mocked(db.query.itemSources.findFirst)).not.toHaveBeenCalled()
+  })
 })
 
 describe('PATCH /v1/admin/items/:id/sources/:sourceId', () => {
@@ -1127,6 +1261,7 @@ describe('PATCH /v1/admin/items/:id/sources/:sourceId', () => {
     mockAdminAuth()
     mockFindItemSourceById(SOURCE_ROW)
     mockFindShopById(SHOP_ROW)
+    mockExistsItemSourceForShop(false)
     mockUpdateItemSource({ ...SOURCE_ROW, shopId: SHOP_ROW.id })
     mockFindItemSourceByIdWithShop({ ...SOURCE_ROW, shopId: SHOP_ROW.id }, SHOP_ROW)
 
@@ -1238,6 +1373,74 @@ describe('PATCH /v1/admin/items/:id/sources/:sourceId', () => {
     )
 
     expect(response.status).toBe(401)
+  })
+
+  it('returns 409 when patching shopId to one already used by another source of the item', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindItemSourceById(SOURCE_ROW)
+    mockFindShopById(SHOP_ROW)
+    mockExistsItemSourceForShop(true)
+
+    const response = await apiRequest(
+      `/v1/admin/items/${ITEM_ROW.id}/sources/${SOURCE_ROW.id}`,
+      {
+        method: 'PATCH',
+        token,
+        body: { shopId: SHOP_ROW.id },
+      },
+    )
+
+    const body = await response.json() as { code: string; metadata: { message: string } }
+    expect(response.status).toBe(409)
+    expect(body.code).toBe('CONFLICT')
+    expect(body.metadata.message).toBe('This shop is already used by another source of this item.')
+  })
+
+  it('returns 409 when the DB unique index rejects a concurrent duplicate update', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindItemSourceById(SOURCE_ROW)
+    mockFindShopById(SHOP_ROW)
+    mockExistsItemSourceForShop(false)
+    mockUpdateItemSourceUniqueViolation()
+
+    const response = await apiRequest(
+      `/v1/admin/items/${ITEM_ROW.id}/sources/${SOURCE_ROW.id}`,
+      {
+        method: 'PATCH',
+        token,
+        body: { shopId: SHOP_ROW.id },
+      },
+    )
+
+    const body = await response.json() as { code: string; metadata: { message: string } }
+    expect(response.status).toBe(409)
+    expect(body.code).toBe('CONFLICT')
+    expect(body.metadata.message).toBe('This shop is already used by another source of this item.')
+  })
+
+  it('skips the uniqueness probe when shopId is unchanged', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindItemSourceById({ ...SOURCE_ROW, shopId: SHOP_ROW.id })
+    mockFindShopById(SHOP_ROW)
+    mockUpdateItemSource({ ...SOURCE_ROW, shopId: SHOP_ROW.id, currency: 'USD' })
+    mockFindItemSourceByIdWithShop({ ...SOURCE_ROW, shopId: SHOP_ROW.id, currency: 'USD' }, SHOP_ROW)
+
+    const response = await apiRequest(
+      `/v1/admin/items/${ITEM_ROW.id}/sources/${SOURCE_ROW.id}`,
+      {
+        method: 'PATCH',
+        token,
+        body: { shopId: SHOP_ROW.id, currency: 'USD' },
+      },
+    )
+
+    expect(response.status).toBe(200)
+    // Only findItemSourceById + findItemSourceByIdWithShop (both use itemSources.findFirst),
+    // so exactly 2 calls — the probe would push it to 3.
+    expect(vi.mocked(db.query.itemSources.findFirst)).toHaveBeenCalledTimes(2)
   })
 })
 

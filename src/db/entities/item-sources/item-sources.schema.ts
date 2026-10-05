@@ -1,4 +1,5 @@
-import { char, index, numeric, pgTable, text, uuid } from 'drizzle-orm/pg-core'
+import { char, index, numeric, pgTable, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
+import { isNotNull } from 'drizzle-orm'
 import { timestamps, uuidPrimaryKey } from '../../../shared/db/columns.js'
 import { items } from '../items/items.schema.js'
 import { shops } from '../shops/shops.schema.js'
@@ -16,6 +17,9 @@ export const itemSources = pgTable(
   },
   (table) => [
     index('item_sources_shop_id_idx').on(table.shopId),
+    uniqueIndex('item_sources_item_shop_unique_idx')
+      .on(table.itemId, table.shopId)
+      .where(isNotNull(table.shopId)),
   ],
 )
 

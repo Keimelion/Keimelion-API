@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "item_sources_item_shop_unique_idx" ON "item_sources" USING btree ("item_id","shop_id") WHERE "item_sources"."shop_id" is not null;
