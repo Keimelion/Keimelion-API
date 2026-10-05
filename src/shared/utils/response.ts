@@ -5,6 +5,9 @@ import { HttpStatus } from '../enums/http.js'
 import type { ApiError } from '../types/api.js'
 import type { ServiceResult } from '../types/service.js'
 
+export const DUPLICATE_SHOP_IN_SOURCES_MESSAGE =
+  'This shop is already used by another source of this item.'
+
 export const errorMap: Record<ErrorCode, { status: ContentfulStatusCode; message: string }> = {
   BAD_REQUEST:             { status: HttpStatus.BAD_REQUEST,           message: 'Bad request' },
   UNAUTHORIZED:            { status: HttpStatus.UNAUTHORIZED,          message: 'Unauthorized' },
@@ -13,6 +16,7 @@ export const errorMap: Record<ErrorCode, { status: ContentfulStatusCode; message
   ACCOUNT_BANNED:          { status: HttpStatus.FORBIDDEN,             message: 'This account has been suspended' },
   NOT_FOUND:               { status: HttpStatus.NOT_FOUND,             message: 'Resource not found' },
   CONFLICT:                { status: HttpStatus.CONFLICT,              message: 'Resource already exists' },
+  DUPLICATE_SHOP_FOR_ITEM: { status: HttpStatus.CONFLICT,              message: DUPLICATE_SHOP_IN_SOURCES_MESSAGE },
   UNPROCESSABLE_ENTITY:    { status: HttpStatus.UNPROCESSABLE_ENTITY,  message: 'Validation failed' },
   RATE_LIMIT_EXCEEDED:     { status: HttpStatus.TOO_MANY_REQUESTS,     message: 'Too many requests' },
   USER_CREATION_FAILED:    { status: HttpStatus.INTERNAL_SERVER_ERROR, message: 'Account could not be created' },

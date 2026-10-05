@@ -16,7 +16,6 @@ import {
   existsItemSourceForShop,
 } from '../../../db/entities/item-sources/item-sources.repository.js'
 import { findShopById } from '../../../db/entities/shops/shops.repository.js'
-import { DUPLICATE_SHOP_IN_SOURCES_MESSAGE } from '../../../db/entities/item-sources/item-sources.schemas.js'
 import { toItemSourceDetail } from '../../../shared/types/item.js'
 import { AdminAction } from '../admin.enums.js'
 import type { Shop } from '../../../db/entities/shops/shops.schema.js'
@@ -40,9 +39,7 @@ export async function createItemSource(
     shop = found
 
     const alreadyUsed = await existsItemSourceForShop(itemId, input.shopId)
-    if (alreadyUsed) {
-      return serviceError(ErrorCode.CONFLICT, { message: DUPLICATE_SHOP_IN_SOURCES_MESSAGE })
-    }
+    if (alreadyUsed) return serviceError(ErrorCode.DUPLICATE_SHOP_FOR_ITEM)
   }
 
   const outcome = await runWrite(() =>
@@ -55,9 +52,7 @@ export async function createItemSource(
     }),
   )
   if ('errorCode' in outcome) {
-    if (outcome.errorCode === ErrorCode.CONFLICT) {
-      return serviceError(ErrorCode.CONFLICT, { message: DUPLICATE_SHOP_IN_SOURCES_MESSAGE })
-    }
+    if (outcome.errorCode === ErrorCode.CONFLICT) return serviceError(ErrorCode.DUPLICATE_SHOP_FOR_ITEM)
     return serviceError(outcome.errorCode)
   }
 
@@ -81,9 +76,7 @@ export async function updateItemSourceById(
 
     if (input.shopId !== existingSource.shopId) {
       const alreadyUsed = await existsItemSourceForShop(itemId, input.shopId, sourceId)
-      if (alreadyUsed) {
-        return serviceError(ErrorCode.CONFLICT, { message: DUPLICATE_SHOP_IN_SOURCES_MESSAGE })
-      }
+      if (alreadyUsed) return serviceError(ErrorCode.DUPLICATE_SHOP_FOR_ITEM)
     }
   }
 
@@ -96,9 +89,7 @@ export async function updateItemSourceById(
 
   const outcome = await runWrite(() => updateItemSource(sourceId, fields))
   if ('errorCode' in outcome) {
-    if (outcome.errorCode === ErrorCode.CONFLICT) {
-      return serviceError(ErrorCode.CONFLICT, { message: DUPLICATE_SHOP_IN_SOURCES_MESSAGE })
-    }
+    if (outcome.errorCode === ErrorCode.CONFLICT) return serviceError(ErrorCode.DUPLICATE_SHOP_FOR_ITEM)
     return serviceError(outcome.errorCode)
   }
 

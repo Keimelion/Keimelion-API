@@ -1,13 +1,11 @@
 import { z } from 'zod'
 import { httpsUrlSchema } from '../../../shared/schemas/url.js'
+import { DUPLICATE_SHOP_IN_SOURCES_MESSAGE } from '../../../shared/utils/response.js'
 
 const MAX_SOURCE_URL_LENGTH = 2048
 const PRICE_REGEX = /^\d{1,8}(\.\d{1,2})?$/
 const CURRENCY_REGEX = /^[A-Z]{3}$/
 const CURRENCY_LENGTH = 3
-
-export const DUPLICATE_SHOP_IN_SOURCES_MESSAGE =
-  'This shop is already used by another source of this item.'
 
 export const httpsSourceUrlSchema = httpsUrlSchema('sourceUrl', MAX_SOURCE_URL_LENGTH).nullable()
 

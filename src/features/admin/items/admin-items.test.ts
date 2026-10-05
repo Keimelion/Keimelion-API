@@ -1184,10 +1184,10 @@ describe('POST /v1/admin/items/:id/sources', () => {
       body: { shopId: SHOP_ROW.id, currency: 'EUR' },
     })
 
-    const body = await response.json() as { code: string; metadata: { message: string } }
+    const body = await response.json() as { code: string; message: string }
     expect(response.status).toBe(409)
-    expect(body.code).toBe('CONFLICT')
-    expect(body.metadata.message).toBe('This shop is already used by another source of this item.')
+    expect(body.code).toBe('DUPLICATE_SHOP_FOR_ITEM')
+    expect(body.message).toBe('This shop is already used by another source of this item.')
   })
 
   it('returns 409 when the DB unique index rejects a concurrent duplicate insert', async () => {
@@ -1204,10 +1204,10 @@ describe('POST /v1/admin/items/:id/sources', () => {
       body: { shopId: SHOP_ROW.id, currency: 'EUR' },
     })
 
-    const body = await response.json() as { code: string; metadata: { message: string } }
+    const body = await response.json() as { code: string; message: string }
     expect(response.status).toBe(409)
-    expect(body.code).toBe('CONFLICT')
-    expect(body.metadata.message).toBe('This shop is already used by another source of this item.')
+    expect(body.code).toBe('DUPLICATE_SHOP_FOR_ITEM')
+    expect(body.message).toBe('This shop is already used by another source of this item.')
   })
 
   it('skips the uniqueness probe when shopId is null (any number allowed)', async () => {
@@ -1391,10 +1391,10 @@ describe('PATCH /v1/admin/items/:id/sources/:sourceId', () => {
       },
     )
 
-    const body = await response.json() as { code: string; metadata: { message: string } }
+    const body = await response.json() as { code: string; message: string }
     expect(response.status).toBe(409)
-    expect(body.code).toBe('CONFLICT')
-    expect(body.metadata.message).toBe('This shop is already used by another source of this item.')
+    expect(body.code).toBe('DUPLICATE_SHOP_FOR_ITEM')
+    expect(body.message).toBe('This shop is already used by another source of this item.')
   })
 
   it('returns 409 when the DB unique index rejects a concurrent duplicate update', async () => {
@@ -1414,10 +1414,10 @@ describe('PATCH /v1/admin/items/:id/sources/:sourceId', () => {
       },
     )
 
-    const body = await response.json() as { code: string; metadata: { message: string } }
+    const body = await response.json() as { code: string; message: string }
     expect(response.status).toBe(409)
-    expect(body.code).toBe('CONFLICT')
-    expect(body.metadata.message).toBe('This shop is already used by another source of this item.')
+    expect(body.code).toBe('DUPLICATE_SHOP_FOR_ITEM')
+    expect(body.message).toBe('This shop is already used by another source of this item.')
   })
 
   it('skips the uniqueness probe when shopId is unchanged', async () => {
