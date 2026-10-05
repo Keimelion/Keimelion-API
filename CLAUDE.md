@@ -43,6 +43,10 @@ See `.claude/coding-standards.md` for the full coding standards (early return, n
 - `@typescript-eslint/unbound-method` is disabled for `*.test.ts` files (false positive with `vi.mocked`)
 - Cast `res.json()` responses with `as MyType` — `Response.json()` does not accept a generic
 
+### Error handling
+- Specific error messages belong in `errorMap` under a dedicated `ErrorCode` entry (see `src/shared/utils/response.ts`), not inline via `serviceError(code, { message })`. The inline form keeps the generic message at the response top-level `message` and buries the custom one under `metadata.message` — leaky, and forces every caller to repeat the string. A dedicated code puts the specific message at `message` and lets clients branch on the specific `code`.
+- When the same message is needed by a Zod refine (for a 422), export it as a `const` alongside its `errorMap` entry in `response.ts` and import from there — single source of truth, no feature-layer file re-exporting shared strings.
+
 ## Data model rules
 
 ### RGPD exportability
