@@ -335,6 +335,32 @@ describe('POST /v1/lists', () => {
     expect(body.code).toBe('UNPROCESSABLE_ENTITY')
   })
 
+  it('returns 422 when eventDate is not a real calendar date (2024-02-30)', async () => {
+    const token = await generateTestToken(AUTH_USER.id)
+    mockAuthChain()
+
+    const response = await apiRequest('/v1/lists', {
+      method: 'POST',
+      token,
+      body: { title: 'My Wishlist', eventDate: '2024-02-30' },
+    })
+
+    expect(response.status).toBe(422)
+  })
+
+  it('returns 422 when eventDate is garbage (9999-99-99)', async () => {
+    const token = await generateTestToken(AUTH_USER.id)
+    mockAuthChain()
+
+    const response = await apiRequest('/v1/lists', {
+      method: 'POST',
+      token,
+      body: { title: 'My Wishlist', eventDate: '9999-99-99' },
+    })
+
+    expect(response.status).toBe(422)
+  })
+
   it('returns 401 when not authenticated', async () => {
     const response = await apiRequest('/v1/lists', {
       method: 'POST',
@@ -565,6 +591,19 @@ describe('PATCH /v1/lists/:id', () => {
       method: 'PATCH',
       token,
       body: { occasionTypeId: '00000000-0000-0000-0000-000000000099' },
+    })
+
+    expect(response.status).toBe(422)
+  })
+
+  it('returns 422 when eventDate is not a real calendar date (2024-02-30)', async () => {
+    const token = await generateTestToken(AUTH_USER.id)
+    mockAuthChain()
+
+    const response = await apiRequest(`/v1/lists/${LIST_ID}`, {
+      method: 'PATCH',
+      token,
+      body: { eventDate: '2024-02-30' },
     })
 
     expect(response.status).toBe(422)

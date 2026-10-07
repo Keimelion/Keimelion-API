@@ -18,7 +18,7 @@ const createListSchema = z
       .optional()
       .transform((value) => (value === '' || value === undefined ? null : value)),
     occasionTypeId: z.string().uuid().optional(),
-    eventDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    eventDate: z.string().date().optional(),
   })
   .strict()
 

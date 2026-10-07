@@ -24,7 +24,7 @@ const updateListSchema = z
       .optional()
       .transform((value) => (value === '' ? null : value)),
     occasionTypeId: z.string().uuid().nullable().optional(),
-    eventDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+    eventDate: z.string().date().nullable().optional(),
     listStatus: z.enum(USER_UPDATABLE_LIST_STATUSES).optional(),
   })
   .strict()
