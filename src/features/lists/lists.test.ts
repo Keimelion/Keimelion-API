@@ -113,10 +113,16 @@ function mockTransactionInserts(rows: unknown[]): void {
   })
 }
 
-function mockOwnedListIdsQuery(listIds: string[]): void {
-  vi.mocked(db.query.listCollaborators.findMany).mockResolvedValueOnce(
-    listIds.map((listId) => ({ listId })) as never,
-  )
+function mockOwnedListsSubquery(listIds: string[]): void {
+  // The findListsOwnedBy/countListsOwnedBy repository functions build a lazy
+  // subquery via db.select(...).from(listCollaborators).where(...). In production
+  // Drizzle serialises it into a correlated subquery; the mock chain here just
+  // needs to be consumed so the test does not blow the global db.select queue.
+  const chain = {
+    from: vi.fn().mockReturnThis(),
+    where: vi.fn().mockResolvedValueOnce(listIds.map((listId) => ({ id: listId }))),
+  }
+  vi.mocked(db.select).mockReturnValueOnce(chain as never)
 }
 
 function mockCountChain(total: number): void {
@@ -381,12 +387,12 @@ describe('GET /v1/lists', () => {
   it('returns 200 with paginated owned lists', async () => {
     const token = await generateTestToken(AUTH_USER.id)
     mockAuthChain()
-    mockOwnedListIdsQuery([LIST_ID])
+    mockOwnedListsSubquery([LIST_ID])
     vi.mocked(db.query.lists.findMany).mockResolvedValueOnce([
       rowWithOwner(MOCK_LIST, AUTH_USER),
     ] as never)
-    mockOwnedListIdsQuery([LIST_ID])
     mockCountChain(1)
+    mockOwnedListsSubquery([LIST_ID])
 
     const response = await apiRequest('/v1/lists', { token })
 
@@ -403,8 +409,10 @@ describe('GET /v1/lists', () => {
   it('returns an empty page when user owns no lists', async () => {
     const token = await generateTestToken(AUTH_USER.id)
     mockAuthChain()
-    mockOwnedListIdsQuery([])
-    mockOwnedListIdsQuery([])
+    mockOwnedListsSubquery([])
+    vi.mocked(db.query.lists.findMany).mockResolvedValueOnce([] as never)
+    mockCountChain(0)
+    mockOwnedListsSubquery([])
 
     const response = await apiRequest('/v1/lists', { token })
 

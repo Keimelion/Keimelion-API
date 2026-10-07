@@ -7,6 +7,7 @@ import { findListById } from '../../../db/entities/lists/lists.repository.js'
 import { CollabRoles } from '../../../shared/enums/collab-role.js'
 import { defineEntity, buildSoftDeleteDefault } from '../../../shared/db/entity-descriptor.js'
 import { LIST_STATUS_VALUES } from '../../../shared/enums/list-status.js'
+import { LIST_WITH_OWNER } from '../../lists/lists.includes.js'
 import type { List } from '../../../db/entities/lists/lists.schema.js'
 import type { ListRowWithOwner } from '../../../shared/types/list.js'
 import type { PaginationInput } from '../../../shared/schemas/pagination.js'
@@ -40,14 +41,6 @@ export interface ListListsFilters {
   genericFilters?: FilterInput[] | undefined
   ownerListIds?: string[] | undefined
 }
-
-const LIST_WITH_OWNER = {
-  collaborators: {
-    where: eq(listCollaborators.collabRole, CollabRoles.OWNER),
-    limit: 1,
-    with: { user: true },
-  },
-} as const
 
 export function findAllListsWithOwner(
   input: PaginationInput,

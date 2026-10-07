@@ -4,7 +4,6 @@ import { HttpStatus } from '../../shared/enums/http.js'
 import { ErrorCode } from '../../shared/enums/error-code.js'
 import { ItemStatuses } from '../../shared/enums/item-status.js'
 import { ListStatuses } from '../../shared/enums/list-status.js'
-import { CollabRoles } from '../../shared/enums/collab-role.js'
 import { serviceError } from '../../shared/utils/response.js'
 import { pickDefined } from '../../shared/utils/partial-update.js'
 import { runWrite } from '../../shared/utils/admin-write.js'
@@ -16,13 +15,13 @@ import { insertItem } from '../../db/entities/items/items.repository.js'
 import { insertItemSource } from '../../db/entities/item-sources/item-sources.repository.js'
 import { insertListItem } from '../../db/entities/list-items/list-items.repository.js'
 import { lists as listsTable } from '../../db/entities/lists/lists.schema.js'
-import { listCollaborators } from '../../db/entities/list-collaborators/list-collaborators.schema.js'
 import {
   findListById,
   insertList,
   updateList,
   softDeleteList,
 } from '../../db/entities/lists/lists.repository.js'
+import { LIST_WITH_OWNER } from './lists.includes.js'
 import { insertOwnerCollaborator } from '../../db/entities/list-collaborators/list-collaborators.repository.js'
 import { toItemDetail, toListItemDetail, toItemSourceDetail } from '../../shared/types/item.js'
 import { toListDetail } from '../../shared/types/list.js'
@@ -55,14 +54,6 @@ interface CreatedListItemRecord {
   source: ItemSource | null
   listItem: ListItem
 }
-
-const LIST_WITH_OWNER_INCLUDE = {
-  collaborators: {
-    where: eq(listCollaborators.collabRole, CollabRoles.OWNER),
-    limit: 1,
-    with: { user: true },
-  },
-} as const
 
 export async function createUserList(
   userId: string,
@@ -222,7 +213,7 @@ function buildUpdatePatch(input: UpdateListInput, existing: List): UpdateListFie
 async function findListByIdWithOwner(id: string): Promise<ListRowWithOwner | undefined> {
   return db.query.lists.findFirst({
     where: eq(listsTable.id, id),
-    with: LIST_WITH_OWNER_INCLUDE,
+    with: LIST_WITH_OWNER,
   })
 }
 
