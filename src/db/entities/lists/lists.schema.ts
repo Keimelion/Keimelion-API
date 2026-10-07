@@ -1,4 +1,4 @@
-import { pgEnum, pgTable, text, timestamp, uuid, varchar } from 'drizzle-orm/pg-core'
+import { boolean, date, pgEnum, pgTable, text, timestamp, uuid, varchar } from 'drizzle-orm/pg-core'
 import { timestamps, uuidPrimaryKey } from '../../../shared/db/columns.js'
 import { LIST_STATUS_VALUES } from '../../../shared/enums/list-status.js'
 import { occasionTypes } from '../occasion-types/occasion-types.schema.js'
@@ -9,8 +9,12 @@ export const lists = pgTable('lists', {
   id: uuidPrimaryKey(),
   occasionTypeId: uuid('occasion_type_id').references(() => occasionTypes.id, { onDelete: 'set null' }),
   title: varchar('title', { length: 200 }).notNull(),
+  slug: varchar('slug', { length: 80 }).notNull().unique(),
   description: text('description'),
   listStatus: listStatusEnum('list_status').notNull().default('active'),
+  eventDate: date('event_date'),
+  isGalleryPublic: boolean('is_gallery_public').notNull().default(false),
+  archivedAt: timestamp('archived_at', { withTimezone: true }),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
   ...timestamps(),
 })

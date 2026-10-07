@@ -64,6 +64,13 @@
       "when": 1791192019460,
       "tag": "0008_add-items-lists-shops-item-sources",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1791371682417,
+      "tag": "0009_add-lists-slug-event-date-is-gallery-public-archived-at",
+      "breakpoints": true
     }
   ]
 }

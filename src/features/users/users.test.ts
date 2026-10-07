@@ -536,6 +536,91 @@ describe('GET /v1/users/me/export', () => {
     expect(itemSourcesDescriptor?.columns).toContain('shopId')
   })
 
+  it('registers lists.csv with the exact allow-list required by RGPD', () => {
+    const listsDescriptor = EXPORT_ENTITY_REGISTRY.find(
+      (descriptor) => descriptor.filename === 'lists.csv',
+    )
+    expect(listsDescriptor).toBeDefined()
+    expect(listsDescriptor?.columns).toEqual([
+      'id',
+      'title',
+      'slug',
+      'description',
+      'listStatus',
+      'occasionTypeId',
+      'eventDate',
+      'isGalleryPublic',
+      'createdAt',
+      'updatedAt',
+      'archivedAt',
+      'deletedAt',
+    ])
+  })
+
+  it('fetches owner-scoped lists for RGPD and includes soft-deleted rows', async () => {
+    const listsDescriptor = EXPORT_ENTITY_REGISTRY.find(
+      (descriptor) => descriptor.filename === 'lists.csv',
+    )
+    const activeList = {
+      id: '00000000-0000-0000-0000-0000000000a1',
+      occasionTypeId: null,
+      title: 'Active',
+      slug: 'active-a1',
+      description: null,
+      listStatus: 'active' as const,
+      eventDate: null,
+      isGalleryPublic: false,
+      archivedAt: null,
+      deletedAt: null,
+      createdAt: new Date('2024-01-01'),
+      updatedAt: new Date('2024-01-01'),
+    }
+    const deletedList = { ...activeList, id: '00000000-0000-0000-0000-0000000000a2', slug: 'deleted-a2', deletedAt: new Date('2024-06-01') }
+
+    vi.mocked(db.query.listCollaborators.findMany).mockResolvedValueOnce([
+      { listId: activeList.id },
+      { listId: deletedList.id },
+    ] as never)
+    vi.mocked(db.query.lists.findMany).mockResolvedValueOnce([activeList, deletedList] as never)
+
+    expect(listsDescriptor).toBeDefined()
+    const rows = await (listsDescriptor as { fetchRows: (userId: string) => Promise<object[]> }).fetchRows(SAFE_USER.id)
+    expect(rows).toHaveLength(2)
+    const deletedRow = rows.find((row) => (row as { id: string }).id === deletedList.id)
+    expect(deletedRow).toBeDefined()
+    expect((deletedRow as { deletedAt: Date | null }).deletedAt).not.toBeNull()
+  })
+
+  it('returns an empty lists.csv row set when the user owns no lists', async () => {
+    const listsDescriptor = EXPORT_ENTITY_REGISTRY.find(
+      (descriptor) => descriptor.filename === 'lists.csv',
+    )
+    vi.mocked(db.query.listCollaborators.findMany).mockResolvedValueOnce([] as never)
+
+    expect(listsDescriptor).toBeDefined()
+    const rows = await (listsDescriptor as { fetchRows: (userId: string) => Promise<object[]> }).fetchRows(SAFE_USER.id)
+    expect(rows).toHaveLength(0)
+  })
+
+  it('includes a lists key in the JSON export payload', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+
+    vi.mocked(db.query.items.findMany).mockResolvedValueOnce([])
+    vi.mocked(db.query.items.findMany).mockResolvedValueOnce([])
+    vi.mocked(db.query.itemSources.findMany).mockResolvedValueOnce([])
+    vi.mocked(db.query.listCollaborators.findMany).mockResolvedValueOnce([])
+    vi.mocked(db.query.listCollaborators.findMany).mockResolvedValueOnce([])
+
+    const response = await apiRequest('/v1/users/me/export?format=json', { token })
+
+    expect(response.status).toBe(200)
+    const body = await response.json() as { lists: unknown[] }
+    expect(body).toHaveProperty('lists')
+    expect(Array.isArray(body.lists)).toBe(true)
+  })
+
   it('excludes catalog items (createdByUserId=null) from JSON export — findItemsByCreator scopes by userId', async () => {
     const token = await generateTestToken(SAFE_USER.id)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)

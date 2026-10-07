@@ -33,6 +33,7 @@
     "pino": "^10.3.1",
     "postgres": "^3.4.5",
     "qs": "^6.16.0",
+    "slugify": "^1.6.9",
     "zod": "^3.23.8"
   },
   "devDependencies": {

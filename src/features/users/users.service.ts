@@ -7,10 +7,16 @@ import { hashPassword, verifyPassword } from '../../shared/utils/hash.js'
 import { findUserById, anonymizeUser, updatePasswordHash, insertDeletionAudit } from '../../db/entities/users/users.repository.js'
 import { deleteAllUserTokens } from '../../db/entities/access-tokens/access-tokens.repository.js'
 import { revokeAllUserSessions } from '../../shared/db/user-sessions.js'
-import { findItemsByCreator, findItemSourcesByCreator, findListItemsForContributor } from './export/rgpd-export.repository.js'
+import {
+  findItemsByCreator,
+  findItemSourcesByCreator,
+  findListItemsForContributor,
+  findListsOwnedByForExport,
+} from './export/rgpd-export.repository.js'
 import { updateUserProfile } from './users.repository.js'
 import { toUserDetail } from '../../shared/types/user.js'
 import { toItemDetail, toItemSourceDetail, toListItemDetail } from '../../shared/types/item.js'
+import { toListDetail } from '../../shared/types/list.js'
 import { buildExportZipStream } from './export/csv-archive-writer.js'
 import { EXPORT_ENTITY_REGISTRY } from './export/export-entities.js'
 import type { UserDetail, UserWrite } from '../../shared/types/user.js'
@@ -113,10 +119,11 @@ export async function exportUserData(userId: string, format: ExportFormat): Prom
   const user = await findUserById(userId)
   const profile = user ? toUserDetail(user) : null
 
-  const [rawItems, rawItemSources, rawListItems] = await Promise.all([
+  const [rawItems, rawItemSources, rawListItems, rawLists] = await Promise.all([
     findItemsByCreator(userId),
     findItemSourcesByCreator(userId),
     findListItemsForContributor(userId),
+    findListsOwnedByForExport(userId),
   ])
 
   return {
@@ -126,6 +133,7 @@ export async function exportUserData(userId: string, format: ExportFormat): Prom
       items: rawItems.map(toItemDetail),
       itemSources: rawItemSources.map((source) => toItemSourceDetail({ ...source, shop: null })),
       listItems: rawListItems.map(toListItemDetail),
+      lists: rawLists.map((list) => ({ ...toListDetail(list, null), deletedAt: list.deletedAt })),
     },
     contentType: EXPORT_JSON_CONTENT_TYPE,
     filename: EXPORT_JSON_FILENAME,

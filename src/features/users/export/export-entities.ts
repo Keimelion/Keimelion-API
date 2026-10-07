@@ -1,7 +1,13 @@
 import { findUserById } from '../../../db/entities/users/users.repository.js'
-import { findItemsByCreator, findItemSourcesByCreator, findListItemsForContributor } from './rgpd-export.repository.js'
+import {
+  findItemsByCreator,
+  findItemSourcesByCreator,
+  findListItemsForContributor,
+  findListsOwnedByForExport,
+} from './rgpd-export.repository.js'
 import { toUserDetail } from '../../../shared/types/user.js'
 import { toItemDetail, toItemSourceDetail, toListItemDetail } from '../../../shared/types/item.js'
+import { toListDetail } from '../../../shared/types/list.js'
 
 /**
  * Descriptor for a single entity exported in the RGPD CSV archive.
@@ -110,9 +116,35 @@ const listItemsEntityDescriptor: ExportEntityDescriptor = {
   },
 }
 
+const listsEntityDescriptor: ExportEntityDescriptor = {
+  filename: 'lists.csv',
+  columns: [
+    'id',
+    'title',
+    'slug',
+    'description',
+    'listStatus',
+    'occasionTypeId',
+    'eventDate',
+    'isGalleryPublic',
+    'createdAt',
+    'updatedAt',
+    'archivedAt',
+    'deletedAt',
+  ],
+  fetchRows: async (userId: string) => {
+    const ownedLists = await findListsOwnedByForExport(userId)
+    return ownedLists.map((list) => ({
+      ...toListDetail(list, null),
+      deletedAt: list.deletedAt,
+    }))
+  },
+}
+
 export const EXPORT_ENTITY_REGISTRY: ExportEntityDescriptor[] = [
   profileEntityDescriptor,
   itemsEntityDescriptor,
   itemSourcesEntityDescriptor,
   listItemsEntityDescriptor,
+  listsEntityDescriptor,
 ]

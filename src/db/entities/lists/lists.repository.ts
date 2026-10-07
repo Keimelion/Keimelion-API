@@ -7,14 +7,30 @@ interface FindListByIdOptions {
   includeDeleted?: boolean
 }
 
-export type UpdateListFields = Partial<
-  Pick<typeof lists.$inferInsert, 'title' | 'description' | 'listStatus' | 'occasionTypeId'>
+export type InsertList = Pick<
+  typeof lists.$inferInsert,
+  'title' | 'slug' | 'description' | 'listStatus' | 'occasionTypeId' | 'eventDate' | 'isGalleryPublic' | 'archivedAt'
 >
+
+export type UpdateListFields = Partial<
+  Pick<
+    typeof lists.$inferInsert,
+    'title' | 'description' | 'listStatus' | 'occasionTypeId' | 'eventDate' | 'archivedAt'
+  >
+>
+
+type DbOrTx = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0]
 
 export function findListById(id: string, options?: FindListByIdOptions): Promise<List | undefined> {
   const includeDeleted = options?.includeDeleted ?? false
   const where = includeDeleted ? eq(lists.id, id) : and(eq(lists.id, id), isNull(lists.deletedAt))
   return db.query.lists.findFirst({ where })
+}
+
+export async function insertList(data: InsertList, tx?: DbOrTx): Promise<List | undefined> {
+  const executor = tx ?? db
+  const [row] = await executor.insert(lists).values(data).returning()
+  return row
 }
 
 export async function updateList(id: string, fields: UpdateListFields): Promise<List | undefined> {
