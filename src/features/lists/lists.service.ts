@@ -10,7 +10,7 @@ import { pickDefined } from '../../shared/utils/partial-update.js'
 import { runWrite } from '../../shared/utils/admin-write.js'
 import { buildPaginatedResponse } from '../../shared/schemas/pagination.js'
 import { buildSlugFromTitle } from '../../shared/utils/slug.js'
-import { isPgUniqueViolation } from '../../shared/db/pg-errors.js'
+import { isPgForeignKeyViolation, isPgUniqueViolation } from '../../shared/db/pg-errors.js'
 import { logger } from '../../shared/utils/logger.js'
 import { insertItem } from '../../db/entities/items/items.repository.js'
 import { insertItemSource } from '../../db/entities/item-sources/item-sources.repository.js'
@@ -185,6 +185,7 @@ async function tryInsertList(
     return { row: refreshed }
   } catch (error) {
     if (isPgUniqueViolation(error)) return { errorCode: ErrorCode.CONFLICT, retriable: true }
+    if (isPgForeignKeyViolation(error)) return { errorCode: ErrorCode.UNPROCESSABLE_ENTITY, retriable: false }
     logger.error({ error }, 'List creation failed')
     return { errorCode: ErrorCode.INTERNAL_ERROR, retriable: false }
   }

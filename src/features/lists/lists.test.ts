@@ -330,7 +330,9 @@ describe('POST /v1/lists', () => {
       body: { title: 'My Wishlist', occasionTypeId: '00000000-0000-0000-0000-000000000099' },
     })
 
-    expect(response.status).toBe(500)
+    const body = await response.json() as { code: string }
+    expect(response.status).toBe(422)
+    expect(body.code).toBe('UNPROCESSABLE_ENTITY')
   })
 
   it('returns 401 when not authenticated', async () => {
