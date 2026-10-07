@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto'
+import { randomInt } from 'node:crypto'
 import slugify from 'slugify'
 
 const SLUG_SUFFIX_LENGTH = 6
@@ -13,6 +13,9 @@ export function buildSlugFromTitle(title: string): string {
 
 function randomSuffix(): string {
   const alphabetLength = SLUG_SUFFIX_ALPHABET.length
-  const bytes = randomBytes(SLUG_SUFFIX_LENGTH)
-  return Array.from(bytes, (byte) => SLUG_SUFFIX_ALPHABET[byte % alphabetLength] ?? '').join('')
+  let out = ''
+  for (let i = 0; i < SLUG_SUFFIX_LENGTH; i += 1) {
+    out += SLUG_SUFFIX_ALPHABET[randomInt(0, alphabetLength)] ?? ''
+  }
+  return out
 }
