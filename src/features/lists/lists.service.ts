@@ -159,7 +159,7 @@ async function insertListWithSlugRetry(
     if (outcome.retriable) continue
     return { errorCode: outcome.errorCode }
   }
-  return { errorCode: ErrorCode.INTERNAL_ERROR }
+  return { errorCode: ErrorCode.SLUG_GENERATION_EXHAUSTED }
 }
 
 interface InsertAttemptFailure {

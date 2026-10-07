@@ -211,7 +211,7 @@ describe('POST /v1/lists', () => {
     expect(txInsert).toHaveBeenCalledTimes(2)
   })
 
-  it('retries on slug unique violation up to 3 times then returns 500', async () => {
+  it('retries on slug unique violation up to 3 times then returns 409', async () => {
     const token = await generateTestToken(AUTH_USER.id)
     mockAuthChain()
     vi.mocked(db.transaction).mockImplementation(() => {
@@ -225,7 +225,9 @@ describe('POST /v1/lists', () => {
       body: { title: 'My Wishlist' },
     })
 
-    expect(response.status).toBe(500)
+    const body = await response.json() as { code: string }
+    expect(response.status).toBe(409)
+    expect(body.code).toBe('SLUG_GENERATION_EXHAUSTED')
     expect(vi.mocked(db.transaction)).toHaveBeenCalledTimes(3)
   })
 
