@@ -1,12 +1,17 @@
+import { eq } from 'drizzle-orm'
 import type { Context, MiddlewareHandler } from 'hono'
 import { ErrorCode } from '../enums/error-code.js'
+import { HonoContextKey } from '../enums/context-key.js'
 import { sendError } from '../utils/response.js'
 import { logger } from '../utils/logger.js'
-import { findListById } from '../../db/entities/lists/lists.repository.js'
+import { db } from '../../db/client.js'
+import { lists } from '../../db/entities/lists/lists.schema.js'
 import { findListOwner, findListContributor } from '../../db/entities/list-collaborators/list-collaborators.repository.js'
+import { LIST_WITH_OWNER } from '../../features/lists/lists.includes.js'
 import { getAuthUser } from './auth.js'
 import type { AppVariables } from '../types/app.js'
 import type { ListCollaborator } from '../../db/entities/list-collaborators/list-collaborators.schema.js'
+import type { ListRowWithOwner } from '../types/list.js'
 
 type AppContext = Context<{ Variables: AppVariables }>
 type ResolveCollaborator = (listId: string, userId: string) => Promise<ListCollaborator | undefined>
@@ -37,12 +42,13 @@ function buildListAccessMiddleware(
       const listId = await resolveListId(context, options)
       if (!listId) return sendError(ErrorCode.NOT_FOUND)
 
-      const listExistsAndActive = await assertListActive(listId)
-      if (!listExistsAndActive) return sendError(ErrorCode.NOT_FOUND)
+      const list = await findActiveListWithOwner(listId)
+      if (!list) return sendError(ErrorCode.NOT_FOUND)
 
       const hasAccess = await assertUserHasAccess(context, listId, resolveCollaborator)
       if (!hasAccess) return sendError(ErrorCode.FORBIDDEN)
 
+      context.set(HonoContextKey.LIST, list)
       await next()
       return
     } catch (error: unknown) {
@@ -50,6 +56,10 @@ function buildListAccessMiddleware(
       return sendError(ErrorCode.INTERNAL_ERROR)
     }
   }
+}
+
+export function getList(context: AppContext): ListRowWithOwner {
+  return context.get(HonoContextKey.LIST)
 }
 
 async function resolveListId(
@@ -61,10 +71,14 @@ async function resolveListId(
   return paramValue ?? null
 }
 
-async function assertListActive(listId: string): Promise<boolean> {
-  const list = await findListById(listId)
-  if (!list) return false
-  return list.deletedAt === null
+async function findActiveListWithOwner(listId: string): Promise<ListRowWithOwner | undefined> {
+  const list = await db.query.lists.findFirst({
+    where: eq(lists.id, listId),
+    with: LIST_WITH_OWNER,
+  })
+  if (!list) return undefined
+  if (list.deletedAt !== null) return undefined
+  return list
 }
 
 function assertUserHasAccess(

@@ -16,7 +16,6 @@ import { insertItemSource } from '../../db/entities/item-sources/item-sources.re
 import { insertListItem } from '../../db/entities/list-items/list-items.repository.js'
 import { lists as listsTable } from '../../db/entities/lists/lists.schema.js'
 import {
-  findListById,
   insertList,
   updateList,
   softDeleteList,
@@ -31,6 +30,7 @@ import type { Item } from '../../db/entities/items/items.schema.js'
 import type { ItemSource } from '../../db/entities/item-sources/item-sources.schema.js'
 import type { ListItem } from '../../db/entities/list-items/list-items.schema.js'
 import type { List } from '../../db/entities/lists/lists.schema.js'
+import type { User } from '../../db/entities/users/users.schema.js'
 import type { InsertList, UpdateListFields } from '../../db/entities/lists/lists.repository.js'
 import type { ListDetail, ListRowWithOwner } from '../../shared/types/list.js'
 import type { UserDetail } from '../../shared/types/user.js'
@@ -56,10 +56,10 @@ interface CreatedListItemRecord {
 }
 
 export async function createUserList(
-  userId: string,
+  user: User,
   input: CreateListInput,
 ): Promise<ServiceResult<{ list: ListDetail }>> {
-  const outcome = await insertListWithSlugRetry(userId, input)
+  const outcome = await insertListWithSlugRetry(user, input)
   if ('errorCode' in outcome) return serviceError(outcome.errorCode)
 
   return {
@@ -84,34 +84,28 @@ export async function listUserLists(
   }
 }
 
-export async function getUserListById(id: string): Promise<ServiceResult<{ list: ListDetail }>> {
-  const row = await findListByIdWithOwner(id)
-  if (!row || row.deletedAt) return serviceError(ErrorCode.NOT_FOUND)
-
+export function getUserListById(list: ListRowWithOwner): ServiceResult<{ list: ListDetail }> {
   return {
-    data: { list: toListDetail(row, mapOwnerFromRow(row)) },
+    data: { list: toListDetail(list, mapOwnerFromRow(list)) },
     httpStatus: HttpStatus.OK,
   }
 }
 
 export async function updateUserList(
-  id: string,
+  existing: ListRowWithOwner,
   input: UpdateListInput,
 ): Promise<ServiceResult<{ list: ListDetail }>> {
-  const existing = await findListById(id)
-  if (!existing || existing.deletedAt) return serviceError(ErrorCode.NOT_FOUND)
-
   const fieldPatch = buildUpdatePatch(input, existing)
   if (Object.keys(fieldPatch).length === 0) {
     return serviceError(ErrorCode.NO_FIELDS_TO_UPDATE)
   }
 
-  const writeOutcome = await runWrite(() => updateList(id, fieldPatch), {
+  const writeOutcome = await runWrite(() => updateList(existing.id, fieldPatch), {
     foreignKeyErrorCode: ErrorCode.UNPROCESSABLE_ENTITY,
   })
   if ('errorCode' in writeOutcome) return serviceError(writeOutcome.errorCode)
 
-  const refreshed = await findListByIdWithOwner(id)
+  const refreshed = await findListByIdWithOwner(existing.id)
   if (!refreshed) return serviceError(ErrorCode.INTERNAL_ERROR)
 
   return {
@@ -121,9 +115,6 @@ export async function updateUserList(
 }
 
 export async function deleteUserList(id: string): Promise<ServiceResult<null>> {
-  const existing = await findListById(id)
-  if (!existing || existing.deletedAt) return serviceError(ErrorCode.NOT_FOUND)
-
   await softDeleteList(id)
   return { data: null, httpStatus: HttpStatus.NO_CONTENT }
 }
@@ -140,12 +131,12 @@ export async function addItemToList(
 }
 
 async function insertListWithSlugRetry(
-  userId: string,
+  user: User,
   input: CreateListInput,
 ): Promise<{ row: ListRowWithOwner } | { errorCode: ErrorCode }> {
   for (let attempt = 0; attempt < MAX_SLUG_RETRIES; attempt += 1) {
     const slug = buildSlugFromTitle(input.title)
-    const outcome = await tryInsertList(userId, input, slug)
+    const outcome = await tryInsertList(user, input, slug)
     if ('row' in outcome) return outcome
     if (outcome.retriable) continue
     return { errorCode: outcome.errorCode }
@@ -159,7 +150,7 @@ interface InsertAttemptFailure {
 }
 
 async function tryInsertList(
-  userId: string,
+  user: User,
   input: CreateListInput,
   slug: string,
 ): Promise<{ row: ListRowWithOwner } | InsertAttemptFailure> {
@@ -167,13 +158,15 @@ async function tryInsertList(
     const created = await db.transaction(async (tx) => {
       const inserted = await insertList(buildCreatePayload(input, slug), tx)
       if (!inserted) throw new Error('List insert returned no row')
-      const collaborator = await insertOwnerCollaborator(inserted.id, userId, tx)
+      const collaborator = await insertOwnerCollaborator(inserted.id, user.id, tx)
       if (!collaborator) throw new Error('Owner collaborator insert returned no row')
-      return inserted
+      return { list: inserted, collaborator }
     })
-    const refreshed = await findListByIdWithOwner(created.id)
-    if (!refreshed) return { errorCode: ErrorCode.INTERNAL_ERROR, retriable: false }
-    return { row: refreshed }
+    const row: ListRowWithOwner = {
+      ...created.list,
+      collaborators: [{ ...created.collaborator, user }],
+    }
+    return { row }
   } catch (error) {
     if (isPgUniqueViolation(error)) return { errorCode: ErrorCode.CONFLICT, retriable: true }
     if (isPgForeignKeyViolation(error)) return { errorCode: ErrorCode.UNPROCESSABLE_ENTITY, retriable: false }
@@ -190,8 +183,6 @@ function buildCreatePayload(input: CreateListInput, slug: string): InsertList {
     occasionTypeId: input.occasionTypeId ?? null,
     eventDate: input.eventDate ?? null,
     listStatus: ListStatuses.ACTIVE,
-    isGalleryPublic: false,
-    archivedAt: null,
   }
 }
 

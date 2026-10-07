@@ -33,7 +33,7 @@ export function mountCreateList(router: FeatureRouter): void {
     async (context) => {
       const user = getAuthUser(context)
       const input = context.req.valid('json')
-      return jsonResult(context, await createUserList(user.id, input))
+      return jsonResult(context, await createUserList(user, input))
     },
   )
 }

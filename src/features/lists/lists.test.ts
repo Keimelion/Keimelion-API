@@ -93,8 +93,14 @@ function mockAuthChain(): void {
   vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(AUTH_USER)
 }
 
-function mockListAndOwner(list: unknown = MOCK_LIST): void {
-  vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(list as never)
+function mockListAndOwner(list: unknown = MOCK_LIST, owner: unknown = AUTH_USER): void {
+  // The listOwnershipMiddleware now fetches the list with its owner relation in a
+  // single query and exposes it in context. The service re-reads that value instead
+  // of hitting the DB again, so tests only need the one findFirst + the collaborator
+  // check (ownership assertion).
+  vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(
+    (list && owner !== null ? rowWithOwner(list as object, owner) : list) as never,
+  )
   vi.mocked(db.query.listCollaborators.findFirst).mockResolvedValueOnce(MOCK_COLLABORATOR as never)
 }
 
@@ -167,9 +173,6 @@ describe('POST /v1/lists', () => {
     const token = await generateTestToken(AUTH_USER.id)
     mockAuthChain()
     mockTransactionInserts([MOCK_LIST, MOCK_COLLABORATOR])
-    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(
-      rowWithOwner(MOCK_LIST, AUTH_USER) as never,
-    )
 
     const response = await apiRequest('/v1/lists', {
       method: 'POST',
@@ -203,9 +206,6 @@ describe('POST /v1/lists', () => {
       }
       return (callback as (tx: unknown) => Promise<unknown>)(tx)
     })
-    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(
-      rowWithOwner(MOCK_LIST, AUTH_USER) as never,
-    )
 
     const response = await apiRequest('/v1/lists', {
       method: 'POST',
@@ -245,9 +245,6 @@ describe('POST /v1/lists', () => {
       return Promise.reject(error)
     })
     mockTransactionInserts([MOCK_LIST, MOCK_COLLABORATOR])
-    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(
-      rowWithOwner(MOCK_LIST, AUTH_USER) as never,
-    )
 
     const response = await apiRequest('/v1/lists', {
       method: 'POST',
@@ -446,9 +443,6 @@ describe('GET /v1/lists/:id', () => {
     const token = await generateTestToken(AUTH_USER.id)
     mockAuthChain()
     mockListAndOwner()
-    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(
-      rowWithOwner(MOCK_LIST, AUTH_USER) as never,
-    )
 
     const response = await apiRequest(`/v1/lists/${LIST_ID}`, { token })
 
@@ -510,7 +504,6 @@ describe('PATCH /v1/lists/:id', () => {
     const token = await generateTestToken(AUTH_USER.id)
     mockAuthChain()
     mockListAndOwner()
-    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(MOCK_LIST as never)
     mockUpdateList({ ...MOCK_LIST, title: 'Updated' })
     vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(
       rowWithOwner({ ...MOCK_LIST, title: 'Updated' }, AUTH_USER) as never,
@@ -531,7 +524,6 @@ describe('PATCH /v1/lists/:id', () => {
     const token = await generateTestToken(AUTH_USER.id)
     mockAuthChain()
     mockListAndOwner()
-    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(MOCK_LIST as never)
     mockUpdateList({ ...MOCK_LIST, listStatus: 'archived', archivedAt: new Date() })
     vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(
       rowWithOwner({ ...MOCK_LIST, listStatus: 'archived', archivedAt: new Date() }, AUTH_USER) as never,
@@ -553,7 +545,6 @@ describe('PATCH /v1/lists/:id', () => {
     const token = await generateTestToken(AUTH_USER.id)
     mockAuthChain()
     mockListAndOwner()
-    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(MOCK_LIST as never)
 
     const response = await apiRequest(`/v1/lists/${LIST_ID}`, {
       method: 'PATCH',
@@ -594,7 +585,6 @@ describe('PATCH /v1/lists/:id', () => {
     const token = await generateTestToken(AUTH_USER.id)
     mockAuthChain()
     mockListAndOwner()
-    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(MOCK_LIST as never)
     mockUpdateListRejects({ code: '23503' })
 
     const response = await apiRequest(`/v1/lists/${LIST_ID}`, {
@@ -668,7 +658,6 @@ describe('DELETE /v1/lists/:id', () => {
     const token = await generateTestToken(AUTH_USER.id)
     mockAuthChain()
     mockListAndOwner()
-    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(MOCK_LIST as never)
     mockUpdateList({ ...MOCK_LIST, deletedAt: new Date() })
 
     const response = await apiRequest(`/v1/lists/${LIST_ID}`, { method: 'DELETE', token })
