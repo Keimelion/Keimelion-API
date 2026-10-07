@@ -103,7 +103,7 @@ export async function updateUserList(
 
   const fieldPatch = buildUpdatePatch(input, existing)
   if (Object.keys(fieldPatch).length === 0) {
-    return serviceError(ErrorCode.UNPROCESSABLE_ENTITY, { message: 'At least one field must be provided' })
+    return serviceError(ErrorCode.NO_FIELDS_TO_UPDATE)
   }
 
   const writeOutcome = await runWrite(() => updateList(id, fieldPatch), {

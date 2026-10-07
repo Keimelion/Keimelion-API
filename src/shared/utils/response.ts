@@ -22,6 +22,7 @@ export const errorMap: Record<ErrorCode, { status: ContentfulStatusCode; message
   DUPLICATE_SHOP_FOR_ITEM: { status: HttpStatus.CONFLICT,              message: DUPLICATE_SHOP_IN_SOURCES_MESSAGE },
   SLUG_GENERATION_EXHAUSTED: { status: HttpStatus.CONFLICT,            message: SLUG_GENERATION_EXHAUSTED_MESSAGE },
   UNPROCESSABLE_ENTITY:    { status: HttpStatus.UNPROCESSABLE_ENTITY,  message: 'Validation failed' },
+  NO_FIELDS_TO_UPDATE:     { status: HttpStatus.UNPROCESSABLE_ENTITY,  message: 'At least one field must be provided' },
   RATE_LIMIT_EXCEEDED:     { status: HttpStatus.TOO_MANY_REQUESTS,     message: 'Too many requests' },
   USER_CREATION_FAILED:    { status: HttpStatus.INTERNAL_SERVER_ERROR, message: 'Account could not be created' },
   USER_UPDATE_FAILED:      { status: HttpStatus.INTERNAL_SERVER_ERROR, message: 'Account could not be updated' },
