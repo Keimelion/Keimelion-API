@@ -1,5 +1,5 @@
 {
-  "id": "91d02d88-839c-46b4-95eb-019b265ca714",
+  "id": "4113bdb4-0cbf-4524-ac8b-2d22ae843b35",
   "prevId": "1c69b0be-07b5-4a71-bc10-c9972485be52",
   "version": "7",
   "dialect": "postgresql",
@@ -525,6 +525,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "slug": {
+          "name": "slug",
+          "type": "varchar(80)",
+          "primaryKey": false,
+          "notNull": true
+        },
         "description": {
           "name": "description",
           "type": "text",
@@ -538,6 +544,25 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'active'"
+        },
+        "event_date": {
+          "name": "event_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_gallery_public": {
+          "name": "is_gallery_public",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "archived_at": {
+          "name": "archived_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
         },
         "deleted_at": {
           "name": "deleted_at",
@@ -577,7 +602,15 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
+      "uniqueConstraints": {
+        "lists_slug_unique": {
+          "name": "lists_slug_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "slug"
+          ]
+        }
+      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
