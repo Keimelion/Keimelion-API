@@ -6,8 +6,18 @@ import {
   findListsOwnedByForExport,
 } from './rgpd-export.repository.js'
 import { toUserDetail } from '../../../shared/types/user.js'
-import { toItemDetail, toItemSourceDetail, toListItemDetail } from '../../../shared/types/item.js'
+import { toItemDetail, toItemSourceDetailWithoutShop, toListItemDetail } from '../../../shared/types/item.js'
 import { toListDetail } from '../../../shared/types/list.js'
+import type { List } from '../../../db/entities/lists/lists.schema.js'
+import type { ListDetail } from '../../../shared/types/list.js'
+
+export interface ExportListRow extends ListDetail {
+  deletedAt: Date | null
+}
+
+export function toExportListRow(list: List): ExportListRow {
+  return { ...toListDetail(list, null), deletedAt: list.deletedAt }
+}
 
 /**
  * Descriptor for a single entity exported in the RGPD CSV archive.
@@ -92,7 +102,7 @@ const itemSourcesEntityDescriptor: ExportEntityDescriptor = {
   ],
   fetchRows: async (userId: string) => {
     const sources = await findItemSourcesByCreator(userId)
-    return sources.map((source) => toItemSourceDetail({ ...source, shop: null }))
+    return sources.map(toItemSourceDetailWithoutShop)
   },
 }
 
@@ -125,19 +135,13 @@ const listsEntityDescriptor: ExportEntityDescriptor = {
     'description',
     'listStatus',
     'occasionTypeId',
-    'eventDate',
-    'isGalleryPublic',
     'createdAt',
     'updatedAt',
-    'archivedAt',
     'deletedAt',
   ],
   fetchRows: async (userId: string) => {
     const ownedLists = await findListsOwnedByForExport(userId)
-    return ownedLists.map((list) => ({
-      ...toListDetail(list, null),
-      deletedAt: list.deletedAt,
-    }))
+    return ownedLists.map(toExportListRow)
   },
 }
 

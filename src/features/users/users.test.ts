@@ -548,11 +548,8 @@ describe('GET /v1/users/me/export', () => {
       'description',
       'listStatus',
       'occasionTypeId',
-      'eventDate',
-      'isGalleryPublic',
       'createdAt',
       'updatedAt',
-      'archivedAt',
       'deletedAt',
     ])
   })
@@ -568,9 +565,6 @@ describe('GET /v1/users/me/export', () => {
       slug: 'active-a1',
       description: null,
       listStatus: 'active' as const,
-      eventDate: null,
-      isGalleryPublic: false,
-      archivedAt: null,
       deletedAt: null,
       createdAt: new Date('2024-01-01'),
       updatedAt: new Date('2024-01-01'),

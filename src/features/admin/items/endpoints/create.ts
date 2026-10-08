@@ -5,7 +5,11 @@ import { jsonResult } from '../../../../shared/utils/response.js'
 import { validationErrorHandler } from '../../../../shared/utils/validation.js'
 import { getAuthUser } from '../../../../shared/middlewares/auth.js'
 import { RATE_LIMITS } from '../../../../shared/utils/rate-limiter.js'
-import { logoUrlSchema } from '../../../../db/entities/shops/shops.schemas.js'
+import {
+  itemNameSchema,
+  itemDescriptionSchema,
+  itemImageUrlSchema,
+} from '../../../../db/entities/items/items.schemas.js'
 import {
   currencySchema,
   httpsSourceUrlSchema,
@@ -15,9 +19,6 @@ import {
 } from '../../../../db/entities/item-sources/item-sources.schemas.js'
 import type { FeatureRouter } from '../../../../shared/types/app.js'
 import { createItem } from '../admin-items.service.js'
-
-const MAX_NAME_LENGTH = 300
-const MAX_DESCRIPTION_LENGTH = 5000
 
 const createItemSourceInputSchema = z
   .object({
@@ -30,15 +31,9 @@ const createItemSourceInputSchema = z
 
 const adminCreateItemSchema = z
   .object({
-    name: z.string().trim().min(1).max(MAX_NAME_LENGTH),
-    description: z
-      .string()
-      .trim()
-      .max(MAX_DESCRIPTION_LENGTH)
-      .nullable()
-      .optional()
-      .transform((value) => (value === '' ? null : (value ?? null))),
-    imageUrl: logoUrlSchema.optional().transform((value) => value ?? null),
+    name: itemNameSchema,
+    description: itemDescriptionSchema.optional().transform((value) => value ?? null),
+    imageUrl: itemImageUrlSchema.optional().transform((value) => value ?? null),
     sources: z.array(createItemSourceInputSchema).min(1),
   })
   .strict()

@@ -1,22 +1,21 @@
 import { and, count, eq, inArray, isNull, type SQL } from 'drizzle-orm'
 import { db } from '../../db/client.js'
 import { lists } from '../../db/entities/lists/lists.schema.js'
+import {
+  LIST_DEFAULT_SORT,
+  LIST_SORTABLE_FIELDS,
+  LIST_WITH_OWNER,
+} from '../../db/entities/lists/lists.repository.js'
 import { listCollaborators } from '../../db/entities/list-collaborators/list-collaborators.schema.js'
 import { CollabRoles } from '../../shared/enums/collab-role.js'
 import { defineEntity } from '../../shared/db/entity-descriptor.js'
-import { LIST_WITH_OWNER } from './lists.includes.js'
 import type { ListRowWithOwner } from '../../shared/types/list.js'
 import type { PaginationInput } from '../../shared/schemas/pagination.js'
 import type { SortInput } from '../../shared/schemas/sort.js'
 
 export const userListsEntity = defineEntity({
-  sortable: {
-    createdAt:  lists.createdAt,
-    updatedAt:  lists.updatedAt,
-    title:      lists.title,
-    listStatus: lists.listStatus,
-  },
-  defaultSort: [{ field: 'createdAt', direction: 'desc' }],
+  sortable: LIST_SORTABLE_FIELDS,
+  defaultSort: LIST_DEFAULT_SORT,
   filterable: {},
 })
 

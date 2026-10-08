@@ -104,12 +104,17 @@ function mockFindListByIdWithOwner(row: unknown, owner: unknown): void {
   const rowOut =
     row === undefined || row === null
       ? undefined
-      : { ...(row as object), collaborators: owner === null ? [] : [{ user: owner }] }
+      : { ...(row as object), collaborators: buildCollaborators(owner) }
   vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(rowOut as never)
 }
 
 function rowWithOwner(row: object, owner: unknown): object {
-  return { ...row, collaborators: owner === null ? [] : [{ user: owner }] }
+  return { ...row, collaborators: buildCollaborators(owner) }
+}
+
+function buildCollaborators(owner: unknown): { userId: string; user: unknown }[] {
+  if (owner === null) return []
+  return [{ userId: (owner as { id: string }).id, user: owner }]
 }
 
 function mockCountChain(total: number): void {
@@ -379,9 +384,8 @@ describe('PATCH /v1/admin/lists/:id', () => {
   it('returns 200 with updated list when patching title', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
-    mockFindListById(LIST_ROW)
+    mockFindListByIdWithOwner(LIST_ROW, OWNER_USER)
     mockUpdateList({ ...LIST_ROW, title: 'Updated title' })
-    mockFindListByIdWithOwner({ ...LIST_ROW, title: 'Updated title' }, OWNER_USER)
 
     const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}`, {
       method: 'PATCH',
@@ -397,9 +401,8 @@ describe('PATCH /v1/admin/lists/:id', () => {
   it('returns 200 when patching listStatus', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
-    mockFindListById(LIST_ROW)
+    mockFindListByIdWithOwner(LIST_ROW, OWNER_USER)
     mockUpdateList({ ...LIST_ROW, listStatus: 'archived' })
-    mockFindListByIdWithOwner({ ...LIST_ROW, listStatus: 'archived' }, OWNER_USER)
 
     const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}`, {
       method: 'PATCH',
@@ -415,9 +418,8 @@ describe('PATCH /v1/admin/lists/:id', () => {
   it('logs with title/description redacted and only change keys recorded', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
-    mockFindListById(LIST_ROW)
+    mockFindListByIdWithOwner(LIST_ROW, OWNER_USER)
     mockUpdateList({ ...LIST_ROW, title: 'New title', description: 'New description' })
-    mockFindListByIdWithOwner({ ...LIST_ROW, title: 'New title', description: 'New description' }, OWNER_USER)
 
     await apiRequest(`/v1/admin/lists/${LIST_ROW.id}`, {
       method: 'PATCH',
@@ -440,7 +442,7 @@ describe('PATCH /v1/admin/lists/:id', () => {
   it('returns 422 when body is empty (no fields)', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
-    mockFindListById(LIST_ROW)
+    mockFindListByIdWithOwner(LIST_ROW, OWNER_USER)
 
     const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}`, {
       method: 'PATCH',
@@ -493,7 +495,7 @@ describe('PATCH /v1/admin/lists/:id', () => {
   it('returns 422 when occasionTypeId does not exist (FK violation surfaced as friendly error)', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
-    mockFindListById(LIST_ROW)
+    mockFindListByIdWithOwner(LIST_ROW, OWNER_USER)
     vi.mocked(db.update).mockReturnValueOnce({
       set: vi.fn().mockReturnValueOnce({
         where: vi.fn().mockReturnValueOnce({
@@ -514,7 +516,7 @@ describe('PATCH /v1/admin/lists/:id', () => {
   it('returns 404 when list does not exist', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
-    mockFindListById(undefined)
+    mockFindListByIdWithOwner(undefined, OWNER_USER)
 
     const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}`, {
       method: 'PATCH',
@@ -528,7 +530,7 @@ describe('PATCH /v1/admin/lists/:id', () => {
   it('returns 404 when list is soft-deleted (cannot update without restoring first)', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
-    mockFindListById(DELETED_LIST_ROW)
+    mockFindListByIdWithOwner(DELETED_LIST_ROW, OWNER_USER)
 
     const response = await apiRequest(`/v1/admin/lists/${DELETED_LIST_ROW.id}`, {
       method: 'PATCH',
@@ -673,9 +675,8 @@ describe('POST /v1/admin/lists/:id/restore', () => {
   it('returns 200 with restored list', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
-    mockFindListById(DELETED_LIST_ROW)
+    mockFindListByIdWithOwner(DELETED_LIST_ROW, OWNER_USER)
     mockUpdateList({ ...DELETED_LIST_ROW, deletedAt: null })
-    mockFindListByIdWithOwner({ ...DELETED_LIST_ROW, deletedAt: null }, OWNER_USER)
 
     const response = await apiRequest(`/v1/admin/lists/${DELETED_LIST_ROW.id}/restore`, {
       method: 'POST',
@@ -690,7 +691,7 @@ describe('POST /v1/admin/lists/:id/restore', () => {
   it('is idempotent-safe: restoring twice fails the second time with 404', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
-    mockFindListById({ ...DELETED_LIST_ROW, deletedAt: null })
+    mockFindListByIdWithOwner({ ...DELETED_LIST_ROW, deletedAt: null }, OWNER_USER)
 
     const response = await apiRequest(`/v1/admin/lists/${DELETED_LIST_ROW.id}/restore`, {
       method: 'POST',
@@ -703,7 +704,7 @@ describe('POST /v1/admin/lists/:id/restore', () => {
   it('returns 404 when list is not soft-deleted (active list)', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
-    mockFindListById(LIST_ROW)
+    mockFindListByIdWithOwner(LIST_ROW, OWNER_USER)
 
     const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}/restore`, {
       method: 'POST',
@@ -716,7 +717,7 @@ describe('POST /v1/admin/lists/:id/restore', () => {
   it('returns 404 when list does not exist', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
-    mockFindListById(undefined)
+    mockFindListByIdWithOwner(undefined, OWNER_USER)
 
     const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}/restore`, {
       method: 'POST',
@@ -729,9 +730,8 @@ describe('POST /v1/admin/lists/:id/restore', () => {
   it('logs at info level on successful restore', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
-    mockFindListById(DELETED_LIST_ROW)
+    mockFindListByIdWithOwner(DELETED_LIST_ROW, OWNER_USER)
     mockUpdateList({ ...DELETED_LIST_ROW, deletedAt: null })
-    mockFindListByIdWithOwner({ ...DELETED_LIST_ROW, deletedAt: null }, OWNER_USER)
 
     await apiRequest(`/v1/admin/lists/${DELETED_LIST_ROW.id}/restore`, {
       method: 'POST',

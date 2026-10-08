@@ -2,10 +2,10 @@ import { HttpStatus } from '../../../shared/enums/http.js'
 import { ErrorCode } from '../../../shared/enums/error-code.js'
 import { serviceError } from '../../../shared/utils/response.js'
 import { logger } from '../../../shared/utils/logger.js'
-import { pickDefined } from '../../../shared/utils/partial-update.js'
 import { runWrite, buildChanges } from '../../../shared/utils/admin-write.js'
 import { buildPaginatedResponse } from '../../../shared/schemas/pagination.js'
 import {
+  buildListUpdatePatch,
   updateList,
   softDeleteList,
   restoreList,
@@ -61,15 +61,10 @@ export async function updateListById(
   id: string,
   input: UpdateListInput,
 ): Promise<ServiceResult<{ list: AdminListDetail }>> {
-  const existingRow = await findAdminListById(id)
+  const existingRow = await findAdminListByIdWithOwner(id)
   if (!existingRow || existingRow.deletedAt) return serviceError(ErrorCode.NOT_FOUND)
 
-  const fieldPatch: UpdateListFields = pickDefined({
-    title: input.title,
-    description: input.description,
-    listStatus: input.listStatus,
-    occasionTypeId: input.occasionTypeId,
-  })
+  const fieldPatch = buildListUpdatePatch(input)
 
   if (Object.keys(fieldPatch).length === 0) {
     return serviceError(ErrorCode.NO_FIELDS_TO_UPDATE)
@@ -82,9 +77,7 @@ export async function updateListById(
 
   logChanges(adminId, id, existingRow, fieldPatch)
 
-  const updatedRow = await findAdminListByIdWithOwner(id)
-  if (!updatedRow) return serviceError(ErrorCode.INTERNAL_ERROR)
-
+  const updatedRow = { ...outcome.row, collaborators: existingRow.collaborators }
   return {
     data: { list: toAdminListDetail(updatedRow) },
     httpStatus: HttpStatus.OK,
@@ -105,7 +98,7 @@ export async function restoreListById(
   adminId: string,
   id: string,
 ): Promise<ServiceResult<{ list: AdminListDetail }>> {
-  const existingRow = await findAdminListById(id)
+  const existingRow = await findAdminListByIdWithOwner(id)
   if (!existingRow?.deletedAt) return serviceError(ErrorCode.NOT_FOUND)
 
   const restored = await restoreList(id)
@@ -113,9 +106,7 @@ export async function restoreListById(
 
   logger.info({ adminId, action: AdminAction.RESTORE_LIST, listId: id })
 
-  const restoredRow = await findAdminListByIdWithOwner(id)
-  if (!restoredRow) return serviceError(ErrorCode.INTERNAL_ERROR)
-
+  const restoredRow = { ...restored, collaborators: existingRow.collaborators }
   return {
     data: { list: toAdminListDetail(restoredRow) },
     httpStatus: HttpStatus.OK,

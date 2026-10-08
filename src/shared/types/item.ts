@@ -90,6 +90,10 @@ export function toItemSourceDetail(source: ItemSourceWithShop): ItemSourceDetail
   }
 }
 
+export function toItemSourceDetailWithoutShop(source: ItemSource): ItemSourceDetail {
+  return toItemSourceDetail({ ...source, shop: null })
+}
+
 export function toItemWithSources(item: ItemRowWithSources): ItemWithSources {
   return {
     ...toItemDetail(item),

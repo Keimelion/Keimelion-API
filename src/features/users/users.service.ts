@@ -15,10 +15,9 @@ import {
 } from './export/rgpd-export.repository.js'
 import { updateUserProfile } from './users.repository.js'
 import { toUserDetail } from '../../shared/types/user.js'
-import { toItemDetail, toItemSourceDetail, toListItemDetail } from '../../shared/types/item.js'
-import { toListDetail } from '../../shared/types/list.js'
+import { toItemDetail, toItemSourceDetailWithoutShop, toListItemDetail } from '../../shared/types/item.js'
 import { buildExportZipStream } from './export/csv-archive-writer.js'
-import { EXPORT_ENTITY_REGISTRY } from './export/export-entities.js'
+import { EXPORT_ENTITY_REGISTRY, toExportListRow } from './export/export-entities.js'
 import type { UserDetail, UserWrite } from '../../shared/types/user.js'
 import type { ServiceResult } from '../../shared/types/service.js'
 import type { PartialWrite } from '../../shared/types/api.js'
@@ -131,9 +130,9 @@ export async function exportUserData(userId: string, format: ExportFormat): Prom
     payload: {
       profile,
       items: rawItems.map(toItemDetail),
-      itemSources: rawItemSources.map((source) => toItemSourceDetail({ ...source, shop: null })),
+      itemSources: rawItemSources.map(toItemSourceDetailWithoutShop),
       listItems: rawListItems.map(toListItemDetail),
-      lists: rawLists.map((list) => ({ ...toListDetail(list, null), deletedAt: list.deletedAt })),
+      lists: rawLists.map(toExportListRow),
     },
     contentType: EXPORT_JSON_CONTENT_TYPE,
     filename: EXPORT_JSON_FILENAME,

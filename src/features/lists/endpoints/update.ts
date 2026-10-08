@@ -7,24 +7,21 @@ import { jsonResult } from '../../../shared/utils/response.js'
 import { validationErrorHandler } from '../../../shared/utils/validation.js'
 import { uuidParamSchema } from '../../../shared/schemas/params.js'
 import { ListStatuses } from '../../../shared/enums/list-status.js'
+import {
+  listTitleSchema,
+  listDescriptionSchema,
+  listOccasionTypeIdSchema,
+} from '../../../db/entities/lists/lists.schemas.js'
 import type { FeatureRouter } from '../../../shared/types/app.js'
 import { updateUserList } from '../lists.service.js'
-
-const MAX_TITLE_LENGTH = 200
 
 const USER_UPDATABLE_LIST_STATUSES = [ListStatuses.ACTIVE, ListStatuses.ARCHIVED] as const
 
 const updateListSchema = z
   .object({
-    title: z.string().trim().min(1).max(MAX_TITLE_LENGTH).optional(),
-    description: z
-      .string()
-      .trim()
-      .nullable()
-      .optional()
-      .transform((value) => (value === '' ? null : value)),
-    occasionTypeId: z.string().uuid().nullable().optional(),
-    eventDate: z.string().date().nullable().optional(),
+    title: listTitleSchema.optional(),
+    description: listDescriptionSchema.optional(),
+    occasionTypeId: listOccasionTypeIdSchema.optional(),
     listStatus: z.enum(USER_UPDATABLE_LIST_STATUSES).optional(),
   })
   .strict()

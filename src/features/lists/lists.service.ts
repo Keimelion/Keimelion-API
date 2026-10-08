@@ -1,11 +1,9 @@
-import { eq } from 'drizzle-orm'
 import { db } from '../../db/client.js'
 import { HttpStatus } from '../../shared/enums/http.js'
 import { ErrorCode } from '../../shared/enums/error-code.js'
 import { ItemStatuses } from '../../shared/enums/item-status.js'
 import { ListStatuses } from '../../shared/enums/list-status.js'
 import { serviceError } from '../../shared/utils/response.js'
-import { pickDefined } from '../../shared/utils/partial-update.js'
 import { runWrite } from '../../shared/utils/admin-write.js'
 import { buildPaginatedResponse } from '../../shared/schemas/pagination.js'
 import { buildSlugFromTitle } from '../../shared/utils/slug.js'
@@ -14,26 +12,22 @@ import { logger } from '../../shared/utils/logger.js'
 import { insertItem } from '../../db/entities/items/items.repository.js'
 import { insertItemSource } from '../../db/entities/item-sources/item-sources.repository.js'
 import { insertListItem } from '../../db/entities/list-items/list-items.repository.js'
-import { lists as listsTable } from '../../db/entities/lists/lists.schema.js'
 import {
+  buildListUpdatePatch,
   insertList,
   updateList,
   softDeleteList,
 } from '../../db/entities/lists/lists.repository.js'
-import { LIST_WITH_OWNER } from './lists.includes.js'
 import { insertOwnerCollaborator } from '../../db/entities/list-collaborators/list-collaborators.repository.js'
-import { toItemDetail, toListItemDetail, toItemSourceDetail } from '../../shared/types/item.js'
-import { toListDetail } from '../../shared/types/list.js'
-import { toUserDetail } from '../../shared/types/user.js'
+import { toItemDetail, toListItemDetail, toItemSourceDetailWithoutShop } from '../../shared/types/item.js'
+import { extractOwnerDetail, toListDetail } from '../../shared/types/list.js'
 import { findListsOwnedBy, countListsOwnedBy } from './lists.repository.js'
 import type { Item } from '../../db/entities/items/items.schema.js'
 import type { ItemSource } from '../../db/entities/item-sources/item-sources.schema.js'
 import type { ListItem } from '../../db/entities/list-items/list-items.schema.js'
-import type { List } from '../../db/entities/lists/lists.schema.js'
 import type { User } from '../../db/entities/users/users.schema.js'
-import type { InsertList, UpdateListFields } from '../../db/entities/lists/lists.repository.js'
+import type { InsertList } from '../../db/entities/lists/lists.repository.js'
 import type { ListDetail, ListRowWithOwner } from '../../shared/types/list.js'
-import type { UserDetail } from '../../shared/types/user.js'
 import type { ListItemResponse } from './lists.types.js'
 import type { ServiceResult } from '../../shared/types/service.js'
 import type { PaginatedResponse } from '../../shared/types/api.js'
@@ -63,7 +57,7 @@ export async function createUserList(
   if ('errorCode' in outcome) return serviceError(outcome.errorCode)
 
   return {
-    data: { list: toListDetail(outcome.row, mapOwnerFromRow(outcome.row)) },
+    data: { list: toListDetail(outcome.row, extractOwnerDetail(outcome.row)) },
     httpStatus: HttpStatus.CREATED,
   }
 }
@@ -77,7 +71,7 @@ export async function listUserLists(
     countListsOwnedBy(userId),
   ])
 
-  const items = rows.map((row) => toListDetail(row, mapOwnerFromRow(row)))
+  const items = rows.map((row) => toListDetail(row, extractOwnerDetail(row)))
   return {
     data: buildPaginatedResponse(items, input, total),
     httpStatus: HttpStatus.OK,
@@ -86,7 +80,7 @@ export async function listUserLists(
 
 export function getUserListById(list: ListRowWithOwner): ServiceResult<{ list: ListDetail }> {
   return {
-    data: { list: toListDetail(list, mapOwnerFromRow(list)) },
+    data: { list: toListDetail(list, extractOwnerDetail(list)) },
     httpStatus: HttpStatus.OK,
   }
 }
@@ -95,7 +89,7 @@ export async function updateUserList(
   existing: ListRowWithOwner,
   input: UpdateListInput,
 ): Promise<ServiceResult<{ list: ListDetail }>> {
-  const fieldPatch = buildUpdatePatch(input, existing)
+  const fieldPatch = buildListUpdatePatch(input)
   if (Object.keys(fieldPatch).length === 0) {
     return serviceError(ErrorCode.NO_FIELDS_TO_UPDATE)
   }
@@ -105,11 +99,12 @@ export async function updateUserList(
   })
   if ('errorCode' in writeOutcome) return serviceError(writeOutcome.errorCode)
 
-  const refreshed = await findListByIdWithOwner(existing.id)
-  if (!refreshed) return serviceError(ErrorCode.INTERNAL_ERROR)
-
+  const refreshed: ListRowWithOwner = {
+    ...writeOutcome.row,
+    collaborators: existing.collaborators,
+  }
   return {
-    data: { list: toListDetail(refreshed, mapOwnerFromRow(refreshed)) },
+    data: { list: toListDetail(refreshed, extractOwnerDetail(refreshed)) },
     httpStatus: HttpStatus.OK,
   }
 }
@@ -181,36 +176,8 @@ function buildCreatePayload(input: CreateListInput, slug: string): InsertList {
     slug,
     description: input.description ?? null,
     occasionTypeId: input.occasionTypeId ?? null,
-    eventDate: input.eventDate ?? null,
     listStatus: ListStatuses.ACTIVE,
   }
-}
-
-function buildUpdatePatch(input: UpdateListInput, existing: List): UpdateListFields {
-  const base: UpdateListFields = pickDefined({
-    title: input.title,
-    description: input.description,
-    occasionTypeId: input.occasionTypeId,
-    eventDate: input.eventDate,
-    listStatus: input.listStatus,
-  })
-
-  if (input.listStatus === undefined) return base
-  if (input.listStatus === existing.listStatus) return base
-  base.archivedAt = input.listStatus === ListStatuses.ARCHIVED ? new Date() : null
-  return base
-}
-
-async function findListByIdWithOwner(id: string): Promise<ListRowWithOwner | undefined> {
-  return db.query.lists.findFirst({
-    where: eq(listsTable.id, id),
-    with: LIST_WITH_OWNER,
-  })
-}
-
-function mapOwnerFromRow(row: ListRowWithOwner): UserDetail | null {
-  const owner = row.collaborators[0]?.user ?? null
-  return owner ? toUserDetail(owner) : null
 }
 
 async function createManualListItem(
@@ -253,6 +220,6 @@ function buildListItemResponse(record: CreatedListItemRecord): ListItemResponse 
   return {
     ...toListItemDetail(record.listItem),
     item: toItemDetail(record.item),
-    source: record.source ? toItemSourceDetail({ ...record.source, shop: null }) : null,
+    source: record.source ? toItemSourceDetailWithoutShop(record.source) : null,
   }
 }

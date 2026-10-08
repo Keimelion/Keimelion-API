@@ -7,22 +7,20 @@ import { getAuthUser } from '../../../../shared/middlewares/auth.js'
 import { RATE_LIMITS } from '../../../../shared/utils/rate-limiter.js'
 import { uuidParamSchema } from '../../../../shared/schemas/params.js'
 import { LIST_STATUS_VALUES } from '../../../../shared/enums/list-status.js'
+import {
+  listTitleSchema,
+  listDescriptionSchema,
+  listOccasionTypeIdSchema,
+} from '../../../../db/entities/lists/lists.schemas.js'
 import type { FeatureRouter } from '../../../../shared/types/app.js'
 import { updateListById } from '../admin-lists.service.js'
 
-const MAX_TITLE_LENGTH = 200
-
 const adminUpdateListSchema = z
   .object({
-    title: z.string().trim().min(1).max(MAX_TITLE_LENGTH).optional(),
-    description: z
-      .string()
-      .trim()
-      .nullable()
-      .optional()
-      .transform((value) => (value === '' ? null : value)),
+    title: listTitleSchema.optional(),
+    description: listDescriptionSchema.optional(),
+    occasionTypeId: listOccasionTypeIdSchema.optional(),
     listStatus: z.enum(LIST_STATUS_VALUES).optional(),
-    occasionTypeId: z.string().uuid().nullable().optional(),
   })
   .strict()
 

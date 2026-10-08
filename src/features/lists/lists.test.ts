@@ -38,9 +38,6 @@ const MOCK_LIST = {
   slug: 'my-wishlist-abc123',
   description: null,
   listStatus: 'active' as const,
-  eventDate: null,
-  isGalleryPublic: false,
-  archivedAt: null,
   deletedAt: null,
   createdAt: new Date('2024-01-01'),
   updatedAt: new Date('2024-01-01'),
@@ -94,14 +91,11 @@ function mockAuthChain(): void {
 }
 
 function mockListAndOwner(list: unknown = MOCK_LIST, owner: unknown = AUTH_USER): void {
-  // The listOwnershipMiddleware now fetches the list with its owner relation in a
-  // single query and exposes it in context. The service re-reads that value instead
-  // of hitting the DB again, so tests only need the one findFirst + the collaborator
-  // check (ownership assertion).
+  // The listOwnershipMiddleware fetches the list with its owner relation in one query
+  // and derives ownership from the embedded collaborator — no separate DB call.
   vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(
     (list && owner !== null ? rowWithOwner(list as object, owner) : list) as never,
   )
-  vi.mocked(db.query.listCollaborators.findFirst).mockResolvedValueOnce(MOCK_COLLABORATOR as never)
 }
 
 function mockTransactionInserts(rows: unknown[]): void {
@@ -140,7 +134,9 @@ function mockCountChain(total: number): void {
 }
 
 function rowWithOwner(row: object, owner: unknown): object {
-  return { ...row, collaborators: owner === null ? [] : [{ user: owner }] }
+  if (owner === null) return { ...row, collaborators: [] }
+  const ownerId = (owner as { id: string }).id
+  return { ...row, collaborators: [{ userId: ownerId, user: owner }] }
 }
 
 function mockUpdateList(returnRow: unknown): void {
@@ -340,32 +336,6 @@ describe('POST /v1/lists', () => {
     expect(body.code).toBe('UNPROCESSABLE_ENTITY')
   })
 
-  it('returns 422 when eventDate is not a real calendar date (2024-02-30)', async () => {
-    const token = await generateTestToken(AUTH_USER.id)
-    mockAuthChain()
-
-    const response = await apiRequest('/v1/lists', {
-      method: 'POST',
-      token,
-      body: { title: 'My Wishlist', eventDate: '2024-02-30' },
-    })
-
-    expect(response.status).toBe(422)
-  })
-
-  it('returns 422 when eventDate is garbage (9999-99-99)', async () => {
-    const token = await generateTestToken(AUTH_USER.id)
-    mockAuthChain()
-
-    const response = await apiRequest('/v1/lists', {
-      method: 'POST',
-      token,
-      body: { title: 'My Wishlist', eventDate: '9999-99-99' },
-    })
-
-    expect(response.status).toBe(422)
-  })
-
   it('returns 401 when not authenticated', async () => {
     const response = await apiRequest('/v1/lists', {
       method: 'POST',
@@ -473,8 +443,9 @@ describe('GET /v1/lists/:id', () => {
   it('returns 403 when caller does not own the list', async () => {
     const token = await generateTestToken(AUTH_USER.id)
     mockAuthChain()
-    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(MOCK_LIST as never)
-    vi.mocked(db.query.listCollaborators.findFirst).mockResolvedValueOnce(undefined)
+    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(
+      rowWithOwner(MOCK_LIST, null) as never,
+    )
 
     const response = await apiRequest(`/v1/lists/${LIST_ID}`, { token })
     expect(response.status).toBe(403)
@@ -505,9 +476,6 @@ describe('PATCH /v1/lists/:id', () => {
     mockAuthChain()
     mockListAndOwner()
     mockUpdateList({ ...MOCK_LIST, title: 'Updated' })
-    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(
-      rowWithOwner({ ...MOCK_LIST, title: 'Updated' }, AUTH_USER) as never,
-    )
 
     const response = await apiRequest(`/v1/lists/${LIST_ID}`, {
       method: 'PATCH',
@@ -518,27 +486,6 @@ describe('PATCH /v1/lists/:id', () => {
     const body = await response.json() as { list: { title: string } }
     expect(response.status).toBe(200)
     expect(body.list.title).toBe('Updated')
-  })
-
-  it('sets archivedAt when transitioning listStatus from active to archived', async () => {
-    const token = await generateTestToken(AUTH_USER.id)
-    mockAuthChain()
-    mockListAndOwner()
-    mockUpdateList({ ...MOCK_LIST, listStatus: 'archived', archivedAt: new Date() })
-    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(
-      rowWithOwner({ ...MOCK_LIST, listStatus: 'archived', archivedAt: new Date() }, AUTH_USER) as never,
-    )
-
-    const response = await apiRequest(`/v1/lists/${LIST_ID}`, {
-      method: 'PATCH',
-      token,
-      body: { listStatus: 'archived' },
-    })
-
-    const body = await response.json() as { list: { listStatus: string; archivedAt: string | null } }
-    expect(response.status).toBe(200)
-    expect(body.list.listStatus).toBe('archived')
-    expect(body.list.archivedAt).not.toBeNull()
   })
 
   it('returns 422 when body is empty', async () => {
@@ -596,19 +543,6 @@ describe('PATCH /v1/lists/:id', () => {
     expect(response.status).toBe(422)
   })
 
-  it('returns 422 when eventDate is not a real calendar date (2024-02-30)', async () => {
-    const token = await generateTestToken(AUTH_USER.id)
-    mockAuthChain()
-
-    const response = await apiRequest(`/v1/lists/${LIST_ID}`, {
-      method: 'PATCH',
-      token,
-      body: { eventDate: '2024-02-30' },
-    })
-
-    expect(response.status).toBe(422)
-  })
-
   it('returns 404 when list is soft-deleted', async () => {
     const token = await generateTestToken(AUTH_USER.id)
     mockAuthChain()
@@ -626,8 +560,9 @@ describe('PATCH /v1/lists/:id', () => {
   it('returns 403 when user does not own the list', async () => {
     const token = await generateTestToken(AUTH_USER.id)
     mockAuthChain()
-    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(MOCK_LIST as never)
-    vi.mocked(db.query.listCollaborators.findFirst).mockResolvedValueOnce(undefined)
+    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(
+      rowWithOwner(MOCK_LIST, null) as never,
+    )
 
     const response = await apiRequest(`/v1/lists/${LIST_ID}`, {
       method: 'PATCH',
@@ -676,8 +611,9 @@ describe('DELETE /v1/lists/:id', () => {
   it('returns 403 when user does not own the list', async () => {
     const token = await generateTestToken(AUTH_USER.id)
     mockAuthChain()
-    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(MOCK_LIST as never)
-    vi.mocked(db.query.listCollaborators.findFirst).mockResolvedValueOnce(undefined)
+    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(
+      rowWithOwner(MOCK_LIST, null) as never,
+    )
 
     const response = await apiRequest(`/v1/lists/${LIST_ID}`, { method: 'DELETE', token })
     expect(response.status).toBe(403)
@@ -744,8 +680,9 @@ describe('POST /v1/lists/:id/items', () => {
     const token = await generateTestToken(AUTH_USER.id)
     vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(AUTH_USER)
-    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(MOCK_LIST as never)
-    vi.mocked(db.query.listCollaborators.findFirst).mockResolvedValueOnce(undefined)
+    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(
+      rowWithOwner(MOCK_LIST, null) as never,
+    )
 
     const response = await apiRequest(`/v1/lists/${LIST_ID}/items`, {
       method: 'POST',

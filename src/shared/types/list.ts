@@ -1,6 +1,7 @@
 import type { List } from '../../db/entities/lists/lists.schema.js'
 import type { ListCollaborator } from '../../db/entities/list-collaborators/list-collaborators.schema.js'
 import type { User } from '../../db/entities/users/users.schema.js'
+import { toUserDetail } from './user.js'
 import type { UserDetail } from './user.js'
 
 export interface ListDetail {
@@ -10,10 +11,7 @@ export interface ListDetail {
   description: string | null
   listStatus: string
   occasionTypeId: string | null
-  eventDate: string | null
-  isGalleryPublic: boolean
   owner: UserDetail | null
-  archivedAt: Date | null
   createdAt: Date
   updatedAt: Date
 }
@@ -26,6 +24,11 @@ export interface ListRowWithOwner extends List {
   collaborators: ListCollaboratorWithUser[]
 }
 
+export function extractOwnerDetail(row: ListRowWithOwner): UserDetail | null {
+  const ownerUser = row.collaborators[0]?.user ?? null
+  return ownerUser ? toUserDetail(ownerUser) : null
+}
+
 export function toListDetail(list: List, owner: UserDetail | null): ListDetail {
   return {
     id: list.id,
@@ -34,10 +37,7 @@ export function toListDetail(list: List, owner: UserDetail | null): ListDetail {
     description: list.description ?? null,
     listStatus: list.listStatus,
     occasionTypeId: list.occasionTypeId ?? null,
-    eventDate: list.eventDate ?? null,
-    isGalleryPublic: list.isGalleryPublic,
     owner,
-    archivedAt: list.archivedAt ?? null,
     createdAt: list.createdAt,
     updatedAt: list.updatedAt,
   }
