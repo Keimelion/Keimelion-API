@@ -4,15 +4,14 @@ import { ErrorCode } from '../../../shared/enums/error-code.js'
 import { MAX_CATEGORY_DEPTH, serviceError } from '../../../shared/utils/response.js'
 import { logger } from '../../../shared/utils/logger.js'
 import { pickDefined } from '../../../shared/utils/partial-update.js'
+import { runWrite } from '../../../shared/utils/admin-write.js'
 import { buildPaginatedResponse } from '../../../shared/schemas/pagination.js'
-import { isPgUniqueViolation } from '../../../shared/db/pg-errors.js'
 import {
   findAllCategories,
   countCategories,
 } from './admin-categories.repository.js'
 import {
   deleteCategory,
-  findCategoriesByParentId,
   findCategoriesByParentIds,
   findCategoryById,
   insertCategory,
@@ -40,22 +39,19 @@ export async function createCategory(
   const depthResolution = await resolveDepthForNewParent(input.parentId)
   if ('errorCode' in depthResolution) return serviceError(depthResolution.errorCode)
 
-  try {
-    const row = await insertCategory({
+  const outcome = await runWrite(() =>
+    insertCategory({
       parentId: input.parentId,
       name: input.name,
       slug: input.slug,
       depth: depthResolution.depth,
-    })
-    if (!row) return serviceError(ErrorCode.INTERNAL_ERROR)
+    }),
+  )
+  if ('errorCode' in outcome) return serviceError(outcome.errorCode)
 
-    const category = toCategoryDetail(row)
-    logger.info({ adminId, action: AdminAction.CREATE_CATEGORY, categoryId: category.id, slug: category.slug })
-    return { data: { category }, httpStatus: HttpStatus.CREATED }
-  } catch (error) {
-    if (isPgUniqueViolation(error)) return serviceError(ErrorCode.CATEGORY_SLUG_CONFLICT)
-    throw error
-  }
+  const category = toCategoryDetail(outcome.row)
+  logger.info({ adminId, action: AdminAction.CREATE_CATEGORY, categoryId: category.id, slug: category.slug })
+  return { data: { category }, httpStatus: HttpStatus.CREATED }
 }
 
 export async function listCategories(
@@ -131,14 +127,9 @@ async function applySimplePatch(
   id: string,
   patch: { name?: string; slug?: string },
 ): Promise<ServiceResult<{ category: CategoryDetail }>> {
-  try {
-    const row = await updateCategoryRow(id, patch)
-    if (!row) return serviceError(ErrorCode.CATEGORY_NOT_FOUND)
-    return { data: { category: toCategoryDetail(row) }, httpStatus: HttpStatus.OK }
-  } catch (error) {
-    if (isPgUniqueViolation(error)) return serviceError(ErrorCode.CATEGORY_SLUG_CONFLICT)
-    throw error
-  }
+  const outcome = await runWrite(() => updateCategoryRow(id, patch))
+  if ('errorCode' in outcome) return serviceError(outcome.errorCode)
+  return { data: { category: toCategoryDetail(outcome.row) }, httpStatus: HttpStatus.OK }
 }
 
 async function applyParentChange(
@@ -152,24 +143,21 @@ async function applyParentChange(
   const resolution = await resolveParentChange(existing, newParentId)
   if ('errorCode' in resolution) return serviceError(resolution.errorCode)
 
-  try {
-    const row = await db.transaction(async (tx) =>
+  const outcome = await runWrite(() =>
+    db.transaction(async (tx) =>
       applyParentChangeInTransaction(tx, existing, resolution, newParentId, nameSlugPatch),
-    )
-    if (!row) return serviceError(ErrorCode.INTERNAL_ERROR)
+    ),
+  )
+  if ('errorCode' in outcome) return serviceError(outcome.errorCode)
 
-    logger.info({
-      adminId,
-      action: AdminAction.UPDATE_CATEGORY,
-      categoryId: existing.id,
-      slug: existing.slug,
-      changes: { parentId: { from: existing.parentId, to: newParentId } },
-    })
-    return { data: { category: toCategoryDetail(row) }, httpStatus: HttpStatus.OK }
-  } catch (error) {
-    if (isPgUniqueViolation(error)) return serviceError(ErrorCode.CATEGORY_SLUG_CONFLICT)
-    throw error
-  }
+  logger.info({
+    adminId,
+    action: AdminAction.UPDATE_CATEGORY,
+    categoryId: existing.id,
+    slug: existing.slug,
+    changes: { parentId: { from: existing.parentId, to: newParentId } },
+  })
+  return { data: { category: toCategoryDetail(outcome.row) }, httpStatus: HttpStatus.OK }
 }
 
 interface ParentChangeResolution {
@@ -244,7 +232,7 @@ async function walkAncestorsHasId(start: Category, targetId: string): Promise<bo
 }
 
 async function loadDescendants(rootId: string): Promise<Category[]> {
-  const children = await findCategoriesByParentId(rootId)
+  const children = await findCategoriesByParentIds([rootId])
   if (children.length === 0) return []
   const grandchildren = await findCategoriesByParentIds(children.map((child) => child.id))
   return [...children, ...grandchildren]

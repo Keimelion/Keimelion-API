@@ -17,12 +17,6 @@ export interface CategoryTreeNode extends CategoryPublic {
   children: CategoryTreeNode[]
 }
 
-export interface CategoryWrite {
-  parentId: string | null
-  name: string
-  slug: string
-}
-
 export function toCategoryPublic(row: Category): CategoryPublic {
   return {
     id: row.id,

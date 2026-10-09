@@ -1,4 +1,4 @@
-import { eq, inArray } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import { db } from '../../client.js'
 import { itemCategories } from './item-categories.schema.js'
 import type { ItemCategory } from './item-categories.schema.js'
@@ -9,25 +9,6 @@ type DbClient = typeof db | DbTransaction
 
 export interface ItemCategoryWithCategory extends ItemCategory {
   category: Category
-}
-
-export async function findItemCategoriesByItemId(
-  itemId: string,
-): Promise<ItemCategoryWithCategory[]> {
-  return db.query.itemCategories.findMany({
-    where: eq(itemCategories.itemId, itemId),
-    with: { category: true },
-  })
-}
-
-export async function findItemCategoriesForCreator(
-  userItemIds: string[],
-): Promise<ItemCategoryWithCategory[]> {
-  if (userItemIds.length === 0) return []
-  return db.query.itemCategories.findMany({
-    where: inArray(itemCategories.itemId, userItemIds),
-    with: { category: true },
-  })
 }
 
 export async function deleteItemCategoriesForItem(

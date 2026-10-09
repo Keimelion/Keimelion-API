@@ -16,8 +16,6 @@ const assignCategoriesSchema = z
   })
   .strict()
 
-export type AssignCategoriesInput = z.infer<typeof assignCategoriesSchema>
-
 export function mountAssignCategories(router: FeatureRouter): void {
   router.post(
     '/:id/categories',

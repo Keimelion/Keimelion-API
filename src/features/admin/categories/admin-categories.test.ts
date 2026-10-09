@@ -230,7 +230,7 @@ describe('POST /v1/admin/categories', () => {
     expect(body.message).toContain('3 levels')
   })
 
-  it('returns 409 with CATEGORY_SLUG_CONFLICT when slug already exists', async () => {
+  it('returns 409 with CONFLICT when slug already exists', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
     mockInsertCategoryUniqueViolation()
@@ -243,7 +243,7 @@ describe('POST /v1/admin/categories', () => {
 
     const body = await response.json() as { code: string }
     expect(response.status).toBe(409)
-    expect(body.code).toBe('CATEGORY_SLUG_CONFLICT')
+    expect(body.code).toBe('CONFLICT')
   })
 
   it('returns 422 when slug fails kebab-case validation', async () => {
@@ -485,7 +485,7 @@ describe('PATCH /v1/admin/categories/:id', () => {
     expect(response.status).toBe(404)
   })
 
-  it('returns 409 CATEGORY_SLUG_CONFLICT when patching slug collides', async () => {
+  it('returns 409 CONFLICT when patching slug collides', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
     mockFindCategoryById(ROOT_CATEGORY)
@@ -499,7 +499,7 @@ describe('PATCH /v1/admin/categories/:id', () => {
 
     const body = await response.json() as { code: string }
     expect(response.status).toBe(409)
-    expect(body.code).toBe('CATEGORY_SLUG_CONFLICT')
+    expect(body.code).toBe('CONFLICT')
   })
 
   it('returns 422 CATEGORY_CYCLE_DETECTED when parentId equals the id itself', async () => {
