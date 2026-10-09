@@ -1,6 +1,5 @@
 import { findUserById } from '../../../db/entities/users/users.repository.js'
 import {
-  findItemCategoriesByCreator,
   findItemsByCreator,
   findItemSourcesByCreator,
   findListItemsForContributor,
@@ -11,25 +10,6 @@ import { toItemDetail, toItemSourceDetailWithoutShop, toListItemDetail } from '.
 import { toListDetail } from '../../../shared/types/list.js'
 import type { List } from '../../../db/entities/lists/lists.schema.js'
 import type { ListDetail } from '../../../shared/types/list.js'
-import type { ItemCategoryWithCategory } from '../../../db/entities/item-categories/item-categories.repository.js'
-
-export interface ExportItemCategoryRow {
-  itemId: string
-  categoryId: string
-  categoryName: string
-  categorySlug: string
-  assignedAt: Date
-}
-
-export function toExportItemCategoryRow(row: ItemCategoryWithCategory): ExportItemCategoryRow {
-  return {
-    itemId: row.itemId,
-    categoryId: row.categoryId,
-    categoryName: row.category.name,
-    categorySlug: row.category.slug,
-    assignedAt: row.assignedAt,
-  }
-}
 
 export interface ExportListRow extends ListDetail {
   deletedAt: Date | null
@@ -165,26 +145,10 @@ const listsEntityDescriptor: ExportEntityDescriptor = {
   },
 }
 
-const itemCategoriesEntityDescriptor: ExportEntityDescriptor = {
-  filename: 'item-categories.csv',
-  columns: [
-    'itemId',
-    'categoryId',
-    'categoryName',
-    'categorySlug',
-    'assignedAt',
-  ],
-  fetchRows: async (userId: string) => {
-    const assignments = await findItemCategoriesByCreator(userId)
-    return assignments.map(toExportItemCategoryRow)
-  },
-}
-
 export const EXPORT_ENTITY_REGISTRY: ExportEntityDescriptor[] = [
   profileEntityDescriptor,
   itemsEntityDescriptor,
   itemSourcesEntityDescriptor,
   listItemsEntityDescriptor,
   listsEntityDescriptor,
-  itemCategoriesEntityDescriptor,
 ]

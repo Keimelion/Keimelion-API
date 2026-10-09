@@ -2,7 +2,6 @@ import { and, eq, inArray } from 'drizzle-orm'
 import { db } from '../../../db/client.js'
 import { items } from '../../../db/entities/items/items.schema.js'
 import { itemSources } from '../../../db/entities/item-sources/item-sources.schema.js'
-import { itemCategories } from '../../../db/entities/item-categories/item-categories.schema.js'
 import { listCollaborators } from '../../../db/entities/list-collaborators/list-collaborators.schema.js'
 import { listItems } from '../../../db/entities/list-items/list-items.schema.js'
 import { lists } from '../../../db/entities/lists/lists.schema.js'
@@ -11,7 +10,6 @@ import type { Item } from '../../../db/entities/items/items.schema.js'
 import type { ItemSource } from '../../../db/entities/item-sources/item-sources.schema.js'
 import type { ListItem } from '../../../db/entities/list-items/list-items.schema.js'
 import type { List } from '../../../db/entities/lists/lists.schema.js'
-import type { ItemCategoryWithCategory } from '../../../db/entities/item-categories/item-categories.repository.js'
 
 export async function findItemsByCreator(userId: string): Promise<Item[]> {
   return db.query.items.findMany({
@@ -49,16 +47,5 @@ export async function findListsOwnedByForExport(userId: string): Promise<List[]>
     .where(and(eq(listCollaborators.userId, userId), eq(listCollaborators.collabRole, CollabRoles.OWNER)))
   return db.query.lists.findMany({
     where: inArray(lists.id, ownedListIds),
-  })
-}
-
-export async function findItemCategoriesByCreator(userId: string): Promise<ItemCategoryWithCategory[]> {
-  const userItemIds = db
-    .select({ id: items.id })
-    .from(items)
-    .where(eq(items.createdByUserId, userId))
-  return db.query.itemCategories.findMany({
-    where: inArray(itemCategories.itemId, userItemIds),
-    with: { category: true },
   })
 }

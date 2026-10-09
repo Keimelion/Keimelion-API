@@ -20,8 +20,8 @@ import {
   updateCategoryRow,
 } from '../../../db/entities/categories/categories.repository.js'
 import { AdminAction } from '../admin.enums.js'
-import { toAdminCategoryDetail } from './admin-categories.mapper.js'
-import type { AdminCategoryDetail } from './admin-categories.mapper.js'
+import { toCategoryDetail } from '../../../shared/types/category.js'
+import type { CategoryDetail } from '../../../shared/types/category.js'
 import type { Category } from '../../../db/entities/categories/categories.schema.js'
 import type { ServiceResult } from '../../../shared/types/service.js'
 import type { PaginatedResponse } from '../../../shared/types/api.js'
@@ -36,7 +36,7 @@ type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 export async function createCategory(
   adminId: string,
   input: CreateCategoryInput,
-): Promise<ServiceResult<{ category: AdminCategoryDetail }>> {
+): Promise<ServiceResult<{ category: CategoryDetail }>> {
   const depthResolution = await resolveDepthForNewParent(input.parentId)
   if ('errorCode' in depthResolution) return serviceError(depthResolution.errorCode)
 
@@ -49,7 +49,7 @@ export async function createCategory(
     })
     if (!row) return serviceError(ErrorCode.INTERNAL_ERROR)
 
-    const category = toAdminCategoryDetail(row)
+    const category = toCategoryDetail(row)
     logger.info({ adminId, action: AdminAction.CREATE_CATEGORY, categoryId: category.id, slug: category.slug })
     return { data: { category }, httpStatus: HttpStatus.CREATED }
   } catch (error) {
@@ -60,28 +60,28 @@ export async function createCategory(
 
 export async function listCategories(
   input: ListCategoriesInput,
-): Promise<ServiceResult<PaginatedResponse<AdminCategoryDetail>>> {
+): Promise<ServiceResult<PaginatedResponse<CategoryDetail>>> {
   const [rows, total] = await Promise.all([findAllCategories(input, input), countCategories(input)])
 
   return {
-    data: buildPaginatedResponse(rows.map(toAdminCategoryDetail), input, total),
+    data: buildPaginatedResponse(rows.map(toCategoryDetail), input, total),
     httpStatus: HttpStatus.OK,
   }
 }
 
 export async function getCategoryById(
   id: string,
-): Promise<ServiceResult<{ category: AdminCategoryDetail }>> {
+): Promise<ServiceResult<{ category: CategoryDetail }>> {
   const row = await findCategoryById(id)
   if (!row) return serviceError(ErrorCode.CATEGORY_NOT_FOUND)
-  return { data: { category: toAdminCategoryDetail(row) }, httpStatus: HttpStatus.OK }
+  return { data: { category: toCategoryDetail(row) }, httpStatus: HttpStatus.OK }
 }
 
 export async function updateCategoryById(
   adminId: string,
   id: string,
   input: UpdateCategoryInput,
-): Promise<ServiceResult<{ category: AdminCategoryDetail }>> {
+): Promise<ServiceResult<{ category: CategoryDetail }>> {
   const existing = await findCategoryById(id)
   if (!existing) return serviceError(ErrorCode.CATEGORY_NOT_FOUND)
 
@@ -89,7 +89,7 @@ export async function updateCategoryById(
 
   if (input.parentId === undefined) {
     if (Object.keys(nameSlugPatch).length === 0) {
-      return { data: { category: toAdminCategoryDetail(existing) }, httpStatus: HttpStatus.OK }
+      return { data: { category: toCategoryDetail(existing) }, httpStatus: HttpStatus.OK }
     }
     return applySimplePatch(id, nameSlugPatch)
   }
@@ -130,11 +130,11 @@ async function resolveDepthForNewParent(
 async function applySimplePatch(
   id: string,
   patch: { name?: string; slug?: string },
-): Promise<ServiceResult<{ category: AdminCategoryDetail }>> {
+): Promise<ServiceResult<{ category: CategoryDetail }>> {
   try {
     const row = await updateCategoryRow(id, patch)
     if (!row) return serviceError(ErrorCode.CATEGORY_NOT_FOUND)
-    return { data: { category: toAdminCategoryDetail(row) }, httpStatus: HttpStatus.OK }
+    return { data: { category: toCategoryDetail(row) }, httpStatus: HttpStatus.OK }
   } catch (error) {
     if (isPgUniqueViolation(error)) return serviceError(ErrorCode.CATEGORY_SLUG_CONFLICT)
     throw error
@@ -146,7 +146,7 @@ async function applyParentChange(
   existing: Category,
   newParentId: string | null,
   nameSlugPatch: { name?: string; slug?: string },
-): Promise<ServiceResult<{ category: AdminCategoryDetail }>> {
+): Promise<ServiceResult<{ category: CategoryDetail }>> {
   if (newParentId === existing.id) return serviceError(ErrorCode.CATEGORY_CYCLE_DETECTED)
 
   const resolution = await resolveParentChange(existing, newParentId)
@@ -165,7 +165,7 @@ async function applyParentChange(
       slug: existing.slug,
       changes: { parentId: { from: existing.parentId, to: newParentId } },
     })
-    return { data: { category: toAdminCategoryDetail(row) }, httpStatus: HttpStatus.OK }
+    return { data: { category: toCategoryDetail(row) }, httpStatus: HttpStatus.OK }
   } catch (error) {
     if (isPgUniqueViolation(error)) return serviceError(ErrorCode.CATEGORY_SLUG_CONFLICT)
     throw error

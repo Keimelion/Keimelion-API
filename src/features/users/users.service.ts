@@ -8,7 +8,6 @@ import { findUserById, anonymizeUser, updatePasswordHash, insertDeletionAudit } 
 import { deleteAllUserTokens } from '../../db/entities/access-tokens/access-tokens.repository.js'
 import { revokeAllUserSessions } from '../../shared/db/user-sessions.js'
 import {
-  findItemCategoriesByCreator,
   findItemsByCreator,
   findItemSourcesByCreator,
   findListItemsForContributor,
@@ -18,11 +17,7 @@ import { updateUserProfile } from './users.repository.js'
 import { toUserDetail } from '../../shared/types/user.js'
 import { toItemDetail, toItemSourceDetailWithoutShop, toListItemDetail } from '../../shared/types/item.js'
 import { buildExportZipStream } from './export/csv-archive-writer.js'
-import {
-  EXPORT_ENTITY_REGISTRY,
-  toExportItemCategoryRow,
-  toExportListRow,
-} from './export/export-entities.js'
+import { EXPORT_ENTITY_REGISTRY, toExportListRow } from './export/export-entities.js'
 import type { UserDetail, UserWrite } from '../../shared/types/user.js'
 import type { ServiceResult } from '../../shared/types/service.js'
 import type { PartialWrite } from '../../shared/types/api.js'
@@ -123,12 +118,11 @@ export async function exportUserData(userId: string, format: ExportFormat): Prom
   const user = await findUserById(userId)
   const profile = user ? toUserDetail(user) : null
 
-  const [rawItems, rawItemSources, rawListItems, rawLists, rawItemCategories] = await Promise.all([
+  const [rawItems, rawItemSources, rawListItems, rawLists] = await Promise.all([
     findItemsByCreator(userId),
     findItemSourcesByCreator(userId),
     findListItemsForContributor(userId),
     findListsOwnedByForExport(userId),
-    findItemCategoriesByCreator(userId),
   ])
 
   return {
@@ -139,7 +133,6 @@ export async function exportUserData(userId: string, format: ExportFormat): Prom
       itemSources: rawItemSources.map(toItemSourceDetailWithoutShop),
       listItems: rawListItems.map(toListItemDetail),
       lists: rawLists.map(toExportListRow),
-      itemCategories: rawItemCategories.map(toExportItemCategoryRow),
     },
     contentType: EXPORT_JSON_CONTENT_TYPE,
     filename: EXPORT_JSON_FILENAME,
