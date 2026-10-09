@@ -17,4 +17,7 @@ export const AdminAction = {
   UPDATE_LIST: 'admin_update_list',
   DELETE_LIST: 'admin_delete_list',
   RESTORE_LIST: 'admin_restore_list',
+  CREATE_CATEGORY: 'admin_create_category',
+  UPDATE_CATEGORY: 'admin_update_category',
+  DELETE_CATEGORY: 'admin_delete_category',
 } as const

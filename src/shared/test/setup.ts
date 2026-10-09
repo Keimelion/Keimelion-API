@@ -83,6 +83,14 @@ vi.mock('../../db/client.js', () => ({
         findFirst: vi.fn(),
         findMany: vi.fn().mockResolvedValue([]),
       },
+      categories: {
+        findFirst: vi.fn(),
+        findMany: vi.fn().mockResolvedValue([]),
+      },
+      itemCategories: {
+        findFirst: vi.fn(),
+        findMany: vi.fn().mockResolvedValue([]),
+      },
     },
     insert: vi.fn(() => ({
       values: vi.fn(() => ({

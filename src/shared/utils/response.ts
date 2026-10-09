@@ -11,6 +11,16 @@ export const DUPLICATE_SHOP_IN_SOURCES_MESSAGE =
 export const SLUG_GENERATION_EXHAUSTED_MESSAGE =
   'Could not generate a unique slug, please retry with a different title.'
 
+export const MAX_CATEGORY_DEPTH = 3
+
+export const CATEGORY_NOT_FOUND_MESSAGE = 'Category not found'
+
+export const CATEGORY_MAX_DEPTH_EXCEEDED_MESSAGE =
+  `Category depth cannot exceed ${String(MAX_CATEGORY_DEPTH)} levels`
+
+export const CATEGORY_CYCLE_DETECTED_MESSAGE =
+  'Category parent cannot create a cycle in the hierarchy'
+
 export const errorMap: Record<ErrorCode, { status: ContentfulStatusCode; message: string }> = {
   BAD_REQUEST:             { status: HttpStatus.BAD_REQUEST,           message: 'Bad request' },
   UNAUTHORIZED:            { status: HttpStatus.UNAUTHORIZED,          message: 'Unauthorized' },
@@ -21,6 +31,9 @@ export const errorMap: Record<ErrorCode, { status: ContentfulStatusCode; message
   CONFLICT:                { status: HttpStatus.CONFLICT,              message: 'Resource already exists' },
   DUPLICATE_SHOP_FOR_ITEM: { status: HttpStatus.CONFLICT,              message: DUPLICATE_SHOP_IN_SOURCES_MESSAGE },
   SLUG_GENERATION_EXHAUSTED: { status: HttpStatus.CONFLICT,            message: SLUG_GENERATION_EXHAUSTED_MESSAGE },
+  CATEGORY_NOT_FOUND:      { status: HttpStatus.NOT_FOUND,             message: CATEGORY_NOT_FOUND_MESSAGE },
+  CATEGORY_MAX_DEPTH_EXCEEDED: { status: HttpStatus.UNPROCESSABLE_ENTITY, message: CATEGORY_MAX_DEPTH_EXCEEDED_MESSAGE },
+  CATEGORY_CYCLE_DETECTED: { status: HttpStatus.UNPROCESSABLE_ENTITY,  message: CATEGORY_CYCLE_DETECTED_MESSAGE },
   UNPROCESSABLE_ENTITY:    { status: HttpStatus.UNPROCESSABLE_ENTITY,  message: 'Validation failed' },
   NO_FIELDS_TO_UPDATE:     { status: HttpStatus.UNPROCESSABLE_ENTITY,  message: 'At least one field must be provided' },
   RATE_LIMIT_EXCEEDED:     { status: HttpStatus.TOO_MANY_REQUESTS,     message: 'Too many requests' },

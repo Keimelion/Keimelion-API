@@ -43,7 +43,10 @@ export function findAllItemsWithSources(
     orderBy: itemsEntity.buildOrderBy(filters.sort),
     limit: input.limit,
     offset,
-    with: { sources: { with: { shop: true } } },
+    with: {
+      sources: { with: { shop: true } },
+      itemCategories: { with: { category: true } },
+    },
   })
 }
 

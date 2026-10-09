@@ -1,9 +1,13 @@
 import type { Item } from '../../db/entities/items/items.schema.js'
 import type { ItemSource } from '../../db/entities/item-sources/item-sources.schema.js'
+import type { ItemCategory } from '../../db/entities/item-categories/item-categories.schema.js'
 import type { ListItem } from '../../db/entities/list-items/list-items.schema.js'
 import type { Shop } from '../../db/entities/shops/shops.schema.js'
+import type { Category } from '../../db/entities/categories/categories.schema.js'
 import type { ShopPublic } from './shop.js'
+import type { CategoryPublic } from './category.js'
 import { toShopPublic } from './shop.js'
+import { toCategoryPublic } from './category.js'
 
 export interface ItemDetail {
   id: string
@@ -17,6 +21,7 @@ export interface ItemDetail {
 
 export interface ItemWithSources extends ItemDetail {
   sources: ItemSourceDetail[]
+  categories: CategoryPublic[]
 }
 
 export interface ItemWrite {
@@ -41,8 +46,13 @@ export interface ItemSourceWithShop extends ItemSource {
   shop: Shop | null
 }
 
+export interface ItemCategoryWithCategoryRow extends ItemCategory {
+  category: Category
+}
+
 export interface ItemRowWithSources extends Item {
   sources: ItemSourceWithShop[]
+  itemCategories: ItemCategoryWithCategoryRow[]
 }
 
 export interface ListItemDetail {
@@ -98,6 +108,7 @@ export function toItemWithSources(item: ItemRowWithSources): ItemWithSources {
   return {
     ...toItemDetail(item),
     sources: item.sources.map((source) => toItemSourceDetail(source)),
+    categories: item.itemCategories.map((link) => toCategoryPublic(link.category)),
   }
 }
 

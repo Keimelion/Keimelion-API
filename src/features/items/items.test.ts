@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { db } from '../../db/client.js'
 import { apiRequest } from '../../shared/test/api-request.js'
+import { generateTestToken, makeAccessTokenEntry } from '../../shared/test/auth.js'
 
 const ITEM_ROW = {
   id: '00000000-0000-0000-0000-000000000010',
@@ -62,8 +63,11 @@ const SOURCE_WITH_SHOP_ROW = {
   shop: SHOP_ROW,
 }
 
-function itemWith(sources: SourceRow[]): typeof ITEM_ROW & { sources: SourceRow[] } {
-  return { ...ITEM_ROW, sources }
+function itemWith(sources: SourceRow[]): typeof ITEM_ROW & {
+  sources: SourceRow[]
+  itemCategories: never[]
+} {
+  return { ...ITEM_ROW, sources, itemCategories: [] }
 }
 
 function mockCountAllChain(total: number): void {
@@ -81,7 +85,7 @@ describe('GET /v1/items', () => {
   it('returns 200 with paginated items and embedded sources', async () => {
     vi.mocked(db.query.items.findMany).mockResolvedValueOnce([
       itemWith([SOURCE_ROW]),
-      { ...OTHER_ITEM_ROW, sources: [] },
+      { ...OTHER_ITEM_ROW, sources: [], itemCategories: [] },
     ] as never)
     mockCountAllChain(2)
 
@@ -209,5 +213,208 @@ describe('GET /v1/items/:id', () => {
 
     const response = await apiRequest(`/v1/items/${ITEM_ROW.id}`)
     expect(response.status).toBe(200)
+  })
+})
+
+const OWNER_USER = {
+  id: '00000000-0000-0000-0000-000000000040',
+  email: 'owner@example.com',
+  username: 'owner',
+  passwordHash: 'hashed',
+  authProvider: 'email' as const,
+  role: 'user' as const,
+  avatarUrl: null,
+  isCgvAccepted: true,
+  cgvAcceptedAt: new Date('2024-01-01'),
+  isMarketingOptedIn: false,
+  emailVerifyToken: null,
+  emailVerifyTokenExpiresAt: null,
+  emailVerifiedAt: new Date('2024-01-02'),
+  passwordResetToken: null,
+  passwordResetTokenExpiresAt: null,
+  lastActiveAt: null,
+  deletedAt: null,
+  bannedAt: null,
+  banReason: null,
+  createdAt: new Date('2024-01-01'),
+  updatedAt: new Date('2024-01-01'),
+}
+
+const OTHER_USER_ID = '00000000-0000-0000-0000-000000000041'
+
+const OWNED_ITEM_ROW = {
+  ...ITEM_ROW,
+  id: '00000000-0000-0000-0000-000000000050',
+  createdByUserId: OWNER_USER.id,
+}
+
+const CATEGORY_ONE = {
+  id: '00000000-0000-0000-0000-000000000060',
+  parentId: null,
+  name: 'Électronique',
+  slug: 'electronique',
+  depth: 0,
+  createdAt: new Date('2024-01-01'),
+  updatedAt: new Date('2024-01-01'),
+}
+
+const CATEGORY_TWO = {
+  ...CATEGORY_ONE,
+  id: '00000000-0000-0000-0000-000000000061',
+  name: 'Mode',
+  slug: 'mode',
+}
+
+const OWNER_ACCESS_TOKEN_ENTRY = makeAccessTokenEntry(OWNER_USER.id)
+
+function mockOwnerAuth(): void {
+  vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(OWNER_ACCESS_TOKEN_ENTRY as never)
+  vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(OWNER_USER as never)
+}
+
+describe('POST /v1/items/:id/categories', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(OWNER_ACCESS_TOKEN_ENTRY as never)
+  })
+
+  it('returns 200 with assigned categories when the user owns the item', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(OWNED_ITEM_ROW as never)
+    vi.mocked(db.query.categories.findMany).mockResolvedValueOnce(
+      [CATEGORY_ONE, CATEGORY_TWO] as never,
+    )
+    vi.mocked(db.transaction).mockImplementationOnce((callback) => {
+      const txFindMany = vi.fn().mockResolvedValueOnce([
+        { itemId: OWNED_ITEM_ROW.id, categoryId: CATEGORY_ONE.id, assignedAt: new Date(), category: CATEGORY_ONE },
+        { itemId: OWNED_ITEM_ROW.id, categoryId: CATEGORY_TWO.id, assignedAt: new Date(), category: CATEGORY_TWO },
+      ])
+      const tx = {
+        delete: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
+        insert: vi.fn().mockReturnValue({ values: vi.fn().mockResolvedValue([]) }),
+        query: { itemCategories: { findMany: txFindMany } },
+      }
+      return callback(tx as never) as never
+    })
+
+    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}/categories`, {
+      method: 'POST',
+      token,
+      body: { categoryIds: [CATEGORY_ONE.id, CATEGORY_TWO.id] },
+    })
+
+    const body = await response.json() as { categories: { id: string; slug: string }[] }
+    expect(response.status).toBe(200)
+    expect(body.categories).toHaveLength(2)
+    expect(body.categories.map((category) => category.slug)).toEqual(
+      expect.arrayContaining(['electronique', 'mode']),
+    )
+  })
+
+  it('returns 200 with empty assignments when categoryIds is empty (clears existing)', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(OWNED_ITEM_ROW as never)
+    vi.mocked(db.transaction).mockImplementationOnce((callback) => {
+      const tx = {
+        delete: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
+        insert: vi.fn().mockReturnValue({ values: vi.fn().mockResolvedValue([]) }),
+        query: { itemCategories: { findMany: vi.fn().mockResolvedValueOnce([]) } },
+      }
+      return callback(tx as never) as never
+    })
+
+    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}/categories`, {
+      method: 'POST',
+      token,
+      body: { categoryIds: [] },
+    })
+
+    const body = await response.json() as { categories: unknown[] }
+    expect(response.status).toBe(200)
+    expect(body.categories).toHaveLength(0)
+  })
+
+  it('returns 404 NOT_FOUND when the item does not exist', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(undefined)
+
+    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}/categories`, {
+      method: 'POST',
+      token,
+      body: { categoryIds: [CATEGORY_ONE.id] },
+    })
+
+    expect(response.status).toBe(404)
+  })
+
+  it('returns 403 FORBIDDEN when the user does not own the item', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(
+      { ...OWNED_ITEM_ROW, createdByUserId: OTHER_USER_ID } as never,
+    )
+
+    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}/categories`, {
+      method: 'POST',
+      token,
+      body: { categoryIds: [CATEGORY_ONE.id] },
+    })
+
+    expect(response.status).toBe(403)
+  })
+
+  it('returns 404 CATEGORY_NOT_FOUND when one of the categoryIds does not exist', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(OWNED_ITEM_ROW as never)
+    vi.mocked(db.query.categories.findMany).mockResolvedValueOnce([CATEGORY_ONE] as never)
+
+    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}/categories`, {
+      method: 'POST',
+      token,
+      body: { categoryIds: [CATEGORY_ONE.id, CATEGORY_TWO.id] },
+    })
+
+    const body = await response.json() as { code: string }
+    expect(response.status).toBe(404)
+    expect(body.code).toBe('CATEGORY_NOT_FOUND')
+  })
+
+  it('returns 422 when categoryIds contains a non-UUID value', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+
+    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}/categories`, {
+      method: 'POST',
+      token,
+      body: { categoryIds: ['not-a-uuid'] },
+    })
+
+    expect(response.status).toBe(422)
+  })
+
+  it('returns 422 when id is not a UUID', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+
+    const response = await apiRequest('/v1/items/not-a-uuid/categories', {
+      method: 'POST',
+      token,
+      body: { categoryIds: [CATEGORY_ONE.id] },
+    })
+
+    expect(response.status).toBe(422)
+  })
+
+  it('returns 401 when not authenticated', async () => {
+    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}/categories`, {
+      method: 'POST',
+      body: { categoryIds: [CATEGORY_ONE.id] },
+    })
+
+    expect(response.status).toBe(401)
   })
 })
