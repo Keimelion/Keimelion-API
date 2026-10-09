@@ -1,9 +1,9 @@
 import { z } from 'zod'
 import { LOCALES } from '../../../shared/enums/locale.js'
+import { createSlugSchema } from '../../../shared/schemas/slug.js'
 
 export { sortOrderSchema } from '../../../shared/schemas/sort-order.js'
 
-const SLUG_REGEX = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 const MIN_SLUG_LENGTH = 2
 const MAX_SLUG_LENGTH = 60
 
@@ -13,12 +13,11 @@ const MAX_EMOJI_LENGTH = 10
 const MIN_LABEL_LENGTH = 1
 const MAX_LABEL_LENGTH = 100
 
-export const slugSchema = z
-  .string()
-  .trim()
-  .regex(SLUG_REGEX, 'slug must be lowercase letters, digits, and dashes (e.g. my-slug)')
-  .min(MIN_SLUG_LENGTH)
-  .max(MAX_SLUG_LENGTH)
+export const slugSchema = createSlugSchema({
+  min: MIN_SLUG_LENGTH,
+  max: MAX_SLUG_LENGTH,
+  example: 'my-slug',
+})
 
 export const emojiSchema = z.string().trim().min(MIN_EMOJI_LENGTH).max(MAX_EMOJI_LENGTH)
 

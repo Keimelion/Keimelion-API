@@ -46,6 +46,7 @@ export function findAllItemsWithSources(
     with: {
       sources: { with: { shop: true } },
       itemCategories: { with: { category: true } },
+      itemTags: { with: { tag: true } },
     },
   })
 }

@@ -632,4 +632,65 @@ describe('GET /v1/users/me/export', () => {
     expect(body.items).toHaveLength(0)
   })
 
+  it('includes a tags key in the JSON export payload with only tags created by the user', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+
+    const userTag = {
+      id: '00000000-0000-0000-0000-00000000b001',
+      name: 'gaming',
+      slug: 'gaming',
+      createdByUserId: SAFE_USER.id,
+      createdAt: new Date('2024-01-01'),
+      updatedAt: new Date('2024-01-01'),
+    }
+
+    vi.mocked(db.query.tags.findMany).mockResolvedValueOnce([userTag] as never)
+
+    const response = await apiRequest('/v1/users/me/export?format=json', { token })
+
+    expect(response.status).toBe(200)
+    const body = await response.json() as {
+      tags: { id: string; slug: string; name: string }[]
+    }
+    expect(body).toHaveProperty('tags')
+    expect(body.tags).toHaveLength(1)
+    expect(body.tags[0]?.slug).toBe('gaming')
+  })
+
+  it('registers tags.csv with the exact allow-list required by RGPD', () => {
+    const tagsDescriptor = EXPORT_ENTITY_REGISTRY.find(
+      (descriptor) => descriptor.filename === 'tags.csv',
+    )
+    expect(tagsDescriptor).toBeDefined()
+    expect(tagsDescriptor?.columns).toEqual([
+      'id',
+      'name',
+      'slug',
+      'createdAt',
+    ])
+  })
+
+  it('fetches creator-scoped tags for RGPD', async () => {
+    const tagsDescriptor = EXPORT_ENTITY_REGISTRY.find(
+      (descriptor) => descriptor.filename === 'tags.csv',
+    )
+    const userTag = {
+      id: '00000000-0000-0000-0000-00000000b002',
+      name: 'reading',
+      slug: 'reading',
+      createdByUserId: SAFE_USER.id,
+      createdAt: new Date('2024-01-01'),
+      updatedAt: new Date('2024-01-01'),
+    }
+
+    vi.mocked(db.query.tags.findMany).mockResolvedValueOnce([userTag] as never)
+
+    expect(tagsDescriptor).toBeDefined()
+    const rows = await (tagsDescriptor as { fetchRows: (userId: string) => Promise<object[]> }).fetchRows(SAFE_USER.id)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toHaveProperty('slug', 'reading')
+  })
+
 })

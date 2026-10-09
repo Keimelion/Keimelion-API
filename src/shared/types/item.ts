@@ -1,13 +1,17 @@
 import type { Item } from '../../db/entities/items/items.schema.js'
 import type { ItemSource } from '../../db/entities/item-sources/item-sources.schema.js'
 import type { ItemCategory } from '../../db/entities/item-categories/item-categories.schema.js'
+import type { ItemTag } from '../../db/entities/item-tags/item-tags.schema.js'
 import type { ListItem } from '../../db/entities/list-items/list-items.schema.js'
 import type { Shop } from '../../db/entities/shops/shops.schema.js'
 import type { Category } from '../../db/entities/categories/categories.schema.js'
+import type { Tag } from '../../db/entities/tags/tags.schema.js'
 import type { ShopPublic } from './shop.js'
 import type { CategoryPublic } from './category.js'
+import type { TagPublic } from './tag.js'
 import { toShopPublic } from './shop.js'
 import { toCategoryPublic } from './category.js'
+import { toTagPublic } from './tag.js'
 
 export interface ItemDetail {
   id: string
@@ -22,6 +26,7 @@ export interface ItemDetail {
 export interface ItemWithSources extends ItemDetail {
   sources: ItemSourceDetail[]
   categories: CategoryPublic[]
+  tags: TagPublic[]
 }
 
 export interface ItemWrite {
@@ -50,9 +55,14 @@ export interface ItemCategoryWithCategoryRow extends ItemCategory {
   category: Category
 }
 
+export interface ItemTagWithTagRow extends ItemTag {
+  tag: Tag
+}
+
 export interface ItemRowWithSources extends Item {
   sources: ItemSourceWithShop[]
   itemCategories: ItemCategoryWithCategoryRow[]
+  itemTags: ItemTagWithTagRow[]
 }
 
 export interface ListItemDetail {
@@ -109,6 +119,7 @@ export function toItemWithSources(item: ItemRowWithSources): ItemWithSources {
     ...toItemDetail(item),
     sources: item.sources.map((source) => toItemSourceDetail(source)),
     categories: item.itemCategories.map((link) => toCategoryPublic(link.category)),
+    tags: item.itemTags.map((link) => toTagPublic(link.tag)),
   }
 }
 
