@@ -3,7 +3,13 @@ import { z } from 'zod'
 import { db } from '../../../db/client.js'
 import { lists } from '../../../db/entities/lists/lists.schema.js'
 import { listCollaborators } from '../../../db/entities/list-collaborators/list-collaborators.schema.js'
-import { findListById } from '../../../db/entities/lists/lists.repository.js'
+import {
+  LIST_DEFAULT_SORT,
+  LIST_SORTABLE_FIELDS,
+  LIST_WITH_OWNER,
+  findListById,
+  findListWithOwner,
+} from '../../../db/entities/lists/lists.repository.js'
 import { CollabRoles } from '../../../shared/enums/collab-role.js'
 import { defineEntity, buildSoftDeleteDefault } from '../../../shared/db/entity-descriptor.js'
 import { LIST_STATUS_VALUES } from '../../../shared/enums/list-status.js'
@@ -17,13 +23,8 @@ const listStatusSchema = z.enum(LIST_STATUS_VALUES)
 const occasionTypeIdSchema = z.string().uuid()
 
 export const listsEntity = defineEntity({
-  sortable: {
-    createdAt:  lists.createdAt,
-    updatedAt:  lists.updatedAt,
-    title:      lists.title,
-    listStatus: lists.listStatus,
-  },
-  defaultSort: [{ field: 'createdAt', direction: 'desc' }],
+  sortable: LIST_SORTABLE_FIELDS,
+  defaultSort: LIST_DEFAULT_SORT,
   filterable: {
     listStatus:     { column: lists.listStatus,     operators: ['eq', 'in'],   valueSchema: listStatusSchema },
     occasionTypeId: { column: lists.occasionTypeId, operators: ['eq', 'isNull'], valueSchema: occasionTypeIdSchema },
@@ -40,14 +41,6 @@ export interface ListListsFilters {
   genericFilters?: FilterInput[] | undefined
   ownerListIds?: string[] | undefined
 }
-
-const LIST_WITH_OWNER = {
-  collaborators: {
-    where: eq(listCollaborators.collabRole, CollabRoles.OWNER),
-    limit: 1,
-    with: { user: true },
-  },
-} as const
 
 export function findAllListsWithOwner(
   input: PaginationInput,
@@ -76,10 +69,7 @@ export function findAdminListById(id: string): Promise<List | undefined> {
 }
 
 export function findAdminListByIdWithOwner(id: string): Promise<ListRowWithOwner | undefined> {
-  return db.query.lists.findFirst({
-    where: eq(lists.id, id),
-    with: LIST_WITH_OWNER,
-  })
+  return findListWithOwner(id)
 }
 
 export async function findListIdsByOwnerUserId(ownerUserId: string): Promise<string[]> {

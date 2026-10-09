@@ -1,5 +1,4 @@
-import { toListDetail } from '../../../shared/types/list.js'
-import { toUserDetail } from '../../../shared/types/user.js'
+import { extractOwnerDetail, toListDetail } from '../../../shared/types/list.js'
 import type { ListDetail, ListRowWithOwner } from '../../../shared/types/list.js'
 
 export interface AdminListDetail extends ListDetail {
@@ -7,9 +6,8 @@ export interface AdminListDetail extends ListDetail {
 }
 
 export function toAdminListDetail(row: ListRowWithOwner): AdminListDetail {
-  const ownerUser = row.collaborators[0]?.user ?? null
   return {
-    ...toListDetail(row, ownerUser ? toUserDetail(ownerUser) : null),
+    ...toListDetail(row, extractOwnerDetail(row)),
     deletedAt: row.deletedAt ?? null,
   }
 }

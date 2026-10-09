@@ -1,7 +1,23 @@
 import { findUserById } from '../../../db/entities/users/users.repository.js'
-import { findItemsByCreator, findItemSourcesByCreator, findListItemsForContributor } from './rgpd-export.repository.js'
+import {
+  findItemsByCreator,
+  findItemSourcesByCreator,
+  findListItemsForContributor,
+  findListsOwnedByForExport,
+} from './rgpd-export.repository.js'
 import { toUserDetail } from '../../../shared/types/user.js'
-import { toItemDetail, toItemSourceDetail, toListItemDetail } from '../../../shared/types/item.js'
+import { toItemDetail, toItemSourceDetailWithoutShop, toListItemDetail } from '../../../shared/types/item.js'
+import { toListDetail } from '../../../shared/types/list.js'
+import type { List } from '../../../db/entities/lists/lists.schema.js'
+import type { ListDetail } from '../../../shared/types/list.js'
+
+export interface ExportListRow extends ListDetail {
+  deletedAt: Date | null
+}
+
+export function toExportListRow(list: List): ExportListRow {
+  return { ...toListDetail(list, null), deletedAt: list.deletedAt }
+}
 
 /**
  * Descriptor for a single entity exported in the RGPD CSV archive.
@@ -86,7 +102,7 @@ const itemSourcesEntityDescriptor: ExportEntityDescriptor = {
   ],
   fetchRows: async (userId: string) => {
     const sources = await findItemSourcesByCreator(userId)
-    return sources.map((source) => toItemSourceDetail({ ...source, shop: null }))
+    return sources.map(toItemSourceDetailWithoutShop)
   },
 }
 
@@ -110,9 +126,29 @@ const listItemsEntityDescriptor: ExportEntityDescriptor = {
   },
 }
 
+const listsEntityDescriptor: ExportEntityDescriptor = {
+  filename: 'lists.csv',
+  columns: [
+    'id',
+    'title',
+    'slug',
+    'description',
+    'listStatus',
+    'occasionTypeId',
+    'createdAt',
+    'updatedAt',
+    'deletedAt',
+  ],
+  fetchRows: async (userId: string) => {
+    const ownedLists = await findListsOwnedByForExport(userId)
+    return ownedLists.map(toExportListRow)
+  },
+}
+
 export const EXPORT_ENTITY_REGISTRY: ExportEntityDescriptor[] = [
   profileEntityDescriptor,
   itemsEntityDescriptor,
   itemSourcesEntityDescriptor,
   listItemsEntityDescriptor,
+  listsEntityDescriptor,
 ]

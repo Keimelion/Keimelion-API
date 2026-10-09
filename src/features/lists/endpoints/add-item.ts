@@ -6,20 +6,25 @@ import { listOwnershipMiddleware } from '../../../shared/middlewares/list-access
 import { RATE_LIMITS } from '../../../shared/utils/rate-limiter.js'
 import { validationErrorHandler } from '../../../shared/utils/validation.js'
 import { jsonResult } from '../../../shared/utils/response.js'
+import {
+  itemNameSchema,
+  itemDescriptionSchema,
+  itemImageUrlSchema,
+} from '../../../db/entities/items/items.schemas.js'
+import {
+  creatorNoteSchema,
+  quantityDesiredSchema,
+} from '../../../db/entities/list-items/list-items.schemas.js'
 import type { FeatureRouter } from '../../../shared/types/app.js'
 import { addItemToList } from '../lists.service.js'
 
-const MAX_ITEM_NAME_LENGTH = 300
-const MAX_CREATOR_NOTE_LENGTH = 1000
-const MAX_QUANTITY = 100
-
 const addItemSchema = z.object({
-  name: z.string().min(1).max(MAX_ITEM_NAME_LENGTH).trim(),
-  description: z.string().trim().optional(),
-  imageUrl: z.string().url().optional(),
+  name: itemNameSchema,
+  description: itemDescriptionSchema.optional(),
+  imageUrl: itemImageUrlSchema.optional(),
   price: z.number().positive().optional(),
-  creatorNote: z.string().max(MAX_CREATOR_NOTE_LENGTH).trim().optional(),
-  quantityDesired: z.number().int().min(1).max(MAX_QUANTITY).optional(),
+  creatorNote: creatorNoteSchema.optional(),
+  quantityDesired: quantityDesiredSchema.optional(),
 }).strict()
 
 export type AddItemInput = z.infer<typeof addItemSchema>

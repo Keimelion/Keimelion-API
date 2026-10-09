@@ -12,7 +12,12 @@ export async function updateListItemById(
   listItemId: string,
   input: PartialWrite<ListItemWrite>,
 ): Promise<ServiceResult<{ listItem: ListItemDetail }>> {
-  const updated = await updateListItem(listItemId, pickDefined(input))
+  const fieldPatch = pickDefined(input)
+  if (Object.keys(fieldPatch).length === 0) {
+    return serviceError(ErrorCode.NO_FIELDS_TO_UPDATE)
+  }
+
+  const updated = await updateListItem(listItemId, fieldPatch)
   if (!updated) return serviceError(ErrorCode.INTERNAL_ERROR)
 
   return { data: { listItem: toListItemDetail(updated) }, httpStatus: HttpStatus.OK }

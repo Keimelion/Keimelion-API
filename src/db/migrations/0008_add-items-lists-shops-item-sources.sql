@@ -54,11 +54,13 @@ CREATE TABLE "lists" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"occasion_type_id" uuid,
 	"title" varchar(200) NOT NULL,
+	"slug" varchar(80) NOT NULL,
 	"description" text,
 	"list_status" "list_status" DEFAULT 'active' NOT NULL,
 	"deleted_at" timestamp with time zone,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "lists_slug_unique" UNIQUE("slug")
 );
 --> statement-breakpoint
 CREATE TABLE "shops" (

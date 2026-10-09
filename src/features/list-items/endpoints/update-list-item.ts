@@ -6,21 +6,19 @@ import { listContributorMiddleware } from '../../../shared/middlewares/list-acce
 import { RATE_LIMITS } from '../../../shared/utils/rate-limiter.js'
 import { validationErrorHandler } from '../../../shared/utils/validation.js'
 import { jsonResult } from '../../../shared/utils/response.js'
+import {
+  creatorNoteSchema,
+  quantityDesiredSchema,
+} from '../../../db/entities/list-items/list-items.schemas.js'
 import type { FeatureRouter } from '../../../shared/types/app.js'
 import { findListItemById } from '../../../db/entities/list-items/list-items.repository.js'
 import { updateListItemById } from '../list-items.service.js'
 
-const MAX_CREATOR_NOTE_LENGTH = 1000
-const MAX_QUANTITY = 100
-
 const updateListItemSchema = z.object({
-  quantityDesired: z.number().int().min(1).max(MAX_QUANTITY).optional(),
-  creatorNote: z.string().max(MAX_CREATOR_NOTE_LENGTH).trim().nullable().optional(),
+  quantityDesired: quantityDesiredSchema.optional(),
+  creatorNote: creatorNoteSchema.optional(),
   sortOrder: z.number().int().optional(),
-}).strict().refine(
-  (data) => Object.values(data).some((value) => value !== undefined),
-  { message: 'At least one field must be provided' },
-)
+}).strict()
 
 export function mountUpdateListItem(router: FeatureRouter): void {
   router.patch(

@@ -84,7 +84,9 @@ function mockAuthChain(): void {
 
 function mockListItemOwnershipChain(): void {
   vi.mocked(db.query.listItems.findFirst).mockResolvedValueOnce(MOCK_LIST_ITEM as never)
-  vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(MOCK_LIST as never)
+  vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(
+    { ...MOCK_LIST, collaborators: [{ userId: AUTH_USER.id, user: AUTH_USER }] } as never,
+  )
   vi.mocked(db.query.listCollaborators.findFirst).mockResolvedValueOnce(MOCK_COLLABORATOR as never)
 }
 
@@ -198,10 +200,10 @@ describe('PATCH /v1/list-items/:id', () => {
     expect(response.status).toBe(404)
   })
 
-  it('returns 422 when body is empty', async () => {
+  it('returns 422 NO_FIELDS_TO_UPDATE when body is empty', async () => {
     const token = await generateTestToken(AUTH_USER.id)
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
-    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(AUTH_USER)
+    mockAuthChain()
+    mockListItemOwnershipChain()
 
     const response = await apiRequest(`/v1/list-items/${LIST_ITEM_ID}`, {
       method: 'PATCH',
@@ -209,7 +211,9 @@ describe('PATCH /v1/list-items/:id', () => {
       body: {},
     })
 
+    const body = await response.json() as { code: string }
     expect(response.status).toBe(422)
+    expect(body.code).toBe('NO_FIELDS_TO_UPDATE')
   })
 
   it('returns 422 when id param is not a uuid', async () => {
@@ -266,8 +270,9 @@ describe('DELETE /v1/list-items/:id', () => {
     const token = await generateTestToken(AUTH_USER.id)
     mockAuthChain()
     vi.mocked(db.query.listItems.findFirst).mockResolvedValueOnce(MOCK_LIST_ITEM as never)
-    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(MOCK_LIST as never)
-    vi.mocked(db.query.listCollaborators.findFirst).mockResolvedValueOnce(undefined)
+    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(
+      { ...MOCK_LIST, collaborators: [] } as never,
+    )
 
     const response = await apiRequest(`/v1/list-items/${LIST_ITEM_ID}`, {
       method: 'DELETE',

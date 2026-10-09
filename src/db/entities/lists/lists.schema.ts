@@ -9,6 +9,7 @@ export const lists = pgTable('lists', {
   id: uuidPrimaryKey(),
   occasionTypeId: uuid('occasion_type_id').references(() => occasionTypes.id, { onDelete: 'set null' }),
   title: varchar('title', { length: 200 }).notNull(),
+  slug: varchar('slug', { length: 80 }).notNull().unique(),
   description: text('description'),
   listStatus: listStatusEnum('list_status').notNull().default('active'),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),

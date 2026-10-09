@@ -1,15 +1,16 @@
 import type { Context, MiddlewareHandler } from 'hono'
 import { ErrorCode } from '../enums/error-code.js'
+import { HonoContextKey } from '../enums/context-key.js'
 import { sendError } from '../utils/response.js'
 import { logger } from '../utils/logger.js'
-import { findListById } from '../../db/entities/lists/lists.repository.js'
-import { findListOwner, findListContributor } from '../../db/entities/list-collaborators/list-collaborators.repository.js'
+import { findListWithOwner } from '../../db/entities/lists/lists.repository.js'
+import { findListContributor } from '../../db/entities/list-collaborators/list-collaborators.repository.js'
 import { getAuthUser } from './auth.js'
 import type { AppVariables } from '../types/app.js'
-import type { ListCollaborator } from '../../db/entities/list-collaborators/list-collaborators.schema.js'
+import type { ListRowWithOwner } from '../types/list.js'
 
 type AppContext = Context<{ Variables: AppVariables }>
-type ResolveCollaborator = (listId: string, userId: string) => Promise<ListCollaborator | undefined>
+type AccessCheck = (list: ListRowWithOwner, userId: string) => Promise<boolean>
 
 export interface ListAccessMiddlewareOptions {
   paramName: string
@@ -19,30 +20,32 @@ export interface ListAccessMiddlewareOptions {
 export function listOwnershipMiddleware(
   options: ListAccessMiddlewareOptions,
 ): MiddlewareHandler<{ Variables: AppVariables }> {
-  return buildListAccessMiddleware(options, findListOwner)
+  return buildListAccessMiddleware(options, isListOwner)
 }
 
 export function listContributorMiddleware(
   options: ListAccessMiddlewareOptions,
 ): MiddlewareHandler<{ Variables: AppVariables }> {
-  return buildListAccessMiddleware(options, findListContributor)
+  return buildListAccessMiddleware(options, isListContributor)
 }
 
 function buildListAccessMiddleware(
   options: ListAccessMiddlewareOptions,
-  resolveCollaborator: ResolveCollaborator,
+  checkAccess: AccessCheck,
 ): MiddlewareHandler<{ Variables: AppVariables }> {
   return async (context, next) => {
     try {
       const listId = await resolveListId(context, options)
       if (!listId) return sendError(ErrorCode.NOT_FOUND)
 
-      const listExistsAndActive = await assertListActive(listId)
-      if (!listExistsAndActive) return sendError(ErrorCode.NOT_FOUND)
+      const list = await findListWithOwner(listId, { excludeDeleted: true })
+      if (!list) return sendError(ErrorCode.NOT_FOUND)
 
-      const hasAccess = await assertUserHasAccess(context, listId, resolveCollaborator)
+      const user = getAuthUser(context)
+      const hasAccess = await checkAccess(list, user.id)
       if (!hasAccess) return sendError(ErrorCode.FORBIDDEN)
 
+      context.set(HonoContextKey.LIST, list)
       await next()
       return
     } catch (error: unknown) {
@@ -50,6 +53,10 @@ function buildListAccessMiddleware(
       return sendError(ErrorCode.INTERNAL_ERROR)
     }
   }
+}
+
+export function getList(context: AppContext): ListRowWithOwner {
+  return context.get(HonoContextKey.LIST)
 }
 
 async function resolveListId(
@@ -61,17 +68,11 @@ async function resolveListId(
   return paramValue ?? null
 }
 
-async function assertListActive(listId: string): Promise<boolean> {
-  const list = await findListById(listId)
-  if (!list) return false
-  return list.deletedAt === null
+function isListOwner(list: ListRowWithOwner, userId: string): Promise<boolean> {
+  return Promise.resolve(list.collaborators[0]?.userId === userId)
 }
 
-function assertUserHasAccess(
-  context: AppContext,
-  listId: string,
-  resolveCollaborator: ResolveCollaborator,
-): Promise<ListCollaborator | undefined> {
-  const user = getAuthUser(context)
-  return resolveCollaborator(listId, user.id)
+async function isListContributor(list: ListRowWithOwner, userId: string): Promise<boolean> {
+  const row = await findListContributor(list.id, userId)
+  return row !== undefined
 }

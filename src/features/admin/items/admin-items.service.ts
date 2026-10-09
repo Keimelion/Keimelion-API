@@ -113,7 +113,7 @@ export async function updateItemById(
   })
 
   if (Object.keys(fieldPatch).length === 0) {
-    return serviceError(ErrorCode.UNPROCESSABLE_ENTITY, { message: 'At least one field must be provided' })
+    return serviceError(ErrorCode.NO_FIELDS_TO_UPDATE)
   }
 
   const outcome = await runWrite(() => updateItem(id, fieldPatch))
