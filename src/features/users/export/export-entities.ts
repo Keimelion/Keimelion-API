@@ -4,10 +4,12 @@ import {
   findItemSourcesByCreator,
   findListItemsForContributor,
   findListsOwnedByForExport,
+  findTagsCreatedByUser,
 } from './rgpd-export.repository.js'
 import { toUserDetail } from '../../../shared/types/user.js'
 import { toItemDetail, toItemSourceDetailWithoutShop, toListItemDetail } from '../../../shared/types/item.js'
 import { toListDetail } from '../../../shared/types/list.js'
+import { toTagDetail } from '../../../shared/types/tag.js'
 import type { List } from '../../../db/entities/lists/lists.schema.js'
 import type { ListDetail } from '../../../shared/types/list.js'
 
@@ -145,10 +147,25 @@ const listsEntityDescriptor: ExportEntityDescriptor = {
   },
 }
 
+const tagsEntityDescriptor: ExportEntityDescriptor = {
+  filename: 'tags.csv',
+  columns: [
+    'id',
+    'name',
+    'slug',
+    'createdAt',
+  ],
+  fetchRows: async (userId: string) => {
+    const createdTags = await findTagsCreatedByUser(userId)
+    return createdTags.map(toTagDetail)
+  },
+}
+
 export const EXPORT_ENTITY_REGISTRY: ExportEntityDescriptor[] = [
   profileEntityDescriptor,
   itemsEntityDescriptor,
   itemSourcesEntityDescriptor,
   listItemsEntityDescriptor,
   listsEntityDescriptor,
+  tagsEntityDescriptor,
 ]

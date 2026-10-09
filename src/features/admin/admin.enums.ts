@@ -20,4 +20,7 @@ export const AdminAction = {
   CREATE_CATEGORY: 'admin_create_category',
   UPDATE_CATEGORY: 'admin_update_category',
   DELETE_CATEGORY: 'admin_delete_category',
+  CREATE_TAG: 'admin_create_tag',
+  UPDATE_TAG: 'admin_update_tag',
+  DELETE_TAG: 'admin_delete_tag',
 } as const

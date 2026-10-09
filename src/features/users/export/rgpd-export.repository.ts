@@ -5,11 +5,13 @@ import { itemSources } from '../../../db/entities/item-sources/item-sources.sche
 import { listCollaborators } from '../../../db/entities/list-collaborators/list-collaborators.schema.js'
 import { listItems } from '../../../db/entities/list-items/list-items.schema.js'
 import { lists } from '../../../db/entities/lists/lists.schema.js'
+import { tags } from '../../../db/entities/tags/tags.schema.js'
 import { CollabRoles, CONTRIBUTOR_ROLE_VALUES } from '../../../shared/enums/collab-role.js'
 import type { Item } from '../../../db/entities/items/items.schema.js'
 import type { ItemSource } from '../../../db/entities/item-sources/item-sources.schema.js'
 import type { ListItem } from '../../../db/entities/list-items/list-items.schema.js'
 import type { List } from '../../../db/entities/lists/lists.schema.js'
+import type { Tag } from '../../../db/entities/tags/tags.schema.js'
 
 export async function findItemsByCreator(userId: string): Promise<Item[]> {
   return db.query.items.findMany({
@@ -47,5 +49,11 @@ export async function findListsOwnedByForExport(userId: string): Promise<List[]>
     .where(and(eq(listCollaborators.userId, userId), eq(listCollaborators.collabRole, CollabRoles.OWNER)))
   return db.query.lists.findMany({
     where: inArray(lists.id, ownedListIds),
+  })
+}
+
+export async function findTagsCreatedByUser(userId: string): Promise<Tag[]> {
+  return db.query.tags.findMany({
+    where: eq(tags.createdByUserId, userId),
   })
 }
