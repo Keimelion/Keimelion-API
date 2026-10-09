@@ -64,6 +64,13 @@
       "when": 1791383245774,
       "tag": "0008_add-items-lists-shops-item-sources",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1791540341887,
+      "tag": "0009_add-categories-and-item-categories",
+      "breakpoints": true
     }
   ]
 }
