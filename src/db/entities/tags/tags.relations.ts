@@ -2,6 +2,7 @@ import { relations } from 'drizzle-orm'
 import { tags } from './tags.schema.js'
 import { users } from '../users/users.schema.js'
 import { itemTags } from '../item-tags/item-tags.schema.js'
+import { listTags } from '../list-tags/list-tags.schema.js'
 
 export const tagsRelations = relations(tags, ({ one, many }) => ({
   createdByUser: one(users, {
@@ -9,4 +10,5 @@ export const tagsRelations = relations(tags, ({ one, many }) => ({
     references: [users.id],
   }),
   itemTags: many(itemTags),
+  listTags: many(listTags),
 }))

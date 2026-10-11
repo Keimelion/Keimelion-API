@@ -3,6 +3,7 @@ import { lists } from './lists.schema.js'
 import { occasionTypes } from '../occasion-types/occasion-types.schema.js'
 import { listCollaborators } from '../list-collaborators/list-collaborators.schema.js'
 import { listItems } from '../list-items/list-items.schema.js'
+import { listTags } from '../list-tags/list-tags.schema.js'
 
 export const listsRelations = relations(lists, ({ one, many }) => ({
   occasionType: one(occasionTypes, {
@@ -11,4 +12,5 @@ export const listsRelations = relations(lists, ({ one, many }) => ({
   }),
   collaborators: many(listCollaborators),
   listItems: many(listItems),
+  listTags: many(listTags),
 }))

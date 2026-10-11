@@ -99,6 +99,10 @@ vi.mock('../../db/client.js', () => ({
         findFirst: vi.fn(),
         findMany: vi.fn().mockResolvedValue([]),
       },
+      listTags: {
+        findFirst: vi.fn(),
+        findMany: vi.fn().mockResolvedValue([]),
+      },
     },
     insert: vi.fn(() => ({
       values: vi.fn(() => ({

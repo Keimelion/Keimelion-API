@@ -14,6 +14,9 @@ export const LIST_WITH_OWNER = {
     limit: 1,
     with: { user: true },
   },
+  listTags: {
+    with: { tag: true },
+  },
 } as const
 
 export const LIST_SORTABLE_FIELDS = {

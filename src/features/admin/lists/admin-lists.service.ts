@@ -4,12 +4,22 @@ import { serviceError } from '../../../shared/utils/response.js'
 import { logger } from '../../../shared/utils/logger.js'
 import { runWrite, buildChanges } from '../../../shared/utils/admin-write.js'
 import { buildPaginatedResponse } from '../../../shared/schemas/pagination.js'
+import { buildSlugFromName } from '../../../shared/utils/slug.js'
 import {
   buildListUpdatePatch,
+  findListWithOwner,
   updateList,
   softDeleteList,
   restoreList,
 } from '../../../db/entities/lists/lists.repository.js'
+import {
+  findTagsBySlugs,
+  insertTagsIgnoreConflict,
+} from '../../../db/entities/tags/tags.repository.js'
+import {
+  deleteListTag,
+  insertListTagsIgnoreConflict,
+} from '../../../db/entities/list-tags/list-tags.repository.js'
 import {
   findAllListsWithOwner,
   countLists,
@@ -77,7 +87,11 @@ export async function updateListById(
 
   logChanges(adminId, id, existingRow, fieldPatch)
 
-  const updatedRow = { ...outcome.row, collaborators: existingRow.collaborators }
+  const updatedRow = {
+    ...outcome.row,
+    collaborators: existingRow.collaborators,
+    listTags: existingRow.listTags,
+  }
   return {
     data: { list: toAdminListDetail(updatedRow) },
     httpStatus: HttpStatus.OK,
@@ -106,11 +120,70 @@ export async function restoreListById(
 
   logger.info({ adminId, action: AdminAction.RESTORE_LIST, listId: id })
 
-  const restoredRow = { ...restored, collaborators: existingRow.collaborators }
+  const restoredRow = {
+    ...restored,
+    collaborators: existingRow.collaborators,
+    listTags: existingRow.listTags,
+  }
   return {
     data: { list: toAdminListDetail(restoredRow) },
     httpStatus: HttpStatus.OK,
   }
+}
+
+export async function assignTagsToList(
+  adminId: string,
+  listId: string,
+  names: string[],
+): Promise<ServiceResult<{ list: AdminListDetail }>> {
+  const existing = await findAdminListByIdWithOwner(listId)
+  if (!existing) return serviceError(ErrorCode.NOT_FOUND)
+
+  const slugs = normalizeTagSlugs(names)
+  if (slugs === null) return serviceError(ErrorCode.TAG_INVALID_NAME)
+
+  const tagIds = await upsertTagsBySlugs(slugs)
+  await insertListTagsIgnoreConflict(listId, tagIds)
+
+  const refreshed = await findListWithOwner(listId)
+  if (!refreshed) return serviceError(ErrorCode.INTERNAL_ERROR)
+
+  logger.info({ adminId, action: AdminAction.ASSIGN_LIST_TAGS, listId, tagCount: tagIds.length })
+  return { data: { list: toAdminListDetail(refreshed) }, httpStatus: HttpStatus.OK }
+}
+
+export async function removeTagFromList(
+  adminId: string,
+  listId: string,
+  tagId: string,
+): Promise<ServiceResult<null>> {
+  const existing = await findAdminListById(listId)
+  if (!existing) return serviceError(ErrorCode.NOT_FOUND)
+
+  const removed = await deleteListTag(listId, tagId)
+  if (!removed) return serviceError(ErrorCode.TAG_NOT_FOUND)
+
+  logger.info({ adminId, action: AdminAction.REMOVE_LIST_TAG, listId, tagId })
+  return { data: null, httpStatus: HttpStatus.NO_CONTENT }
+}
+
+function normalizeTagSlugs(names: string[]): string[] | null {
+  const slugs: string[] = []
+  for (const name of names) {
+    const slug = buildSlugFromName(name)
+    if (slug.length === 0) return null
+    slugs.push(slug)
+  }
+  return Array.from(new Set(slugs))
+}
+
+async function upsertTagsBySlugs(slugs: string[]): Promise<string[]> {
+  if (slugs.length === 0) return []
+  await insertTagsIgnoreConflict(
+    slugs.map((slug) => ({ name: slug, slug, createdByUserId: null })),
+  )
+  const tags = await findTagsBySlugs(slugs)
+  return tags.map((tag) => tag.id)
 }
 
 function logChanges(adminId: string, listId: string, existingRow: List, fieldPatch: UpdateListFields): void {

@@ -4,6 +4,7 @@ import {
   findItemSourcesByCreator,
   findListItemsForContributor,
   findListsOwnedByForExport,
+  findListTagsForOwner,
   findTagsCreatedByUser,
 } from './rgpd-export.repository.js'
 import { toUserDetail } from '../../../shared/types/user.js'
@@ -11,14 +12,26 @@ import { toItemDetail, toItemSourceDetailWithoutShop, toListItemDetail } from '.
 import { toListDetail } from '../../../shared/types/list.js'
 import { toTagDetail } from '../../../shared/types/tag.js'
 import type { List } from '../../../db/entities/lists/lists.schema.js'
+import type { ListTag } from '../../../db/entities/list-tags/list-tags.schema.js'
 import type { ListDetail } from '../../../shared/types/list.js'
+
+export interface ExportListTagRow {
+  listId: string
+  tagId: string
+  assignedAt: Date
+}
+
+export function toExportListTagRow(row: ListTag): ExportListTagRow {
+  return { listId: row.listId, tagId: row.tagId, assignedAt: row.assignedAt }
+}
 
 export interface ExportListRow extends ListDetail {
   deletedAt: Date | null
 }
 
 export function toExportListRow(list: List): ExportListRow {
-  return { ...toListDetail(list, null), deletedAt: list.deletedAt }
+  const row = { ...list, collaborators: [], listTags: [] }
+  return { ...toListDetail(row, null), deletedAt: list.deletedAt }
 }
 
 /**
@@ -161,6 +174,15 @@ const tagsEntityDescriptor: ExportEntityDescriptor = {
   },
 }
 
+const listTagsEntityDescriptor: ExportEntityDescriptor = {
+  filename: 'list-tags.csv',
+  columns: ['listId', 'tagId', 'assignedAt'],
+  fetchRows: async (userId: string) => {
+    const rows = await findListTagsForOwner(userId)
+    return rows.map(toExportListTagRow)
+  },
+}
+
 export const EXPORT_ENTITY_REGISTRY: ExportEntityDescriptor[] = [
   profileEntityDescriptor,
   itemsEntityDescriptor,
@@ -168,4 +190,5 @@ export const EXPORT_ENTITY_REGISTRY: ExportEntityDescriptor[] = [
   listItemsEntityDescriptor,
   listsEntityDescriptor,
   tagsEntityDescriptor,
+  listTagsEntityDescriptor,
 ]

@@ -6,7 +6,7 @@ import { ListStatuses } from '../../shared/enums/list-status.js'
 import { serviceError } from '../../shared/utils/response.js'
 import { runWrite } from '../../shared/utils/admin-write.js'
 import { buildPaginatedResponse } from '../../shared/schemas/pagination.js'
-import { buildSlugFromTitle } from '../../shared/utils/slug.js'
+import { buildSlugFromName, buildSlugFromTitle } from '../../shared/utils/slug.js'
 import { isPgForeignKeyViolation, isPgUniqueViolation } from '../../shared/db/pg-errors.js'
 import { logger } from '../../shared/utils/logger.js'
 import { insertItem } from '../../db/entities/items/items.repository.js'
@@ -14,11 +14,20 @@ import { insertItemSource } from '../../db/entities/item-sources/item-sources.re
 import { insertListItem } from '../../db/entities/list-items/list-items.repository.js'
 import {
   buildListUpdatePatch,
+  findListWithOwner,
   insertList,
   updateList,
   softDeleteList,
 } from '../../db/entities/lists/lists.repository.js'
 import { insertOwnerCollaborator } from '../../db/entities/list-collaborators/list-collaborators.repository.js'
+import {
+  findTagsBySlugs,
+  insertTagsIgnoreConflict,
+} from '../../db/entities/tags/tags.repository.js'
+import {
+  deleteListTag,
+  insertListTagsIgnoreConflict,
+} from '../../db/entities/list-tags/list-tags.repository.js'
 import { toItemDetail, toListItemDetail, toItemSourceDetailWithoutShop } from '../../shared/types/item.js'
 import { extractOwnerDetail, toListDetail } from '../../shared/types/list.js'
 import { findListsOwnedBy, countListsOwnedBy } from './lists.repository.js'
@@ -102,6 +111,7 @@ export async function updateUserList(
   const refreshed: ListRowWithOwner = {
     ...writeOutcome.row,
     collaborators: existing.collaborators,
+    listTags: existing.listTags,
   }
   return {
     data: { list: toListDetail(refreshed, extractOwnerDetail(refreshed)) },
@@ -112,6 +122,59 @@ export async function updateUserList(
 export async function deleteUserList(id: string): Promise<ServiceResult<null>> {
   await softDeleteList(id)
   return { data: null, httpStatus: HttpStatus.NO_CONTENT }
+}
+
+export async function assignTagsToList(
+  listId: string,
+  userId: string,
+  names: string[],
+): Promise<ServiceResult<{ list: ListDetail }>> {
+  const slugs = normalizeTagSlugs(names)
+  if (slugs === null) return serviceError(ErrorCode.TAG_INVALID_NAME)
+
+  const tagIds = await upsertTagsBySlugs(slugs, userId)
+  await insertListTagsIgnoreConflict(listId, tagIds)
+  return buildListDetailResult(listId)
+}
+
+export async function removeTagFromList(
+  listId: string,
+  tagId: string,
+): Promise<ServiceResult<null>> {
+  const removed = await deleteListTag(listId, tagId)
+  if (!removed) return serviceError(ErrorCode.TAG_NOT_FOUND)
+  return { data: null, httpStatus: HttpStatus.NO_CONTENT }
+}
+
+async function buildListDetailResult(
+  listId: string,
+): Promise<ServiceResult<{ list: ListDetail }>> {
+  const row = await findListWithOwner(listId)
+  if (!row) return serviceError(ErrorCode.NOT_FOUND)
+
+  return {
+    data: { list: toListDetail(row, extractOwnerDetail(row)) },
+    httpStatus: HttpStatus.OK,
+  }
+}
+
+function normalizeTagSlugs(names: string[]): string[] | null {
+  const slugs: string[] = []
+  for (const name of names) {
+    const slug = buildSlugFromName(name)
+    if (slug.length === 0) return null
+    slugs.push(slug)
+  }
+  return Array.from(new Set(slugs))
+}
+
+async function upsertTagsBySlugs(slugs: string[], userId: string): Promise<string[]> {
+  if (slugs.length === 0) return []
+  await insertTagsIgnoreConflict(
+    slugs.map((slug) => ({ name: slug, slug, createdByUserId: userId })),
+  )
+  const tags = await findTagsBySlugs(slugs)
+  return tags.map((tag) => tag.id)
 }
 
 export async function addItemToList(
@@ -160,6 +223,7 @@ async function tryInsertList(
     const row: ListRowWithOwner = {
       ...created.list,
       collaborators: [{ ...created.collaborator, user }],
+      listTags: [],
     }
     return { row }
   } catch (error) {
