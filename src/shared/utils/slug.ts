@@ -11,6 +11,10 @@ export function buildSlugFromTitle(title: string): string {
   return `${fallback}-${randomSuffix()}`
 }
 
+export function buildSlugFromName(name: string): string {
+  return slugify(name, { lower: true, strict: true, trim: true })
+}
+
 function randomSuffix(): string {
   const alphabetLength = SLUG_SUFFIX_ALPHABET.length
   let out = ''

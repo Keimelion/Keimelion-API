@@ -20,6 +20,7 @@ type UpdateItemFields = Partial<Pick<typeof items.$inferInsert, 'name' | 'descri
 const ITEM_WITH_SOURCES_WITH = {
   sources: { with: { shop: true } },
   itemCategories: { with: { category: true } },
+  itemTags: { with: { tag: true } },
 } as const
 
 export async function insertItem(input: InsertItemInput, tx?: DbTransaction): Promise<Item | undefined> {

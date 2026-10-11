@@ -66,8 +66,9 @@ const SOURCE_WITH_SHOP_ROW = {
 function itemWith(sources: SourceRow[]): typeof ITEM_ROW & {
   sources: SourceRow[]
   itemCategories: never[]
+  itemTags: never[]
 } {
-  return { ...ITEM_ROW, sources, itemCategories: [] }
+  return { ...ITEM_ROW, sources, itemCategories: [], itemTags: [] }
 }
 
 function mockCountAllChain(total: number): void {
@@ -85,7 +86,7 @@ describe('GET /v1/items', () => {
   it('returns 200 with paginated items and embedded sources', async () => {
     vi.mocked(db.query.items.findMany).mockResolvedValueOnce([
       itemWith([SOURCE_ROW]),
-      { ...OTHER_ITEM_ROW, sources: [], itemCategories: [] },
+      { ...OTHER_ITEM_ROW, sources: [], itemCategories: [], itemTags: [] },
     ] as never)
     mockCountAllChain(2)
 
@@ -416,5 +417,244 @@ describe('POST /v1/items/:id/categories', () => {
     })
 
     expect(response.status).toBe(401)
+  })
+})
+
+const TAG_GAMING_ROW = {
+  id: '00000000-0000-0000-0000-000000000070',
+  name: 'gaming',
+  slug: 'gaming',
+  createdByUserId: OWNER_USER.id,
+  createdAt: new Date('2024-01-01'),
+  updatedAt: new Date('2024-01-01'),
+}
+
+const TAG_READING_ROW = {
+  ...TAG_GAMING_ROW,
+  id: '00000000-0000-0000-0000-000000000071',
+  name: 'reading',
+  slug: 'reading',
+}
+
+function mockAssignTagsTransaction(assignments: { tag: typeof TAG_GAMING_ROW }[]): void {
+  vi.mocked(db.transaction).mockImplementationOnce((callback) => {
+    const txFindMany = vi.fn().mockResolvedValueOnce(
+      assignments.map((assignment) => ({
+        itemId: OWNED_ITEM_ROW.id,
+        tagId: assignment.tag.id,
+        assignedAt: new Date(),
+        tag: assignment.tag,
+      })),
+    )
+    const tx = {
+      delete: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
+      insert: vi.fn().mockReturnValue({ values: vi.fn().mockResolvedValue([]) }),
+      query: { itemTags: { findMany: txFindMany } },
+    }
+    return callback(tx as never) as never
+  })
+}
+
+function mockInsertTagsIgnoreConflict(): void {
+  vi.mocked(db.insert).mockReturnValueOnce({
+    values: vi.fn().mockReturnValueOnce({
+      onConflictDoNothing: vi.fn().mockResolvedValueOnce([]),
+    }),
+  } as never)
+}
+
+describe('POST /v1/items/:id/tags', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(OWNER_ACCESS_TOKEN_ENTRY as never)
+  })
+
+  it('returns 200 and auto-creates missing tags by normalized slug', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(OWNED_ITEM_ROW as never)
+    mockInsertTagsIgnoreConflict()
+    vi.mocked(db.query.tags.findMany).mockResolvedValueOnce(
+      [TAG_GAMING_ROW, TAG_READING_ROW] as never,
+    )
+    mockAssignTagsTransaction([{ tag: TAG_GAMING_ROW }, { tag: TAG_READING_ROW }])
+
+    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}/tags`, {
+      method: 'POST',
+      token,
+      body: { names: ['Gaming', 'Reading'] },
+    })
+
+    const body = await response.json() as { tags: { slug: string; name: string }[] }
+    expect(response.status).toBe(200)
+    expect(body.tags).toHaveLength(2)
+    expect(body.tags.map((tag) => tag.slug)).toEqual(
+      expect.arrayContaining(['gaming', 'reading']),
+    )
+  })
+
+  it('deduplicates names that normalize to the same slug', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(OWNED_ITEM_ROW as never)
+    mockInsertTagsIgnoreConflict()
+    vi.mocked(db.query.tags.findMany).mockResolvedValueOnce([TAG_GAMING_ROW] as never)
+    mockAssignTagsTransaction([{ tag: TAG_GAMING_ROW }])
+
+    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}/tags`, {
+      method: 'POST',
+      token,
+      body: { names: ['Gaming', 'gaming', 'GAMING'] },
+    })
+
+    const body = await response.json() as { tags: { slug: string }[] }
+    expect(response.status).toBe(200)
+    expect(body.tags).toHaveLength(1)
+    expect(body.tags[0]?.slug).toBe('gaming')
+  })
+
+  it('returns 200 with empty tags when names is empty (clears existing)', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(OWNED_ITEM_ROW as never)
+    mockAssignTagsTransaction([])
+
+    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}/tags`, {
+      method: 'POST',
+      token,
+      body: { names: [] },
+    })
+
+    const body = await response.json() as { tags: unknown[] }
+    expect(response.status).toBe(200)
+    expect(body.tags).toHaveLength(0)
+  })
+
+  it('returns 404 NOT_FOUND when the item does not exist', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(undefined)
+
+    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}/tags`, {
+      method: 'POST',
+      token,
+      body: { names: ['gaming'] },
+    })
+
+    expect(response.status).toBe(404)
+  })
+
+  it('returns 403 FORBIDDEN when the user does not own the item', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(
+      { ...OWNED_ITEM_ROW, createdByUserId: OTHER_USER_ID } as never,
+    )
+
+    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}/tags`, {
+      method: 'POST',
+      token,
+      body: { names: ['gaming'] },
+    })
+
+    expect(response.status).toBe(403)
+  })
+
+  it('returns 422 TAG_INVALID_NAME when a name normalizes to an empty slug', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(OWNED_ITEM_ROW as never)
+
+    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}/tags`, {
+      method: 'POST',
+      token,
+      body: { names: ['!!!'] },
+    })
+
+    const body = await response.json() as { code: string }
+    expect(response.status).toBe(422)
+    expect(body.code).toBe('TAG_INVALID_NAME')
+  })
+
+  it('returns 422 when names exceeds max count (20)', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+
+    const tooMany = Array.from({ length: 21 }, (_, index) => `tag-${String(index)}`)
+    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}/tags`, {
+      method: 'POST',
+      token,
+      body: { names: tooMany },
+    })
+
+    expect(response.status).toBe(422)
+  })
+
+  it('returns 422 when id is not a UUID', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+
+    const response = await apiRequest('/v1/items/not-a-uuid/tags', {
+      method: 'POST',
+      token,
+      body: { names: ['gaming'] },
+    })
+
+    expect(response.status).toBe(422)
+  })
+
+  it('returns 401 when not authenticated', async () => {
+    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}/tags`, {
+      method: 'POST',
+      body: { names: ['gaming'] },
+    })
+
+    expect(response.status).toBe(401)
+  })
+})
+
+describe('items mapper hydrates tags', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('returns tags array on GET /v1/items/:id', async () => {
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce({
+      ...ITEM_ROW,
+      sources: [],
+      itemCategories: [],
+      itemTags: [
+        { itemId: ITEM_ROW.id, tagId: TAG_GAMING_ROW.id, assignedAt: new Date(), tag: TAG_GAMING_ROW },
+      ],
+    } as never)
+
+    const response = await apiRequest(`/v1/items/${ITEM_ROW.id}`)
+
+    const body = await response.json() as {
+      item: { tags: { slug: string; name: string }[] }
+    }
+    expect(response.status).toBe(200)
+    expect(body.item.tags).toHaveLength(1)
+    expect(body.item.tags[0]?.slug).toBe('gaming')
+  })
+
+  it('returns tags array on GET /v1/items (list)', async () => {
+    vi.mocked(db.query.items.findMany).mockResolvedValueOnce([
+      {
+        ...ITEM_ROW,
+        sources: [],
+        itemCategories: [],
+        itemTags: [
+          { itemId: ITEM_ROW.id, tagId: TAG_READING_ROW.id, assignedAt: new Date(), tag: TAG_READING_ROW },
+        ],
+      },
+    ] as never)
+    mockCountAllChain(1)
+
+    const response = await apiRequest('/v1/items')
+
+    const body = await response.json() as { items: { tags: { slug: string }[] }[] }
+    expect(response.status).toBe(200)
+    expect(body.items[0]?.tags[0]?.slug).toBe('reading')
   })
 })

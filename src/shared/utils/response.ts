@@ -21,6 +21,11 @@ export const CATEGORY_MAX_DEPTH_EXCEEDED_MESSAGE =
 export const CATEGORY_CYCLE_DETECTED_MESSAGE =
   'Category parent cannot create a cycle in the hierarchy'
 
+export const TAG_NOT_FOUND_MESSAGE = 'Tag not found'
+
+export const TAG_INVALID_NAME_MESSAGE =
+  'Tag name must contain at least one letter or digit after normalization'
+
 export const errorMap: Record<ErrorCode, { status: ContentfulStatusCode; message: string }> = {
   BAD_REQUEST:             { status: HttpStatus.BAD_REQUEST,           message: 'Bad request' },
   UNAUTHORIZED:            { status: HttpStatus.UNAUTHORIZED,          message: 'Unauthorized' },
@@ -34,6 +39,8 @@ export const errorMap: Record<ErrorCode, { status: ContentfulStatusCode; message
   CATEGORY_NOT_FOUND:      { status: HttpStatus.NOT_FOUND,             message: CATEGORY_NOT_FOUND_MESSAGE },
   CATEGORY_MAX_DEPTH_EXCEEDED: { status: HttpStatus.UNPROCESSABLE_ENTITY, message: CATEGORY_MAX_DEPTH_EXCEEDED_MESSAGE },
   CATEGORY_CYCLE_DETECTED: { status: HttpStatus.UNPROCESSABLE_ENTITY,  message: CATEGORY_CYCLE_DETECTED_MESSAGE },
+  TAG_NOT_FOUND:           { status: HttpStatus.NOT_FOUND,             message: TAG_NOT_FOUND_MESSAGE },
+  TAG_INVALID_NAME:        { status: HttpStatus.UNPROCESSABLE_ENTITY,  message: TAG_INVALID_NAME_MESSAGE },
   UNPROCESSABLE_ENTITY:    { status: HttpStatus.UNPROCESSABLE_ENTITY,  message: 'Validation failed' },
   NO_FIELDS_TO_UPDATE:     { status: HttpStatus.UNPROCESSABLE_ENTITY,  message: 'At least one field must be provided' },
   RATE_LIMIT_EXCEEDED:     { status: HttpStatus.TOO_MANY_REQUESTS,     message: 'Too many requests' },

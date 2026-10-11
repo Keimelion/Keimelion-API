@@ -164,8 +164,9 @@ function mockUpdateItemSourceUniqueViolation(): void {
 function itemWith(sources: SourceRow[]): typeof ITEM_ROW & {
   sources: SourceRow[]
   itemCategories: never[]
+  itemTags: never[]
 } {
-  return { ...ITEM_ROW, sources, itemCategories: [] }
+  return { ...ITEM_ROW, sources, itemCategories: [], itemTags: [] }
 }
 
 function buildTxInsertMock(rows: unknown[]): ReturnType<typeof vi.fn> {
