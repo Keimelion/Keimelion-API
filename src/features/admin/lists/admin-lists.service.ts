@@ -14,10 +14,7 @@ import {
   restoreList,
 } from '../../../db/entities/lists/lists.repository.js'
 import { upsertTagsBySlugs } from '../../../db/entities/tags/tags.repository.js'
-import {
-  deleteListTag,
-  insertListTagsIgnoreConflict,
-} from '../../../db/entities/list-tags/list-tags.repository.js'
+import { replaceListTags } from '../../../db/entities/list-tags/list-tags.repository.js'
 import {
   findAllListsWithOwner,
   countLists,
@@ -73,25 +70,53 @@ export async function updateListById(
   if (!existingRow || existingRow.deletedAt) return serviceError(ErrorCode.NOT_FOUND)
 
   const fieldPatch = buildListUpdatePatch(input)
+  const { tags } = input
 
-  if (Object.keys(fieldPatch).length === 0) {
+  if (Object.keys(fieldPatch).length === 0 && tags === undefined) {
     return serviceError(ErrorCode.NO_FIELDS_TO_UPDATE)
   }
 
-  const outcome = await runWrite(() => updateList(id, fieldPatch), {
-    foreignKeyErrorCode: ErrorCode.UNPROCESSABLE_ENTITY,
-  })
+  let tagSlugs: string[] | null = null
+  if (tags !== undefined) {
+    tagSlugs = normalizeTagSlugs(tags)
+    if (tagSlugs === null) return serviceError(ErrorCode.TAG_INVALID_NAME)
+  }
+
+  const outcome = await runWrite(
+    () =>
+      db.transaction(async (tx) => {
+        const updated =
+          Object.keys(fieldPatch).length > 0
+            ? await updateList(id, fieldPatch, tx)
+            : existingRow
+        if (tagSlugs !== null) {
+          const tagIds = await upsertTagsBySlugs(tagSlugs, null, tx)
+          await replaceListTags(id, tagIds, tx)
+        }
+        return updated
+      }),
+    { foreignKeyErrorCode: ErrorCode.UNPROCESSABLE_ENTITY },
+  )
   if ('errorCode' in outcome) return serviceError(outcome.errorCode)
 
   logChanges(adminId, id, existingRow, fieldPatch)
 
-  const updatedRow = {
-    ...outcome.row,
-    collaborators: existingRow.collaborators,
-    listTags: existingRow.listTags,
+  if (tagSlugs === null) {
+    const updatedRow = {
+      ...outcome.row,
+      collaborators: existingRow.collaborators,
+      listTags: existingRow.listTags,
+    }
+    return {
+      data: { list: toAdminListDetail(updatedRow) },
+      httpStatus: HttpStatus.OK,
+    }
   }
+
+  const refreshed = await findListWithOwner(id)
+  if (!refreshed) return serviceError(ErrorCode.INTERNAL_ERROR)
   return {
-    data: { list: toAdminListDetail(updatedRow) },
+    data: { list: toAdminListDetail(refreshed) },
     httpStatus: HttpStatus.OK,
   }
 }
@@ -127,45 +152,6 @@ export async function restoreListById(
     data: { list: toAdminListDetail(restoredRow) },
     httpStatus: HttpStatus.OK,
   }
-}
-
-export async function assignTagsToList(
-  adminId: string,
-  listId: string,
-  names: string[],
-): Promise<ServiceResult<{ list: AdminListDetail }>> {
-  const existing = await findAdminListById(listId)
-  if (!existing || existing.deletedAt) return serviceError(ErrorCode.NOT_FOUND)
-
-  const slugs = normalizeTagSlugs(names)
-  if (slugs === null) return serviceError(ErrorCode.TAG_INVALID_NAME)
-
-  const tagIds = await db.transaction(async (tx) => {
-    const ids = await upsertTagsBySlugs(slugs, null, tx)
-    await insertListTagsIgnoreConflict(listId, ids, tx)
-    return ids
-  })
-
-  const refreshed = await findListWithOwner(listId)
-  if (!refreshed) return serviceError(ErrorCode.INTERNAL_ERROR)
-
-  logger.info({ adminId, action: AdminAction.ASSIGN_LIST_TAGS, listId, tagCount: tagIds.length })
-  return { data: { list: toAdminListDetail(refreshed) }, httpStatus: HttpStatus.OK }
-}
-
-export async function removeTagFromList(
-  adminId: string,
-  listId: string,
-  tagId: string,
-): Promise<ServiceResult<null>> {
-  const existing = await findAdminListById(listId)
-  if (!existing || existing.deletedAt) return serviceError(ErrorCode.NOT_FOUND)
-
-  const removed = await deleteListTag(listId, tagId)
-  if (!removed) return serviceError(ErrorCode.TAG_NOT_FOUND)
-
-  logger.info({ adminId, action: AdminAction.REMOVE_LIST_TAG, listId, tagId })
-  return { data: null, httpStatus: HttpStatus.NO_CONTENT }
 }
 
 function logChanges(adminId: string, listId: string, existingRow: List, fieldPatch: UpdateListFields): void {

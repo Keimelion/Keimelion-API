@@ -21,10 +21,7 @@ import {
 } from '../../db/entities/lists/lists.repository.js'
 import { insertOwnerCollaborator } from '../../db/entities/list-collaborators/list-collaborators.repository.js'
 import { upsertTagsBySlugs } from '../../db/entities/tags/tags.repository.js'
-import {
-  deleteListTag,
-  insertListTagsIgnoreConflict,
-} from '../../db/entities/list-tags/list-tags.repository.js'
+import { replaceListTags } from '../../db/entities/list-tags/list-tags.repository.js'
 import { toItemDetail, toListItemDetail, toItemSourceDetailWithoutShop } from '../../shared/types/item.js'
 import { extractOwnerDetail, toListDetail } from '../../shared/types/list.js'
 import { findListsOwnedBy, countListsOwnedBy } from './lists.repository.js'
@@ -93,46 +90,49 @@ export function getUserListById(list: ListRowWithOwner): ServiceResult<{ list: L
 
 export async function updateUserList(
   existing: ListRowWithOwner,
+  userId: string,
   input: UpdateListInput,
 ): Promise<ServiceResult<{ list: ListDetail }>> {
   const fieldPatch = buildListUpdatePatch(input)
-  if (Object.keys(fieldPatch).length === 0) {
+  const { tags } = input
+  if (Object.keys(fieldPatch).length === 0 && tags === undefined) {
     return serviceError(ErrorCode.NO_FIELDS_TO_UPDATE)
   }
 
-  const writeOutcome = await runWrite(() => updateList(existing.id, fieldPatch), {
-    foreignKeyErrorCode: ErrorCode.UNPROCESSABLE_ENTITY,
-  })
+  let tagSlugs: string[] | null = null
+  if (tags !== undefined) {
+    tagSlugs = normalizeTagSlugs(tags)
+    if (tagSlugs === null) return serviceError(ErrorCode.TAG_INVALID_NAME)
+  }
+
+  const writeOutcome = await runWrite(
+    () =>
+      db.transaction(async (tx) => {
+        const updated =
+          Object.keys(fieldPatch).length > 0
+            ? await updateList(existing.id, fieldPatch, tx)
+            : existing
+        if (tagSlugs !== null) {
+          const tagIds = await upsertTagsBySlugs(tagSlugs, userId, tx)
+          await replaceListTags(existing.id, tagIds, tx)
+        }
+        return updated
+      }),
+    { foreignKeyErrorCode: ErrorCode.UNPROCESSABLE_ENTITY },
+  )
   if ('errorCode' in writeOutcome) return serviceError(writeOutcome.errorCode)
 
-  const refreshed: ListRowWithOwner = {
-    ...writeOutcome.row,
-    collaborators: existing.collaborators,
-    listTags: existing.listTags,
+  if (tagSlugs === null) {
+    const refreshed: ListRowWithOwner = {
+      ...writeOutcome.row,
+      collaborators: existing.collaborators,
+      listTags: existing.listTags,
+    }
+    return {
+      data: { list: toListDetail(refreshed, extractOwnerDetail(refreshed)) },
+      httpStatus: HttpStatus.OK,
+    }
   }
-  return {
-    data: { list: toListDetail(refreshed, extractOwnerDetail(refreshed)) },
-    httpStatus: HttpStatus.OK,
-  }
-}
-
-export async function deleteUserList(id: string): Promise<ServiceResult<null>> {
-  await softDeleteList(id)
-  return { data: null, httpStatus: HttpStatus.NO_CONTENT }
-}
-
-export async function assignTagsToList(
-  existing: ListRowWithOwner,
-  userId: string,
-  names: string[],
-): Promise<ServiceResult<{ list: ListDetail }>> {
-  const slugs = normalizeTagSlugs(names)
-  if (slugs === null) return serviceError(ErrorCode.TAG_INVALID_NAME)
-
-  await db.transaction(async (tx) => {
-    const tagIds = await upsertTagsBySlugs(slugs, userId, tx)
-    await insertListTagsIgnoreConflict(existing.id, tagIds, tx)
-  })
 
   const refreshed = await findListWithOwner(existing.id)
   if (!refreshed) return serviceError(ErrorCode.NOT_FOUND)
@@ -142,12 +142,8 @@ export async function assignTagsToList(
   }
 }
 
-export async function removeTagFromList(
-  listId: string,
-  tagId: string,
-): Promise<ServiceResult<null>> {
-  const removed = await deleteListTag(listId, tagId)
-  if (!removed) return serviceError(ErrorCode.TAG_NOT_FOUND)
+export async function deleteUserList(id: string): Promise<ServiceResult<null>> {
+  await softDeleteList(id)
   return { data: null, httpStatus: HttpStatus.NO_CONTENT }
 }
 

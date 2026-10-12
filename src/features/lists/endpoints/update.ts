@@ -1,6 +1,6 @@
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import { authMiddleware } from '../../../shared/middlewares/auth.js'
+import { authMiddleware, getAuthUser } from '../../../shared/middlewares/auth.js'
 import { getList, listOwnershipMiddleware } from '../../../shared/middlewares/list-access.middleware.js'
 import { RATE_LIMITS } from '../../../shared/utils/rate-limiter.js'
 import { jsonResult } from '../../../shared/utils/response.js'
@@ -12,6 +12,10 @@ import {
   listDescriptionSchema,
   listOccasionTypeIdSchema,
 } from '../../../db/entities/lists/lists.schemas.js'
+import {
+  MAX_TAGS_PER_RESOURCE,
+  tagNameSchema,
+} from '../../../db/entities/tags/tags.schemas.js'
 import type { FeatureRouter } from '../../../shared/types/app.js'
 import { updateUserList } from '../lists.service.js'
 
@@ -23,6 +27,13 @@ const updateListSchema = z
     description: listDescriptionSchema.optional(),
     occasionTypeId: listOccasionTypeIdSchema.optional(),
     listStatus: z.enum(USER_UPDATABLE_LIST_STATUSES).optional(),
+    tags: z
+      .array(tagNameSchema)
+      .max(
+        MAX_TAGS_PER_RESOURCE,
+        `tags must contain at most ${String(MAX_TAGS_PER_RESOURCE)} entries`,
+      )
+      .optional(),
   })
   .strict()
 
@@ -37,8 +48,9 @@ export function mountUpdateUserList(router: FeatureRouter): void {
     zValidator('json', updateListSchema, validationErrorHandler),
     listOwnershipMiddleware({ paramName: 'id' }),
     async (context) => {
+      const user = getAuthUser(context)
       const input = context.req.valid('json')
-      return jsonResult(context, await updateUserList(getList(context), input))
+      return jsonResult(context, await updateUserList(getList(context), user.id, input))
     },
   )
 }

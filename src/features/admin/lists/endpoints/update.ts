@@ -12,6 +12,10 @@ import {
   listDescriptionSchema,
   listOccasionTypeIdSchema,
 } from '../../../../db/entities/lists/lists.schemas.js'
+import {
+  MAX_TAGS_PER_RESOURCE,
+  tagNameSchema,
+} from '../../../../db/entities/tags/tags.schemas.js'
 import type { FeatureRouter } from '../../../../shared/types/app.js'
 import { updateListById } from '../admin-lists.service.js'
 
@@ -21,6 +25,13 @@ const adminUpdateListSchema = z
     description: listDescriptionSchema.optional(),
     occasionTypeId: listOccasionTypeIdSchema.optional(),
     listStatus: z.enum(LIST_STATUS_VALUES).optional(),
+    tags: z
+      .array(tagNameSchema)
+      .max(
+        MAX_TAGS_PER_RESOURCE,
+        `tags must contain at most ${String(MAX_TAGS_PER_RESOURCE)} entries`,
+      )
+      .optional(),
   })
   .strict()
 

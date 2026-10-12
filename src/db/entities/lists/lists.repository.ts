@@ -91,8 +91,15 @@ export async function insertList(data: InsertList, tx?: DbOrTx): Promise<List | 
   return row
 }
 
-export async function updateList(id: string, fields: UpdateListFields): Promise<List | undefined> {
-  const [row] = await db.update(lists).set(fields).where(eq(lists.id, id)).returning()
+type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
+type DbClient = typeof db | DbTransaction
+
+export async function updateList(
+  id: string,
+  fields: UpdateListFields,
+  client: DbClient = db,
+): Promise<List | undefined> {
+  const [row] = await client.update(lists).set(fields).where(eq(lists.id, id)).returning()
   return row
 }
 
