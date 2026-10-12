@@ -756,25 +756,50 @@ describe('POST /v1/lists/:id/items', () => {
     vi.clearAllMocks()
   })
 
-  it('returns 201 with created list item when owner posts valid body', async () => {
+  function mockInsertListItem(returnRow: unknown): void {
+    vi.mocked(db.insert).mockReturnValueOnce({
+      values: vi.fn().mockReturnValueOnce({
+        returning: vi.fn().mockResolvedValueOnce([returnRow]),
+      }),
+    } as never)
+  }
+
+  it('returns 201 and links the existing item when owner posts a valid itemId', async () => {
     const token = await generateTestToken(AUTH_USER.id)
     mockAuthChain()
     mockListAndOwner()
-    mockTransactionInserts([MOCK_ITEM, MOCK_LIST_ITEM])
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(MOCK_ITEM as never)
+    mockInsertListItem(MOCK_LIST_ITEM)
 
     const response = await apiRequest(`/v1/lists/${LIST_ID}/items`, {
       method: 'POST',
       token,
-      body: { name: 'My New Item' },
+      body: { itemId: ITEM_ID },
     })
 
-    const body = await response.json() as { listItem: { item: { name: string }; itemStatus: string } }
+    const body = await response.json() as { listItem: { item: { id: string; name: string }; itemStatus: string } }
     expect(response.status).toBe(201)
+    expect(body.listItem.item.id).toBe(ITEM_ID)
     expect(body.listItem.item.name).toBe('My Item')
     expect(body.listItem.itemStatus).toBe('available')
   })
 
-  it('returns 422 when name is missing', async () => {
+  it('returns 404 when the referenced item does not exist', async () => {
+    const token = await generateTestToken(AUTH_USER.id)
+    mockAuthChain()
+    mockListAndOwner()
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(undefined)
+
+    const response = await apiRequest(`/v1/lists/${LIST_ID}/items`, {
+      method: 'POST',
+      token,
+      body: { itemId: ITEM_ID },
+    })
+
+    expect(response.status).toBe(404)
+  })
+
+  it('returns 422 when itemId is missing', async () => {
     const token = await generateTestToken(AUTH_USER.id)
     vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(AUTH_USER)
@@ -782,13 +807,13 @@ describe('POST /v1/lists/:id/items', () => {
     const response = await apiRequest(`/v1/lists/${LIST_ID}/items`, {
       method: 'POST',
       token,
-      body: { description: 'no name here' },
+      body: {},
     })
 
     expect(response.status).toBe(422)
   })
 
-  it('returns 422 when imageUrl is not a valid URL', async () => {
+  it('returns 422 when itemId is not a UUID', async () => {
     const token = await generateTestToken(AUTH_USER.id)
     vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(AUTH_USER)
@@ -796,7 +821,7 @@ describe('POST /v1/lists/:id/items', () => {
     const response = await apiRequest(`/v1/lists/${LIST_ID}/items`, {
       method: 'POST',
       token,
-      body: { name: 'Valid', imageUrl: 'not-a-url' },
+      body: { itemId: 'not-a-uuid' },
     })
 
     expect(response.status).toBe(422)
@@ -813,7 +838,7 @@ describe('POST /v1/lists/:id/items', () => {
     const response = await apiRequest(`/v1/lists/${LIST_ID}/items`, {
       method: 'POST',
       token,
-      body: { name: 'Item' },
+      body: { itemId: ITEM_ID },
     })
 
     expect(response.status).toBe(403)
@@ -828,7 +853,7 @@ describe('POST /v1/lists/:id/items', () => {
     const response = await apiRequest(`/v1/lists/${LIST_ID}/items`, {
       method: 'POST',
       token,
-      body: { name: 'Item' },
+      body: { itemId: ITEM_ID },
     })
 
     expect(response.status).toBe(404)
@@ -842,7 +867,7 @@ describe('POST /v1/lists/:id/items', () => {
     const response = await apiRequest('/v1/lists/not-a-uuid/items', {
       method: 'POST',
       token,
-      body: { name: 'Item' },
+      body: { itemId: ITEM_ID },
     })
 
     expect(response.status).toBe(422)
@@ -851,7 +876,7 @@ describe('POST /v1/lists/:id/items', () => {
   it('returns 401 when not authenticated', async () => {
     const response = await apiRequest(`/v1/lists/${LIST_ID}/items`, {
       method: 'POST',
-      body: { name: 'Item' },
+      body: { itemId: ITEM_ID },
     })
 
     expect(response.status).toBe(401)

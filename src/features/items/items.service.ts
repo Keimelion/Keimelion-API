@@ -9,6 +9,7 @@ import {
   findAllItemsWithSources,
   findItemById,
   findItemByIdWithSources,
+  insertItem,
 } from '../../db/entities/items/items.repository.js'
 import { findCategoriesByIds } from '../../db/entities/categories/categories.repository.js'
 import { replaceItemCategories } from '../../db/entities/item-categories/item-categories.repository.js'
@@ -19,6 +20,7 @@ import type { ItemWithSources } from '../../shared/types/item.js'
 import type { PaginationInput } from '../../shared/schemas/pagination.js'
 import type { PaginatedResponse } from '../../shared/types/api.js'
 import type { ServiceResult } from '../../shared/types/service.js'
+import type { CreateItemInput } from './endpoints/create.js'
 import type { UpdateItemInput } from './endpoints/update.js'
 
 export async function listItems(
@@ -29,6 +31,26 @@ export async function listItems(
   return {
     data: buildPaginatedResponse(rows.map((row) => toItemWithSources(row)), pagination, total),
     httpStatus: HttpStatus.OK,
+  }
+}
+
+export async function createUserItem(
+  userId: string,
+  input: CreateItemInput,
+): Promise<ServiceResult<{ item: ItemWithSources }>> {
+  const inserted = await insertItem({
+    name: input.name,
+    description: input.description ?? null,
+    imageUrl: input.imageUrl ?? null,
+    createdByUserId: userId,
+  })
+  if (!inserted) return serviceError(ErrorCode.INTERNAL_ERROR)
+
+  const row = await findItemByIdWithSources(inserted.id)
+  if (!row) return serviceError(ErrorCode.INTERNAL_ERROR)
+  return {
+    data: { item: toItemWithSources(row) },
+    httpStatus: HttpStatus.CREATED,
   }
 }
 

@@ -9,8 +9,7 @@ import { buildPaginatedResponse } from '../../shared/schemas/pagination.js'
 import { buildSlugFromTitle, normalizeTagSlugs } from '../../shared/utils/slug.js'
 import { isPgForeignKeyViolation, isPgUniqueViolation } from '../../shared/db/pg-errors.js'
 import { logger } from '../../shared/utils/logger.js'
-import { insertItem } from '../../db/entities/items/items.repository.js'
-import { insertItemSource } from '../../db/entities/item-sources/item-sources.repository.js'
+import { findItemById } from '../../db/entities/items/items.repository.js'
 import { insertListItem } from '../../db/entities/list-items/list-items.repository.js'
 import {
   buildListUpdatePatch,
@@ -22,35 +21,22 @@ import {
 import { insertOwnerCollaborator } from '../../db/entities/list-collaborators/list-collaborators.repository.js'
 import { upsertTagsBySlugs } from '../../db/entities/tags/tags.repository.js'
 import { replaceListTags } from '../../db/entities/list-tags/list-tags.repository.js'
-import { toItemDetail, toListItemDetail, toItemSourceDetailWithoutShop } from '../../shared/types/item.js'
+import { toItemDetail, toListItemDetail } from '../../shared/types/item.js'
 import { extractOwnerDetail, toListDetail } from '../../shared/types/list.js'
 import { findListsOwnedBy, countListsOwnedBy } from './lists.repository.js'
-import type { Item } from '../../db/entities/items/items.schema.js'
-import type { ItemSource } from '../../db/entities/item-sources/item-sources.schema.js'
-import type { ListItem } from '../../db/entities/list-items/list-items.schema.js'
 import type { User } from '../../db/entities/users/users.schema.js'
 import type { InsertList } from '../../db/entities/lists/lists.repository.js'
 import type { ListDetail, ListRowWithOwner } from '../../shared/types/list.js'
 import type { ListItemResponse } from './lists.types.js'
 import type { ServiceResult } from '../../shared/types/service.js'
 import type { PaginatedResponse } from '../../shared/types/api.js'
-import type { ItemWrite } from '../../shared/types/item.js'
 import type { AddItemInput } from './endpoints/add-item.js'
 import type { CreateListInput } from './endpoints/create.js'
 import type { ListUserListsInput } from './endpoints/list.js'
 import type { UpdateListInput } from './endpoints/update.js'
 
 const DEFAULT_QUANTITY_DESIRED = 1
-const DEFAULT_CURRENCY = 'EUR'
 const MAX_SLUG_RETRIES = 3
-
-type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
-
-interface CreatedListItemRecord {
-  item: Item
-  source: ItemSource | null
-  listItem: ListItem
-}
 
 export async function createUserList(
   user: User,
@@ -164,13 +150,30 @@ export async function deleteUserList(id: string): Promise<ServiceResult<null>> {
 
 export async function addItemToList(
   listId: string,
-  userId: string,
   input: AddItemInput,
 ): Promise<ServiceResult<{ listItem: ListItemResponse }>> {
-  const record = await db.transaction((tx) => createManualListItem(tx, listId, userId, input))
-  if (!record) return serviceError(ErrorCode.INTERNAL_ERROR)
+  const item = await findItemById(input.itemId)
+  if (!item) return serviceError(ErrorCode.NOT_FOUND)
 
-  return { data: { listItem: buildListItemResponse(record) }, httpStatus: HttpStatus.CREATED }
+  const listItem = await insertListItem({
+    listId,
+    itemId: item.id,
+    quantityDesired: input.quantityDesired ?? DEFAULT_QUANTITY_DESIRED,
+    creatorNote: input.creatorNote ?? null,
+    itemStatus: ItemStatuses.AVAILABLE,
+  })
+  if (!listItem) return serviceError(ErrorCode.INTERNAL_ERROR)
+
+  return {
+    data: {
+      listItem: {
+        ...toListItemDetail(listItem),
+        item: toItemDetail(item),
+        source: null,
+      },
+    },
+    httpStatus: HttpStatus.CREATED,
+  }
 }
 
 async function insertListWithSlugRetry(
@@ -235,46 +238,3 @@ function buildCreatePayload(input: CreateListInput, slug: string): InsertList {
   }
 }
 
-async function createManualListItem(
-  tx: DbTransaction,
-  listId: string,
-  userId: string,
-  input: AddItemInput,
-): Promise<CreatedListItemRecord | null> {
-  const itemWrite: ItemWrite = {
-    name: input.name,
-    description: input.description ?? null,
-    imageUrl: input.imageUrl ?? null,
-  }
-  const item = await insertItem({
-    ...itemWrite,
-    createdByUserId: userId,
-  }, tx)
-  if (!item) return null
-
-  const source = input.price === undefined ? null : (await insertItemSource({
-    itemId: item.id,
-    sourceUrl: null,
-    price: String(input.price),
-    currency: DEFAULT_CURRENCY,
-  }, tx)) ?? null
-
-  const listItem = await insertListItem({
-    listId,
-    itemId: item.id,
-    quantityDesired: input.quantityDesired ?? DEFAULT_QUANTITY_DESIRED,
-    creatorNote: input.creatorNote ?? null,
-    itemStatus: ItemStatuses.AVAILABLE,
-  }, tx)
-  if (!listItem) return null
-
-  return { item, source, listItem }
-}
-
-function buildListItemResponse(record: CreatedListItemRecord): ListItemResponse {
-  return {
-    ...toListItemDetail(record.listItem),
-    item: toItemDetail(record.item),
-    source: record.source ? toItemSourceDetailWithoutShop(record.source) : null,
-  }
-}

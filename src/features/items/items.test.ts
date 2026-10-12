@@ -315,6 +315,67 @@ function itemWithTagLinks(tags: (typeof TAG_GAMING_ROW)[]): object {
   }
 }
 
+describe('POST /v1/items', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(OWNER_ACCESS_TOKEN_ENTRY as never)
+  })
+
+  function mockInsertItem(returnRow: unknown): void {
+    vi.mocked(db.insert).mockReturnValueOnce({
+      values: vi.fn().mockReturnValueOnce({
+        returning: vi.fn().mockResolvedValueOnce([returnRow]),
+      }),
+    } as never)
+  }
+
+  it('returns 201 with the created item scoped to the authed user', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+    mockInsertItem(OWNED_ITEM_ROW)
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce({
+      ...OWNED_ITEM_ROW,
+      sources: [],
+      itemCategories: [],
+      itemTags: [],
+    } as never)
+
+    const response = await apiRequest('/v1/items', {
+      method: 'POST',
+      token,
+      body: { name: 'Nintendo Switch' },
+    })
+
+    const body = await response.json() as { item: { id: string; sources: unknown[]; tags: unknown[] } }
+    expect(response.status).toBe(201)
+    expect(body.item.id).toBe(OWNED_ITEM_ROW.id)
+    expect(body.item.sources).toEqual([])
+    expect(body.item.tags).toEqual([])
+  })
+
+  it('returns 422 when name is missing', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+
+    const response = await apiRequest('/v1/items', {
+      method: 'POST',
+      token,
+      body: { description: 'no name' },
+    })
+
+    expect(response.status).toBe(422)
+  })
+
+  it('returns 401 when not authenticated', async () => {
+    const response = await apiRequest('/v1/items', {
+      method: 'POST',
+      body: { name: 'Item' },
+    })
+
+    expect(response.status).toBe(401)
+  })
+})
+
 describe('PATCH /v1/items/:id', () => {
   beforeEach(() => {
     vi.clearAllMocks()
