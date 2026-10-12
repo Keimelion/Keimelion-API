@@ -1,6 +1,6 @@
 import type { List } from '../../db/entities/lists/lists.schema.js'
 import type { ListCollaborator } from '../../db/entities/list-collaborators/list-collaborators.schema.js'
-import type { ListTagWithTag } from '../../db/entities/list-tags/list-tags.repository.js'
+import type { ListTagWithTag } from '../../db/entities/list-tags/list-tags.schema.js'
 import type { User } from '../../db/entities/users/users.schema.js'
 import { toUserDetail } from './user.js'
 import { toTagPublic } from './tag.js'

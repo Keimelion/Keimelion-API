@@ -2,14 +2,9 @@ import { and, eq } from 'drizzle-orm'
 import { db } from '../../client.js'
 import { listTags } from './list-tags.schema.js'
 import type { ListTag } from './list-tags.schema.js'
-import type { Tag } from '../tags/tags.schema.js'
 
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 type DbClient = typeof db | DbTransaction
-
-export interface ListTagWithTag extends ListTag {
-  tag: Tag
-}
 
 export async function insertListTagsIgnoreConflict(
   listId: string,

@@ -1,3 +1,4 @@
+import { db } from '../../../db/client.js'
 import { HttpStatus } from '../../../shared/enums/http.js'
 import { ErrorCode } from '../../../shared/enums/error-code.js'
 import { serviceError } from '../../../shared/utils/response.js'
@@ -134,13 +135,16 @@ export async function assignTagsToList(
   names: string[],
 ): Promise<ServiceResult<{ list: AdminListDetail }>> {
   const existing = await findAdminListById(listId)
-  if (!existing) return serviceError(ErrorCode.NOT_FOUND)
+  if (!existing || existing.deletedAt) return serviceError(ErrorCode.NOT_FOUND)
 
   const slugs = normalizeTagSlugs(names)
   if (slugs === null) return serviceError(ErrorCode.TAG_INVALID_NAME)
 
-  const tagIds = await upsertTagsBySlugs(slugs, null)
-  await insertListTagsIgnoreConflict(listId, tagIds)
+  const tagIds = await db.transaction(async (tx) => {
+    const ids = await upsertTagsBySlugs(slugs, null, tx)
+    await insertListTagsIgnoreConflict(listId, ids, tx)
+    return ids
+  })
 
   const refreshed = await findListWithOwner(listId)
   if (!refreshed) return serviceError(ErrorCode.INTERNAL_ERROR)
@@ -155,7 +159,7 @@ export async function removeTagFromList(
   tagId: string,
 ): Promise<ServiceResult<null>> {
   const existing = await findAdminListById(listId)
-  if (!existing) return serviceError(ErrorCode.NOT_FOUND)
+  if (!existing || existing.deletedAt) return serviceError(ErrorCode.NOT_FOUND)
 
   const removed = await deleteListTag(listId, tagId)
   if (!removed) return serviceError(ErrorCode.TAG_NOT_FOUND)

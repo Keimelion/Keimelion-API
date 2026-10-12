@@ -438,7 +438,7 @@ const TAG_READING_ROW = {
 
 function mockAssignTagsTransaction(assignments: { tag: typeof TAG_GAMING_ROW }[]): void {
   vi.mocked(db.transaction).mockImplementationOnce((callback) => {
-    const txFindMany = vi.fn().mockResolvedValueOnce(
+    const itemTagsFindMany = vi.fn().mockResolvedValueOnce(
       assignments.map((assignment) => ({
         itemId: OWNED_ITEM_ROW.id,
         tagId: assignment.tag.id,
@@ -446,21 +446,21 @@ function mockAssignTagsTransaction(assignments: { tag: typeof TAG_GAMING_ROW }[]
         tag: assignment.tag,
       })),
     )
+    const tagsFindMany = vi.fn().mockResolvedValueOnce(assignments.map((assignment) => assignment.tag))
     const tx = {
       delete: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
-      insert: vi.fn().mockReturnValue({ values: vi.fn().mockResolvedValue([]) }),
-      query: { itemTags: { findMany: txFindMany } },
+      insert: vi.fn().mockReturnValue({
+        values: vi.fn().mockReturnValue({
+          onConflictDoNothing: vi.fn().mockResolvedValue([]),
+        }),
+      }),
+      query: {
+        itemTags: { findMany: itemTagsFindMany },
+        tags: { findMany: tagsFindMany },
+      },
     }
     return callback(tx as never) as never
   })
-}
-
-function mockInsertTagsIgnoreConflict(): void {
-  vi.mocked(db.insert).mockReturnValueOnce({
-    values: vi.fn().mockReturnValueOnce({
-      onConflictDoNothing: vi.fn().mockResolvedValueOnce([]),
-    }),
-  } as never)
 }
 
 describe('POST /v1/items/:id/tags', () => {
@@ -473,10 +473,6 @@ describe('POST /v1/items/:id/tags', () => {
     const token = await generateTestToken(OWNER_USER.id)
     mockOwnerAuth()
     vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(OWNED_ITEM_ROW as never)
-    mockInsertTagsIgnoreConflict()
-    vi.mocked(db.query.tags.findMany).mockResolvedValueOnce(
-      [TAG_GAMING_ROW, TAG_READING_ROW] as never,
-    )
     mockAssignTagsTransaction([{ tag: TAG_GAMING_ROW }, { tag: TAG_READING_ROW }])
 
     const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}/tags`, {
@@ -497,8 +493,6 @@ describe('POST /v1/items/:id/tags', () => {
     const token = await generateTestToken(OWNER_USER.id)
     mockOwnerAuth()
     vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(OWNED_ITEM_ROW as never)
-    mockInsertTagsIgnoreConflict()
-    vi.mocked(db.query.tags.findMany).mockResolvedValueOnce([TAG_GAMING_ROW] as never)
     mockAssignTagsTransaction([{ tag: TAG_GAMING_ROW }])
 
     const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}/tags`, {

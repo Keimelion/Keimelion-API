@@ -129,8 +129,10 @@ export async function assignTagsToList(
   const slugs = normalizeTagSlugs(names)
   if (slugs === null) return serviceError(ErrorCode.TAG_INVALID_NAME)
 
-  const tagIds = await upsertTagsBySlugs(slugs, userId)
-  await insertListTagsIgnoreConflict(existing.id, tagIds)
+  await db.transaction(async (tx) => {
+    const tagIds = await upsertTagsBySlugs(slugs, userId, tx)
+    await insertListTagsIgnoreConflict(existing.id, tagIds, tx)
+  })
 
   const refreshed = await findListWithOwner(existing.id)
   if (!refreshed) return serviceError(ErrorCode.NOT_FOUND)

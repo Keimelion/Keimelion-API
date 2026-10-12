@@ -32,13 +32,16 @@ export async function insertItemTags(
 export async function replaceItemTags(
   itemId: string,
   tagIds: string[],
+  client: DbClient = db,
 ): Promise<ItemTagWithTag[]> {
-  return db.transaction(async (tx) => {
+  const run = async (tx: DbClient): Promise<ItemTagWithTag[]> => {
     await deleteItemTagsForItem(itemId, tx)
     await insertItemTags(itemId, tagIds, tx)
     return tx.query.itemTags.findMany({
       where: eq(itemTags.itemId, itemId),
       with: { tag: true },
     })
-  })
+  }
+  if (client === db) return db.transaction(run)
+  return run(client)
 }

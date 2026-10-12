@@ -2,6 +2,7 @@ import { index, pgTable, primaryKey, timestamp, uuid } from 'drizzle-orm/pg-core
 import { sql } from 'drizzle-orm'
 import { lists } from '../lists/lists.schema.js'
 import { tags } from '../tags/tags.schema.js'
+import type { Tag } from '../tags/tags.schema.js'
 
 export const listTags = pgTable(
   'list_tags',
@@ -23,3 +24,7 @@ export const listTags = pgTable(
 )
 
 export type ListTag = typeof listTags.$inferSelect
+
+export interface ListTagWithTag extends ListTag {
+  tag: Tag
+}

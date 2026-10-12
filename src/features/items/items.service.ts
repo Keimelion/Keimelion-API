@@ -1,3 +1,4 @@
+import { db } from '../../db/client.js'
 import { HttpStatus } from '../../shared/enums/http.js'
 import { ErrorCode } from '../../shared/enums/error-code.js'
 import { serviceError } from '../../shared/utils/response.js'
@@ -78,8 +79,10 @@ export async function assignTagsToItem(
   const slugs = normalizeTagSlugs(names)
   if (slugs === null) return serviceError(ErrorCode.TAG_INVALID_NAME)
 
-  const tagIds = await upsertTagsBySlugs(slugs, userId)
-  const assignments = await replaceItemTags(itemId, tagIds)
+  const assignments = await db.transaction(async (tx) => {
+    const tagIds = await upsertTagsBySlugs(slugs, userId, tx)
+    return replaceItemTags(itemId, tagIds, tx)
+  })
   return {
     data: { tags: assignments.map((assignment) => toTagPublic(assignment.tag)) },
     httpStatus: HttpStatus.OK,
