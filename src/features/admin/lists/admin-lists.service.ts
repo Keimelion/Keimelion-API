@@ -1,15 +1,20 @@
+import { db } from '../../../db/client.js'
 import { HttpStatus } from '../../../shared/enums/http.js'
 import { ErrorCode } from '../../../shared/enums/error-code.js'
 import { serviceError } from '../../../shared/utils/response.js'
 import { logger } from '../../../shared/utils/logger.js'
 import { runWrite, buildChanges } from '../../../shared/utils/admin-write.js'
 import { buildPaginatedResponse } from '../../../shared/schemas/pagination.js'
+import { normalizeTagSlugs } from '../../../shared/utils/slug.js'
 import {
   buildListUpdatePatch,
+  findListWithOwner,
   updateList,
   softDeleteList,
   restoreList,
 } from '../../../db/entities/lists/lists.repository.js'
+import { upsertTagsBySlugs } from '../../../db/entities/tags/tags.repository.js'
+import { replaceListTags } from '../../../db/entities/list-tags/list-tags.repository.js'
 import {
   findAllListsWithOwner,
   countLists,
@@ -65,21 +70,53 @@ export async function updateListById(
   if (!existingRow || existingRow.deletedAt) return serviceError(ErrorCode.NOT_FOUND)
 
   const fieldPatch = buildListUpdatePatch(input)
+  const { tags } = input
 
-  if (Object.keys(fieldPatch).length === 0) {
+  if (Object.keys(fieldPatch).length === 0 && tags === undefined) {
     return serviceError(ErrorCode.NO_FIELDS_TO_UPDATE)
   }
 
-  const outcome = await runWrite(() => updateList(id, fieldPatch), {
-    foreignKeyErrorCode: ErrorCode.UNPROCESSABLE_ENTITY,
-  })
+  let tagSlugs: string[] | null = null
+  if (tags !== undefined) {
+    tagSlugs = normalizeTagSlugs(tags)
+    if (tagSlugs === null) return serviceError(ErrorCode.TAG_INVALID_NAME)
+  }
+
+  const outcome = await runWrite(
+    () =>
+      db.transaction(async (tx) => {
+        const updated =
+          Object.keys(fieldPatch).length > 0
+            ? await updateList(id, fieldPatch, tx)
+            : existingRow
+        if (tagSlugs !== null) {
+          const tagIds = await upsertTagsBySlugs(tagSlugs, null, tx)
+          await replaceListTags(id, tagIds, tx)
+        }
+        return updated
+      }),
+    { foreignKeyErrorCode: ErrorCode.UNPROCESSABLE_ENTITY },
+  )
   if ('errorCode' in outcome) return serviceError(outcome.errorCode)
 
   logChanges(adminId, id, existingRow, fieldPatch)
 
-  const updatedRow = { ...outcome.row, collaborators: existingRow.collaborators }
+  if (tagSlugs === null) {
+    const updatedRow = {
+      ...outcome.row,
+      collaborators: existingRow.collaborators,
+      listTags: existingRow.listTags,
+    }
+    return {
+      data: { list: toAdminListDetail(updatedRow) },
+      httpStatus: HttpStatus.OK,
+    }
+  }
+
+  const refreshed = await findListWithOwner(id)
+  if (!refreshed) return serviceError(ErrorCode.INTERNAL_ERROR)
   return {
-    data: { list: toAdminListDetail(updatedRow) },
+    data: { list: toAdminListDetail(refreshed) },
     httpStatus: HttpStatus.OK,
   }
 }
@@ -106,7 +143,11 @@ export async function restoreListById(
 
   logger.info({ adminId, action: AdminAction.RESTORE_LIST, listId: id })
 
-  const restoredRow = { ...restored, collaborators: existingRow.collaborators }
+  const restoredRow = {
+    ...restored,
+    collaborators: existingRow.collaborators,
+    listTags: existingRow.listTags,
+  }
   return {
     data: { list: toAdminListDetail(restoredRow) },
     httpStatus: HttpStatus.OK,

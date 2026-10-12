@@ -693,4 +693,61 @@ describe('GET /v1/users/me/export', () => {
     expect(rows[0]).toHaveProperty('slug', 'reading')
   })
 
+  it('registers list-tags.csv with the exact allow-list required by RGPD', () => {
+    const listTagsDescriptor = EXPORT_ENTITY_REGISTRY.find(
+      (descriptor) => descriptor.filename === 'list-tags.csv',
+    )
+    expect(listTagsDescriptor).toBeDefined()
+    expect(listTagsDescriptor?.columns).toEqual(['listId', 'tagId', 'assignedAt'])
+  })
+
+  it('fetches owner-scoped list_tags for RGPD (transitive user link via lists)', async () => {
+    const listTagsDescriptor = EXPORT_ENTITY_REGISTRY.find(
+      (descriptor) => descriptor.filename === 'list-tags.csv',
+    )
+    const ownedListId = '00000000-0000-0000-0000-00000000c001'
+    const ownedListTag = {
+      listId: ownedListId,
+      tagId: '00000000-0000-0000-0000-00000000c002',
+      assignedAt: new Date('2024-02-01'),
+    }
+
+    vi.mocked(db.query.listTags.findMany).mockResolvedValueOnce([ownedListTag] as never)
+
+    expect(listTagsDescriptor).toBeDefined()
+    const rows = await (listTagsDescriptor as { fetchRows: (userId: string) => Promise<object[]> }).fetchRows(SAFE_USER.id)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ listId: ownedListId, tagId: ownedListTag.tagId })
+    expect(rows[0]).toHaveProperty('assignedAt')
+  })
+
+  it('includes a listTags key in the JSON export payload', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+
+    vi.mocked(db.query.items.findMany).mockResolvedValueOnce([])
+    vi.mocked(db.query.itemSources.findMany).mockResolvedValueOnce([])
+    vi.mocked(db.query.listCollaborators.findMany).mockResolvedValueOnce([])
+    vi.mocked(db.query.listCollaborators.findMany).mockResolvedValueOnce([])
+    vi.mocked(db.query.tags.findMany).mockResolvedValueOnce([])
+    vi.mocked(db.query.listTags.findMany).mockResolvedValueOnce([
+      {
+        listId: '00000000-0000-0000-0000-00000000c010',
+        tagId: '00000000-0000-0000-0000-00000000c011',
+        assignedAt: new Date('2024-02-01'),
+      },
+    ] as never)
+
+    const response = await apiRequest('/v1/users/me/export?format=json', { token })
+
+    expect(response.status).toBe(200)
+    const body = await response.json() as {
+      listTags: { listId: string; tagId: string; assignedAt: string }[]
+    }
+    expect(body).toHaveProperty('listTags')
+    expect(body.listTags).toHaveLength(1)
+    expect(body.listTags[0]?.listId).toBe('00000000-0000-0000-0000-00000000c010')
+  })
+
 })

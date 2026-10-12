@@ -1,12 +1,12 @@
 import { createFeatureRouter } from '../../shared/types/app.js'
 import { mountListItems } from './endpoints/list.js'
 import { mountGetItem } from './endpoints/get.js'
-import { mountAssignCategories } from './endpoints/assign-categories.js'
-import { mountAssignTags } from './endpoints/assign-tags.js'
+import { mountCreateItem } from './endpoints/create.js'
+import { mountUpdateItem } from './endpoints/update.js'
 
 export const itemsRouter = createFeatureRouter()
 
 mountListItems(itemsRouter)
+mountCreateItem(itemsRouter)
 mountGetItem(itemsRouter)
-mountAssignCategories(itemsRouter)
-mountAssignTags(itemsRouter)
+mountUpdateItem(itemsRouter)

@@ -104,12 +104,12 @@ function mockFindListByIdWithOwner(row: unknown, owner: unknown): void {
   const rowOut =
     row === undefined || row === null
       ? undefined
-      : { ...(row as object), collaborators: buildCollaborators(owner) }
+      : { ...(row as object), collaborators: buildCollaborators(owner), listTags: [] }
   vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(rowOut as never)
 }
 
 function rowWithOwner(row: object, owner: unknown): object {
-  return { ...row, collaborators: buildCollaborators(owner) }
+  return { ...row, collaborators: buildCollaborators(owner), listTags: [] }
 }
 
 function buildCollaborators(owner: unknown): { userId: string; user: unknown }[] {
@@ -575,6 +575,44 @@ describe('PATCH /v1/admin/lists/:id', () => {
 
     expect(response.status).toBe(401)
   })
+
+  it('replaces tags and refetches hydrated list when tags are provided', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindListByIdWithOwner(LIST_ROW, OWNER_USER)
+    vi.mocked(db.query.tags.findMany).mockResolvedValueOnce([TAG_GAMING_ROW] as never)
+    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce({
+      ...LIST_ROW,
+      collaborators: [{ userId: OWNER_USER.id, user: OWNER_USER }],
+      listTags: [listTagLink(TAG_GAMING_ROW)],
+    } as never)
+
+    const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}`, {
+      method: 'PATCH',
+      token,
+      body: { tags: ['Gaming'] },
+    })
+
+    const body = await response.json() as { list: { tags: { slug: string }[] } }
+    expect(response.status).toBe(200)
+    expect(body.list.tags.map((tag) => tag.slug)).toEqual(['gaming'])
+  })
+
+  it('returns 422 TAG_INVALID_NAME when a tag name normalizes to an empty slug', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindListByIdWithOwner(LIST_ROW, OWNER_USER)
+
+    const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}`, {
+      method: 'PATCH',
+      token,
+      body: { tags: ['!!!'] },
+    })
+
+    const body = await response.json() as { code: string }
+    expect(response.status).toBe(422)
+    expect(body.code).toBe('TAG_INVALID_NAME')
+  })
 })
 
 describe('DELETE /v1/admin/lists/:id (soft delete)', () => {
@@ -763,3 +801,22 @@ describe('POST /v1/admin/lists/:id/restore', () => {
     expect(response.status).toBe(401)
   })
 })
+
+const TAG_GAMING_ROW = {
+  id: '00000000-0000-0000-0000-000000000080',
+  name: 'gaming',
+  slug: 'gaming',
+  createdByUserId: null,
+  createdAt: new Date('2024-01-01'),
+  updatedAt: new Date('2024-01-01'),
+}
+
+function listTagLink(tag: typeof TAG_GAMING_ROW): {
+  listId: string
+  tagId: string
+  assignedAt: Date
+  tag: typeof TAG_GAMING_ROW
+} {
+  return { listId: LIST_ROW.id, tagId: tag.id, assignedAt: new Date('2024-02-01'), tag }
+}
+

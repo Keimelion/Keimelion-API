@@ -1,4 +1,4 @@
-import { vi } from 'vitest'
+import { beforeEach, vi } from 'vitest'
 import { NodeEnvs } from '../enums/node-env.js'
 
 vi.mock('../../config/env.js', () => ({
@@ -37,8 +37,8 @@ const buildSelectChain = (resolvedValue: unknown[] = []) => {
   return chain
 }
 
-vi.mock('../../db/client.js', () => ({
-  db: {
+vi.mock('../../db/client.js', () => {
+  const db: Record<string, unknown> = {
     execute: vi.fn(),
     select: vi.fn(() => buildSelectChain()),
     query: {
@@ -99,6 +99,10 @@ vi.mock('../../db/client.js', () => ({
         findFirst: vi.fn(),
         findMany: vi.fn().mockResolvedValue([]),
       },
+      listTags: {
+        findFirst: vi.fn(),
+        findMany: vi.fn().mockResolvedValue([]),
+      },
     },
     insert: vi.fn(() => ({
       values: vi.fn(() => ({
@@ -120,19 +124,19 @@ vi.mock('../../db/client.js', () => ({
         returning: vi.fn(),
       })),
     })),
-    transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) => {
-      const tx = {
-        insert: vi.fn(() => ({ values: vi.fn(() => Promise.resolve([])) })),
-        update: vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn(() => ({ returning: vi.fn(() => Promise.resolve([])) })) })) })),
-        delete: vi.fn(() => ({ where: vi.fn(() => Promise.resolve([])) })),
-      }
-      return callback(tx)
-    }),
-  },
-}))
+  }
+  db.transaction = vi.fn(async (callback: (tx: unknown) => Promise<unknown>) => callback(db))
+  return { db }
+})
 
 vi.mock('hono-rate-limiter', () => ({
   rateLimiter: () => async (_context: unknown, next: () => Promise<void>) => {
     await next()
   },
 }))
+
+beforeEach(async () => {
+  const { db } = await import('../../db/client.js')
+  const passThrough = (async (callback: (tx: unknown) => Promise<unknown>) => callback(db)) as never
+  vi.mocked(db).transaction.mockImplementation(passThrough)
+})

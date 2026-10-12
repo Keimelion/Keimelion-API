@@ -1,8 +1,11 @@
 import type { List } from '../../db/entities/lists/lists.schema.js'
 import type { ListCollaborator } from '../../db/entities/list-collaborators/list-collaborators.schema.js'
+import type { ListTagWithTag } from '../../db/entities/list-tags/list-tags.schema.js'
 import type { User } from '../../db/entities/users/users.schema.js'
 import { toUserDetail } from './user.js'
+import { toTagPublic } from './tag.js'
 import type { UserDetail } from './user.js'
+import type { TagPublic } from './tag.js'
 
 export interface ListDetail {
   id: string
@@ -12,6 +15,7 @@ export interface ListDetail {
   listStatus: string
   occasionTypeId: string | null
   owner: UserDetail | null
+  tags: TagPublic[]
   createdAt: Date
   updatedAt: Date
 }
@@ -22,6 +26,7 @@ export interface ListCollaboratorWithUser extends ListCollaborator {
 
 export interface ListRowWithOwner extends List {
   collaborators: ListCollaboratorWithUser[]
+  listTags: ListTagWithTag[]
 }
 
 export function extractOwnerDetail(row: ListRowWithOwner): UserDetail | null {
@@ -29,16 +34,17 @@ export function extractOwnerDetail(row: ListRowWithOwner): UserDetail | null {
   return ownerUser ? toUserDetail(ownerUser) : null
 }
 
-export function toListDetail(list: List, owner: UserDetail | null): ListDetail {
+export function toListDetail(row: ListRowWithOwner, owner: UserDetail | null): ListDetail {
   return {
-    id: list.id,
-    title: list.title,
-    slug: list.slug,
-    description: list.description ?? null,
-    listStatus: list.listStatus,
-    occasionTypeId: list.occasionTypeId ?? null,
+    id: row.id,
+    title: row.title,
+    slug: row.slug,
+    description: row.description ?? null,
+    listStatus: row.listStatus,
+    occasionTypeId: row.occasionTypeId ?? null,
     owner,
-    createdAt: list.createdAt,
-    updatedAt: list.updatedAt,
+    tags: row.listTags.map((link) => toTagPublic(link.tag)),
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
   }
 }

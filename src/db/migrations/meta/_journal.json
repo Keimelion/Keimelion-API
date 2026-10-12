@@ -78,6 +78,13 @@
       "when": 1791554668683,
       "tag": "0010_add-tags-and-item-tags",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1791754204499,
+      "tag": "0011_add-list-tags",
+      "breakpoints": true
     }
   ]
 }

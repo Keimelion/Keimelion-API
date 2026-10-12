@@ -134,9 +134,9 @@ function mockCountChain(total: number): void {
 }
 
 function rowWithOwner(row: object, owner: unknown): object {
-  if (owner === null) return { ...row, collaborators: [] }
+  if (owner === null) return { ...row, collaborators: [], listTags: [] }
   const ownerId = (owner as { id: string }).id
-  return { ...row, collaborators: [{ userId: ownerId, user: owner }] }
+  return { ...row, collaborators: [{ userId: ownerId, user: owner }], listTags: [] }
 }
 
 function mockUpdateList(returnRow: unknown): void {
@@ -180,6 +180,60 @@ describe('POST /v1/lists', () => {
     expect(response.status).toBe(201)
     expect(body.list.title).toBe('My Wishlist')
     expect(body.list.slug).toBe('my-wishlist-abc123')
+  })
+
+  it('creates a list with tags in a single POST and hydrates them in the response', async () => {
+    const token = await generateTestToken(AUTH_USER.id)
+    mockAuthChain()
+    vi.mocked(db.transaction).mockImplementationOnce(async (callback) => {
+      const tx = {
+        insert: vi.fn().mockImplementation(() => ({
+          values: vi.fn().mockImplementation(() => {
+            const chain = {
+              returning: vi.fn().mockImplementationOnce(() => Promise.resolve([MOCK_LIST]))
+                .mockImplementationOnce(() => Promise.resolve([MOCK_COLLABORATOR])),
+              onConflictDoNothing: vi.fn().mockResolvedValue([]),
+            }
+            return chain
+          }),
+        })),
+        delete: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
+        query: {
+          tags: { findMany: vi.fn().mockResolvedValueOnce([TAG_GAMING_ROW]) },
+        },
+      }
+      return (callback as (tx: unknown) => Promise<unknown>)(tx)
+    })
+    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce({
+      ...MOCK_LIST,
+      collaborators: [{ userId: AUTH_USER.id, user: AUTH_USER }],
+      listTags: [listTagLink(TAG_GAMING_ROW)],
+    } as never)
+
+    const response = await apiRequest('/v1/lists', {
+      method: 'POST',
+      token,
+      body: { title: 'My Wishlist', tags: ['Gaming'] },
+    })
+
+    const body = await response.json() as { list: { tags: { slug: string }[] } }
+    expect(response.status).toBe(201)
+    expect(body.list.tags.map((tag) => tag.slug)).toEqual(['gaming'])
+  })
+
+  it('returns 422 TAG_INVALID_NAME when a tag name normalizes to an empty slug at creation', async () => {
+    const token = await generateTestToken(AUTH_USER.id)
+    mockAuthChain()
+
+    const response = await apiRequest('/v1/lists', {
+      method: 'POST',
+      token,
+      body: { title: 'My Wishlist', tags: ['!!!'] },
+    })
+
+    const body = await response.json() as { code: string }
+    expect(response.status).toBe(422)
+    expect(body.code).toBe('TAG_INVALID_NAME')
   })
 
   it('persists owner collaborator inside the same transaction (both inserts in the callback)', async () => {
@@ -581,6 +635,78 @@ describe('PATCH /v1/lists/:id', () => {
 
     expect(response.status).toBe(401)
   })
+
+  it('replaces tags and refetches hydrated list when tags are provided', async () => {
+    const token = await generateTestToken(AUTH_USER.id)
+    mockAuthChain()
+    mockListAndOwner()
+    vi.mocked(db.query.tags.findMany).mockResolvedValueOnce([TAG_GAMING_ROW, TAG_READING_ROW] as never)
+    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce({
+      ...MOCK_LIST,
+      collaborators: [{ userId: AUTH_USER.id, user: AUTH_USER }],
+      listTags: [listTagLink(TAG_GAMING_ROW), listTagLink(TAG_READING_ROW)],
+    } as never)
+
+    const response = await apiRequest(`/v1/lists/${LIST_ID}`, {
+      method: 'PATCH',
+      token,
+      body: { tags: ['Gaming', 'Reading'] },
+    })
+
+    const body = await response.json() as { list: { tags: { slug: string }[] } }
+    expect(response.status).toBe(200)
+    expect(body.list.tags.map((tag) => tag.slug)).toEqual(expect.arrayContaining(['gaming', 'reading']))
+  })
+
+  it('clears all tags when tags: [] is sent', async () => {
+    const token = await generateTestToken(AUTH_USER.id)
+    mockAuthChain()
+    mockListAndOwner()
+    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce({
+      ...MOCK_LIST,
+      collaborators: [{ userId: AUTH_USER.id, user: AUTH_USER }],
+      listTags: [],
+    } as never)
+
+    const response = await apiRequest(`/v1/lists/${LIST_ID}`, {
+      method: 'PATCH',
+      token,
+      body: { tags: [] },
+    })
+
+    const body = await response.json() as { list: { tags: unknown[] } }
+    expect(response.status).toBe(200)
+    expect(body.list.tags).toEqual([])
+  })
+
+  it('returns 422 TAG_INVALID_NAME when a tag name normalizes to an empty slug', async () => {
+    const token = await generateTestToken(AUTH_USER.id)
+    mockAuthChain()
+    mockListAndOwner()
+
+    const response = await apiRequest(`/v1/lists/${LIST_ID}`, {
+      method: 'PATCH',
+      token,
+      body: { tags: ['!!!'] },
+    })
+
+    const body = await response.json() as { code: string }
+    expect(response.status).toBe(422)
+    expect(body.code).toBe('TAG_INVALID_NAME')
+  })
+
+  it('returns 422 when tags exceeds max count (20)', async () => {
+    const token = await generateTestToken(AUTH_USER.id)
+    mockAuthChain()
+
+    const response = await apiRequest(`/v1/lists/${LIST_ID}`, {
+      method: 'PATCH',
+      token,
+      body: { tags: Array.from({ length: 21 }, (_, i) => `tag-${String(i)}`) },
+    })
+
+    expect(response.status).toBe(422)
+  })
 })
 
 describe('DELETE /v1/lists/:id', () => {
@@ -630,25 +756,50 @@ describe('POST /v1/lists/:id/items', () => {
     vi.clearAllMocks()
   })
 
-  it('returns 201 with created list item when owner posts valid body', async () => {
+  function mockInsertListItem(returnRow: unknown): void {
+    vi.mocked(db.insert).mockReturnValueOnce({
+      values: vi.fn().mockReturnValueOnce({
+        returning: vi.fn().mockResolvedValueOnce([returnRow]),
+      }),
+    } as never)
+  }
+
+  it('returns 201 and links the existing item when owner posts a valid itemId', async () => {
     const token = await generateTestToken(AUTH_USER.id)
     mockAuthChain()
     mockListAndOwner()
-    mockTransactionInserts([MOCK_ITEM, MOCK_LIST_ITEM])
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(MOCK_ITEM as never)
+    mockInsertListItem(MOCK_LIST_ITEM)
 
     const response = await apiRequest(`/v1/lists/${LIST_ID}/items`, {
       method: 'POST',
       token,
-      body: { name: 'My New Item' },
+      body: { itemId: ITEM_ID },
     })
 
-    const body = await response.json() as { listItem: { item: { name: string }; itemStatus: string } }
+    const body = await response.json() as { listItem: { item: { id: string; name: string }; itemStatus: string } }
     expect(response.status).toBe(201)
+    expect(body.listItem.item.id).toBe(ITEM_ID)
     expect(body.listItem.item.name).toBe('My Item')
     expect(body.listItem.itemStatus).toBe('available')
   })
 
-  it('returns 422 when name is missing', async () => {
+  it('returns 404 when the referenced item does not exist', async () => {
+    const token = await generateTestToken(AUTH_USER.id)
+    mockAuthChain()
+    mockListAndOwner()
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(undefined)
+
+    const response = await apiRequest(`/v1/lists/${LIST_ID}/items`, {
+      method: 'POST',
+      token,
+      body: { itemId: ITEM_ID },
+    })
+
+    expect(response.status).toBe(404)
+  })
+
+  it('returns 422 when itemId is missing', async () => {
     const token = await generateTestToken(AUTH_USER.id)
     vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(AUTH_USER)
@@ -656,13 +807,13 @@ describe('POST /v1/lists/:id/items', () => {
     const response = await apiRequest(`/v1/lists/${LIST_ID}/items`, {
       method: 'POST',
       token,
-      body: { description: 'no name here' },
+      body: {},
     })
 
     expect(response.status).toBe(422)
   })
 
-  it('returns 422 when imageUrl is not a valid URL', async () => {
+  it('returns 422 when itemId is not a UUID', async () => {
     const token = await generateTestToken(AUTH_USER.id)
     vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(AUTH_USER)
@@ -670,7 +821,7 @@ describe('POST /v1/lists/:id/items', () => {
     const response = await apiRequest(`/v1/lists/${LIST_ID}/items`, {
       method: 'POST',
       token,
-      body: { name: 'Valid', imageUrl: 'not-a-url' },
+      body: { itemId: 'not-a-uuid' },
     })
 
     expect(response.status).toBe(422)
@@ -687,7 +838,7 @@ describe('POST /v1/lists/:id/items', () => {
     const response = await apiRequest(`/v1/lists/${LIST_ID}/items`, {
       method: 'POST',
       token,
-      body: { name: 'Item' },
+      body: { itemId: ITEM_ID },
     })
 
     expect(response.status).toBe(403)
@@ -702,7 +853,7 @@ describe('POST /v1/lists/:id/items', () => {
     const response = await apiRequest(`/v1/lists/${LIST_ID}/items`, {
       method: 'POST',
       token,
-      body: { name: 'Item' },
+      body: { itemId: ITEM_ID },
     })
 
     expect(response.status).toBe(404)
@@ -716,7 +867,7 @@ describe('POST /v1/lists/:id/items', () => {
     const response = await apiRequest('/v1/lists/not-a-uuid/items', {
       method: 'POST',
       token,
-      body: { name: 'Item' },
+      body: { itemId: ITEM_ID },
     })
 
     expect(response.status).toBe(422)
@@ -725,9 +876,80 @@ describe('POST /v1/lists/:id/items', () => {
   it('returns 401 when not authenticated', async () => {
     const response = await apiRequest(`/v1/lists/${LIST_ID}/items`, {
       method: 'POST',
-      body: { name: 'Item' },
+      body: { itemId: ITEM_ID },
     })
 
     expect(response.status).toBe(401)
+  })
+})
+
+const TAG_GAMING_ROW = {
+  id: '00000000-0000-0000-0000-000000000070',
+  name: 'gaming',
+  slug: 'gaming',
+  createdByUserId: AUTH_USER.id,
+  createdAt: new Date('2024-01-01'),
+  updatedAt: new Date('2024-01-01'),
+}
+
+const TAG_READING_ROW = {
+  ...TAG_GAMING_ROW,
+  id: '00000000-0000-0000-0000-000000000071',
+  name: 'reading',
+  slug: 'reading',
+}
+
+function listTagLink(tag: typeof TAG_GAMING_ROW): {
+  listId: string
+  tagId: string
+  assignedAt: Date
+  tag: typeof TAG_GAMING_ROW
+} {
+  return { listId: LIST_ID, tagId: tag.id, assignedAt: new Date('2024-02-01'), tag }
+}
+
+
+describe('lists mapper hydrates tags', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+  })
+
+  it('returns tags array on GET /v1/lists/:id', async () => {
+    const token = await generateTestToken(AUTH_USER.id)
+    mockAuthChain()
+    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce({
+      ...MOCK_LIST,
+      collaborators: [{ userId: AUTH_USER.id, user: AUTH_USER }],
+      listTags: [listTagLink(TAG_GAMING_ROW)],
+    } as never)
+
+    const response = await apiRequest(`/v1/lists/${LIST_ID}`, { token })
+
+    const body = await response.json() as { list: { tags: { slug: string }[] } }
+    expect(response.status).toBe(200)
+    expect(body.list.tags).toHaveLength(1)
+    expect(body.list.tags[0]?.slug).toBe('gaming')
+  })
+
+  it('returns tags array on GET /v1/lists (paginated)', async () => {
+    const token = await generateTestToken(AUTH_USER.id)
+    mockAuthChain()
+    mockOwnedListsSubquery([LIST_ID])
+    vi.mocked(db.query.lists.findMany).mockResolvedValueOnce([
+      {
+        ...MOCK_LIST,
+        collaborators: [{ userId: AUTH_USER.id, user: AUTH_USER }],
+        listTags: [listTagLink(TAG_READING_ROW)],
+      },
+    ] as never)
+    mockCountChain(1)
+    mockOwnedListsSubquery([LIST_ID])
+
+    const response = await apiRequest('/v1/lists', { token })
+
+    const body = await response.json() as { items: { tags: { slug: string }[] }[] }
+    expect(response.status).toBe(200)
+    expect(body.items[0]?.tags[0]?.slug).toBe('reading')
   })
 })

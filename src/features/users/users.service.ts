@@ -12,6 +12,7 @@ import {
   findItemSourcesByCreator,
   findListItemsForContributor,
   findListsOwnedByForExport,
+  findListTagsForOwner,
   findTagsCreatedByUser,
 } from './export/rgpd-export.repository.js'
 import { updateUserProfile } from './users.repository.js'
@@ -19,7 +20,11 @@ import { toUserDetail } from '../../shared/types/user.js'
 import { toItemDetail, toItemSourceDetailWithoutShop, toListItemDetail } from '../../shared/types/item.js'
 import { toTagDetail } from '../../shared/types/tag.js'
 import { buildExportZipStream } from './export/csv-archive-writer.js'
-import { EXPORT_ENTITY_REGISTRY, toExportListRow } from './export/export-entities.js'
+import {
+  EXPORT_ENTITY_REGISTRY,
+  toExportListRow,
+  toExportListTagRow,
+} from './export/export-entities.js'
 import type { UserDetail, UserWrite } from '../../shared/types/user.js'
 import type { ServiceResult } from '../../shared/types/service.js'
 import type { PartialWrite } from '../../shared/types/api.js'
@@ -120,12 +125,13 @@ export async function exportUserData(userId: string, format: ExportFormat): Prom
   const user = await findUserById(userId)
   const profile = user ? toUserDetail(user) : null
 
-  const [rawItems, rawItemSources, rawListItems, rawLists, rawTags] = await Promise.all([
+  const [rawItems, rawItemSources, rawListItems, rawLists, rawTags, rawListTags] = await Promise.all([
     findItemsByCreator(userId),
     findItemSourcesByCreator(userId),
     findListItemsForContributor(userId),
     findListsOwnedByForExport(userId),
     findTagsCreatedByUser(userId),
+    findListTagsForOwner(userId),
   ])
 
   return {
@@ -137,6 +143,7 @@ export async function exportUserData(userId: string, format: ExportFormat): Prom
       listItems: rawListItems.map(toListItemDetail),
       lists: rawLists.map(toExportListRow),
       tags: rawTags.map(toTagDetail),
+      listTags: rawListTags.map(toExportListTagRow),
     },
     contentType: EXPORT_JSON_CONTENT_TYPE,
     filename: EXPORT_JSON_FILENAME,
