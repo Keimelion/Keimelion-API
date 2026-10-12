@@ -56,9 +56,24 @@ export async function createUserList(
   user: User,
   input: CreateListInput,
 ): Promise<ServiceResult<{ list: ListDetail }>> {
-  const outcome = await insertListWithSlugRetry(user, input)
+  let tagSlugs: string[] | null = null
+  if (input.tags !== undefined) {
+    tagSlugs = normalizeTagSlugs(input.tags)
+    if (tagSlugs === null) return serviceError(ErrorCode.TAG_INVALID_NAME)
+  }
+
+  const outcome = await insertListWithSlugRetry(user, input, tagSlugs)
   if ('errorCode' in outcome) return serviceError(outcome.errorCode)
 
+  if (tagSlugs !== null && tagSlugs.length > 0) {
+    const refreshed = await findListWithOwner(outcome.row.id)
+    if (refreshed) {
+      return {
+        data: { list: toListDetail(refreshed, extractOwnerDetail(refreshed)) },
+        httpStatus: HttpStatus.CREATED,
+      }
+    }
+  }
   return {
     data: { list: toListDetail(outcome.row, extractOwnerDetail(outcome.row)) },
     httpStatus: HttpStatus.CREATED,
@@ -161,10 +176,11 @@ export async function addItemToList(
 async function insertListWithSlugRetry(
   user: User,
   input: CreateListInput,
+  tagSlugs: string[] | null,
 ): Promise<{ row: ListRowWithOwner } | { errorCode: ErrorCode }> {
   for (let attempt = 0; attempt < MAX_SLUG_RETRIES; attempt += 1) {
     const slug = buildSlugFromTitle(input.title)
-    const outcome = await tryInsertList(user, input, slug)
+    const outcome = await tryInsertList(user, input, slug, tagSlugs)
     if ('row' in outcome) return outcome
     if (outcome.retriable) continue
     return { errorCode: outcome.errorCode }
@@ -181,6 +197,7 @@ async function tryInsertList(
   user: User,
   input: CreateListInput,
   slug: string,
+  tagSlugs: string[] | null,
 ): Promise<{ row: ListRowWithOwner } | InsertAttemptFailure> {
   try {
     const created = await db.transaction(async (tx) => {
@@ -188,6 +205,10 @@ async function tryInsertList(
       if (!inserted) throw new Error('List insert returned no row')
       const collaborator = await insertOwnerCollaborator(inserted.id, user.id, tx)
       if (!collaborator) throw new Error('Owner collaborator insert returned no row')
+      if (tagSlugs !== null && tagSlugs.length > 0) {
+        const tagIds = await upsertTagsBySlugs(tagSlugs, user.id, tx)
+        await replaceListTags(inserted.id, tagIds, tx)
+      }
       return { list: inserted, collaborator }
     })
     const row: ListRowWithOwner = {

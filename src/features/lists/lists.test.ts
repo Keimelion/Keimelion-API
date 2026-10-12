@@ -182,6 +182,60 @@ describe('POST /v1/lists', () => {
     expect(body.list.slug).toBe('my-wishlist-abc123')
   })
 
+  it('creates a list with tags in a single POST and hydrates them in the response', async () => {
+    const token = await generateTestToken(AUTH_USER.id)
+    mockAuthChain()
+    vi.mocked(db.transaction).mockImplementationOnce(async (callback) => {
+      const tx = {
+        insert: vi.fn().mockImplementation(() => ({
+          values: vi.fn().mockImplementation(() => {
+            const chain = {
+              returning: vi.fn().mockImplementationOnce(() => Promise.resolve([MOCK_LIST]))
+                .mockImplementationOnce(() => Promise.resolve([MOCK_COLLABORATOR])),
+              onConflictDoNothing: vi.fn().mockResolvedValue([]),
+            }
+            return chain
+          }),
+        })),
+        delete: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
+        query: {
+          tags: { findMany: vi.fn().mockResolvedValueOnce([TAG_GAMING_ROW]) },
+        },
+      }
+      return (callback as (tx: unknown) => Promise<unknown>)(tx)
+    })
+    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce({
+      ...MOCK_LIST,
+      collaborators: [{ userId: AUTH_USER.id, user: AUTH_USER }],
+      listTags: [listTagLink(TAG_GAMING_ROW)],
+    } as never)
+
+    const response = await apiRequest('/v1/lists', {
+      method: 'POST',
+      token,
+      body: { title: 'My Wishlist', tags: ['Gaming'] },
+    })
+
+    const body = await response.json() as { list: { tags: { slug: string }[] } }
+    expect(response.status).toBe(201)
+    expect(body.list.tags.map((tag) => tag.slug)).toEqual(['gaming'])
+  })
+
+  it('returns 422 TAG_INVALID_NAME when a tag name normalizes to an empty slug at creation', async () => {
+    const token = await generateTestToken(AUTH_USER.id)
+    mockAuthChain()
+
+    const response = await apiRequest('/v1/lists', {
+      method: 'POST',
+      token,
+      body: { title: 'My Wishlist', tags: ['!!!'] },
+    })
+
+    const body = await response.json() as { code: string }
+    expect(response.status).toBe(422)
+    expect(body.code).toBe('TAG_INVALID_NAME')
+  })
+
   it('persists owner collaborator inside the same transaction (both inserts in the callback)', async () => {
     const token = await generateTestToken(AUTH_USER.id)
     mockAuthChain()

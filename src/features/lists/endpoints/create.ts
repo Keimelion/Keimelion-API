@@ -1,23 +1,16 @@
 import { zValidator } from '@hono/zod-validator'
-import { z } from 'zod'
 import { authMiddleware, getAuthUser } from '../../../shared/middlewares/auth.js'
 import { RATE_LIMITS } from '../../../shared/utils/rate-limiter.js'
 import { validationErrorHandler } from '../../../shared/utils/validation.js'
 import { jsonResult } from '../../../shared/utils/response.js'
-import {
-  listTitleSchema,
-  listDescriptionSchema,
-  listOccasionTypeIdSchema,
-} from '../../../db/entities/lists/lists.schemas.js'
+import { writableListFieldsSchema } from '../lists.schemas.js'
+import type { z } from 'zod'
 import type { FeatureRouter } from '../../../shared/types/app.js'
 import { createUserList } from '../lists.service.js'
 
-const createListSchema = z
-  .object({
-    title: listTitleSchema,
-    description: listDescriptionSchema.optional(),
-    occasionTypeId: listOccasionTypeIdSchema.optional(),
-  })
+const createListSchema = writableListFieldsSchema
+  .partial()
+  .required({ title: true })
   .strict()
 
 export type CreateListInput = z.infer<typeof createListSchema>

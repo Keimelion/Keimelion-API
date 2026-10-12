@@ -7,33 +7,16 @@ import { jsonResult } from '../../../shared/utils/response.js'
 import { validationErrorHandler } from '../../../shared/utils/validation.js'
 import { uuidParamSchema } from '../../../shared/schemas/params.js'
 import { ListStatuses } from '../../../shared/enums/list-status.js'
-import {
-  listTitleSchema,
-  listDescriptionSchema,
-  listOccasionTypeIdSchema,
-} from '../../../db/entities/lists/lists.schemas.js'
-import {
-  MAX_TAGS_PER_RESOURCE,
-  tagNameSchema,
-} from '../../../db/entities/tags/tags.schemas.js'
+import { writableListFieldsSchema } from '../lists.schemas.js'
 import type { FeatureRouter } from '../../../shared/types/app.js'
 import { updateUserList } from '../lists.service.js'
 
 const USER_UPDATABLE_LIST_STATUSES = [ListStatuses.ACTIVE, ListStatuses.ARCHIVED] as const
 
-const updateListSchema = z
-  .object({
-    title: listTitleSchema.optional(),
-    description: listDescriptionSchema.optional(),
-    occasionTypeId: listOccasionTypeIdSchema.optional(),
+const updateListSchema = writableListFieldsSchema
+  .partial()
+  .extend({
     listStatus: z.enum(USER_UPDATABLE_LIST_STATUSES).optional(),
-    tags: z
-      .array(tagNameSchema)
-      .max(
-        MAX_TAGS_PER_RESOURCE,
-        `tags must contain at most ${String(MAX_TAGS_PER_RESOURCE)} entries`,
-      )
-      .optional(),
   })
   .strict()
 

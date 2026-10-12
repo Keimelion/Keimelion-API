@@ -15,9 +15,7 @@ import { replaceItemCategories } from '../../db/entities/item-categories/item-ca
 import { upsertTagsBySlugs } from '../../db/entities/tags/tags.repository.js'
 import { replaceItemTags } from '../../db/entities/item-tags/item-tags.repository.js'
 import { toItemWithSources } from '../../shared/types/item.js'
-import { toCategoryPublic } from '../../shared/types/category.js'
 import type { ItemWithSources } from '../../shared/types/item.js'
-import type { CategoryPublic } from '../../shared/types/category.js'
 import type { PaginationInput } from '../../shared/schemas/pagination.js'
 import type { PaginatedResponse } from '../../shared/types/api.js'
 import type { ServiceResult } from '../../shared/types/service.js'
@@ -44,46 +42,45 @@ export async function getItemById(id: string): Promise<ServiceResult<{ item: Ite
   }
 }
 
-export async function assignCategoriesToItem(
-  itemId: string,
-  userId: string,
-  categoryIds: string[],
-): Promise<ServiceResult<{ categories: CategoryPublic[] }>> {
-  const item = await findItemById(itemId)
-  if (!item) return serviceError(ErrorCode.NOT_FOUND)
-  if (item.createdByUserId !== userId) return serviceError(ErrorCode.FORBIDDEN)
-
-  const uniqueIds = Array.from(new Set(categoryIds))
-  if (uniqueIds.length > 0) {
-    const found = await findCategoriesByIds(uniqueIds)
-    if (found.length !== uniqueIds.length) return serviceError(ErrorCode.CATEGORY_NOT_FOUND)
-  }
-
-  const assignments = await replaceItemCategories(itemId, uniqueIds)
-  return {
-    data: { categories: assignments.map((assignment) => toCategoryPublic(assignment.category)) },
-    httpStatus: HttpStatus.OK,
-  }
-}
-
 export async function updateUserItem(
   itemId: string,
   userId: string,
   input: UpdateItemInput,
 ): Promise<ServiceResult<{ item: ItemWithSources }>> {
-  const { tags } = input
-  if (tags === undefined) return serviceError(ErrorCode.NO_FIELDS_TO_UPDATE)
+  const { tags, categories } = input
+  if (tags === undefined && categories === undefined) {
+    return serviceError(ErrorCode.NO_FIELDS_TO_UPDATE)
+  }
 
   const item = await findItemById(itemId)
   if (!item) return serviceError(ErrorCode.NOT_FOUND)
   if (item.createdByUserId !== userId) return serviceError(ErrorCode.FORBIDDEN)
 
-  const slugs = normalizeTagSlugs(tags)
-  if (slugs === null) return serviceError(ErrorCode.TAG_INVALID_NAME)
+  let tagSlugs: string[] | null = null
+  if (tags !== undefined) {
+    tagSlugs = normalizeTagSlugs(tags)
+    if (tagSlugs === null) return serviceError(ErrorCode.TAG_INVALID_NAME)
+  }
+
+  let uniqueCategoryIds: string[] | null = null
+  if (categories !== undefined) {
+    uniqueCategoryIds = Array.from(new Set(categories))
+    if (uniqueCategoryIds.length > 0) {
+      const found = await findCategoriesByIds(uniqueCategoryIds)
+      if (found.length !== uniqueCategoryIds.length) {
+        return serviceError(ErrorCode.CATEGORY_NOT_FOUND)
+      }
+    }
+  }
 
   await db.transaction(async (tx) => {
-    const tagIds = await upsertTagsBySlugs(slugs, userId, tx)
-    await replaceItemTags(itemId, tagIds, tx)
+    if (tagSlugs !== null) {
+      const tagIds = await upsertTagsBySlugs(tagSlugs, userId, tx)
+      await replaceItemTags(itemId, tagIds, tx)
+    }
+    if (uniqueCategoryIds !== null) {
+      await replaceItemCategories(itemId, uniqueCategoryIds, tx)
+    }
   })
 
   const refreshed = await findItemByIdWithSources(itemId)

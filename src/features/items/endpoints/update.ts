@@ -12,6 +12,8 @@ import {
 import type { FeatureRouter } from '../../../shared/types/app.js'
 import { updateUserItem } from '../items.service.js'
 
+const MAX_CATEGORIES_PER_ITEM = 20
+
 const updateItemSchema = z
   .object({
     tags: z
@@ -19,6 +21,13 @@ const updateItemSchema = z
       .max(
         MAX_TAGS_PER_RESOURCE,
         `tags must contain at most ${String(MAX_TAGS_PER_RESOURCE)} entries`,
+      )
+      .optional(),
+    categories: z
+      .array(z.string().uuid())
+      .max(
+        MAX_CATEGORIES_PER_ITEM,
+        `categories must contain at most ${String(MAX_CATEGORIES_PER_ITEM)} entries`,
       )
       .optional(),
   })

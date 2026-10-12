@@ -273,152 +273,6 @@ function mockOwnerAuth(): void {
   vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(OWNER_USER as never)
 }
 
-describe('POST /v1/items/:id/categories', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(OWNER_ACCESS_TOKEN_ENTRY as never)
-  })
-
-  it('returns 200 with assigned categories when the user owns the item', async () => {
-    const token = await generateTestToken(OWNER_USER.id)
-    mockOwnerAuth()
-    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(OWNED_ITEM_ROW as never)
-    vi.mocked(db.query.categories.findMany).mockResolvedValueOnce(
-      [CATEGORY_ONE, CATEGORY_TWO] as never,
-    )
-    vi.mocked(db.transaction).mockImplementationOnce((callback) => {
-      const txFindMany = vi.fn().mockResolvedValueOnce([
-        { itemId: OWNED_ITEM_ROW.id, categoryId: CATEGORY_ONE.id, assignedAt: new Date(), category: CATEGORY_ONE },
-        { itemId: OWNED_ITEM_ROW.id, categoryId: CATEGORY_TWO.id, assignedAt: new Date(), category: CATEGORY_TWO },
-      ])
-      const tx = {
-        delete: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
-        insert: vi.fn().mockReturnValue({ values: vi.fn().mockResolvedValue([]) }),
-        query: { itemCategories: { findMany: txFindMany } },
-      }
-      return callback(tx as never) as never
-    })
-
-    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}/categories`, {
-      method: 'POST',
-      token,
-      body: { categoryIds: [CATEGORY_ONE.id, CATEGORY_TWO.id] },
-    })
-
-    const body = await response.json() as { categories: { id: string; slug: string }[] }
-    expect(response.status).toBe(200)
-    expect(body.categories).toHaveLength(2)
-    expect(body.categories.map((category) => category.slug)).toEqual(
-      expect.arrayContaining(['electronique', 'mode']),
-    )
-  })
-
-  it('returns 200 with empty assignments when categoryIds is empty (clears existing)', async () => {
-    const token = await generateTestToken(OWNER_USER.id)
-    mockOwnerAuth()
-    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(OWNED_ITEM_ROW as never)
-    vi.mocked(db.transaction).mockImplementationOnce((callback) => {
-      const tx = {
-        delete: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
-        insert: vi.fn().mockReturnValue({ values: vi.fn().mockResolvedValue([]) }),
-        query: { itemCategories: { findMany: vi.fn().mockResolvedValueOnce([]) } },
-      }
-      return callback(tx as never) as never
-    })
-
-    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}/categories`, {
-      method: 'POST',
-      token,
-      body: { categoryIds: [] },
-    })
-
-    const body = await response.json() as { categories: unknown[] }
-    expect(response.status).toBe(200)
-    expect(body.categories).toHaveLength(0)
-  })
-
-  it('returns 404 NOT_FOUND when the item does not exist', async () => {
-    const token = await generateTestToken(OWNER_USER.id)
-    mockOwnerAuth()
-    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(undefined)
-
-    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}/categories`, {
-      method: 'POST',
-      token,
-      body: { categoryIds: [CATEGORY_ONE.id] },
-    })
-
-    expect(response.status).toBe(404)
-  })
-
-  it('returns 403 FORBIDDEN when the user does not own the item', async () => {
-    const token = await generateTestToken(OWNER_USER.id)
-    mockOwnerAuth()
-    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(
-      { ...OWNED_ITEM_ROW, createdByUserId: OTHER_USER_ID } as never,
-    )
-
-    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}/categories`, {
-      method: 'POST',
-      token,
-      body: { categoryIds: [CATEGORY_ONE.id] },
-    })
-
-    expect(response.status).toBe(403)
-  })
-
-  it('returns 404 CATEGORY_NOT_FOUND when one of the categoryIds does not exist', async () => {
-    const token = await generateTestToken(OWNER_USER.id)
-    mockOwnerAuth()
-    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(OWNED_ITEM_ROW as never)
-    vi.mocked(db.query.categories.findMany).mockResolvedValueOnce([CATEGORY_ONE] as never)
-
-    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}/categories`, {
-      method: 'POST',
-      token,
-      body: { categoryIds: [CATEGORY_ONE.id, CATEGORY_TWO.id] },
-    })
-
-    const body = await response.json() as { code: string }
-    expect(response.status).toBe(404)
-    expect(body.code).toBe('CATEGORY_NOT_FOUND')
-  })
-
-  it('returns 422 when categoryIds contains a non-UUID value', async () => {
-    const token = await generateTestToken(OWNER_USER.id)
-    mockOwnerAuth()
-
-    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}/categories`, {
-      method: 'POST',
-      token,
-      body: { categoryIds: ['not-a-uuid'] },
-    })
-
-    expect(response.status).toBe(422)
-  })
-
-  it('returns 422 when id is not a UUID', async () => {
-    const token = await generateTestToken(OWNER_USER.id)
-    mockOwnerAuth()
-
-    const response = await apiRequest('/v1/items/not-a-uuid/categories', {
-      method: 'POST',
-      token,
-      body: { categoryIds: [CATEGORY_ONE.id] },
-    })
-
-    expect(response.status).toBe(422)
-  })
-
-  it('returns 401 when not authenticated', async () => {
-    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}/categories`, {
-      method: 'POST',
-      body: { categoryIds: [CATEGORY_ONE.id] },
-    })
-
-    expect(response.status).toBe(401)
-  })
-})
 
 const TAG_GAMING_ROW = {
   id: '00000000-0000-0000-0000-000000000070',
@@ -583,6 +437,80 @@ describe('PATCH /v1/items/:id', () => {
     })
 
     expect(response.status).toBe(401)
+  })
+
+  it('replaces categories when categories are provided', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+    vi.mocked(db.query.items.findFirst)
+      .mockResolvedValueOnce(OWNED_ITEM_ROW as never)
+      .mockResolvedValueOnce({
+        ...OWNED_ITEM_ROW,
+        sources: [],
+        itemCategories: [
+          { itemId: OWNED_ITEM_ROW.id, categoryId: CATEGORY_ONE.id, assignedAt: new Date(), category: CATEGORY_ONE },
+          { itemId: OWNED_ITEM_ROW.id, categoryId: CATEGORY_TWO.id, assignedAt: new Date(), category: CATEGORY_TWO },
+        ],
+        itemTags: [],
+      } as never)
+    vi.mocked(db.query.categories.findMany).mockResolvedValueOnce([CATEGORY_ONE, CATEGORY_TWO] as never)
+
+    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}`, {
+      method: 'PATCH',
+      token,
+      body: { categories: [CATEGORY_ONE.id, CATEGORY_TWO.id] },
+    })
+
+    const body = await response.json() as { item: { categories: { slug: string }[] } }
+    expect(response.status).toBe(200)
+    expect(body.item.categories.map((c) => c.slug)).toEqual(expect.arrayContaining(['electronique', 'mode']))
+  })
+
+  it('returns 404 CATEGORY_NOT_FOUND when a categoryId does not exist', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(OWNED_ITEM_ROW as never)
+    vi.mocked(db.query.categories.findMany).mockResolvedValueOnce([CATEGORY_ONE] as never)
+
+    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}`, {
+      method: 'PATCH',
+      token,
+      body: { categories: [CATEGORY_ONE.id, CATEGORY_TWO.id] },
+    })
+
+    const body = await response.json() as { code: string }
+    expect(response.status).toBe(404)
+    expect(body.code).toBe('CATEGORY_NOT_FOUND')
+  })
+
+  it('accepts tags and categories together in one PATCH', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+    vi.mocked(db.query.items.findFirst)
+      .mockResolvedValueOnce(OWNED_ITEM_ROW as never)
+      .mockResolvedValueOnce({
+        ...OWNED_ITEM_ROW,
+        sources: [],
+        itemCategories: [
+          { itemId: OWNED_ITEM_ROW.id, categoryId: CATEGORY_ONE.id, assignedAt: new Date(), category: CATEGORY_ONE },
+        ],
+        itemTags: [
+          { itemId: OWNED_ITEM_ROW.id, tagId: TAG_GAMING_ROW.id, assignedAt: new Date(), tag: TAG_GAMING_ROW },
+        ],
+      } as never)
+    vi.mocked(db.query.categories.findMany).mockResolvedValueOnce([CATEGORY_ONE] as never)
+    mockUpdateItemTagsTransaction([TAG_GAMING_ROW])
+
+    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}`, {
+      method: 'PATCH',
+      token,
+      body: { tags: ['Gaming'], categories: [CATEGORY_ONE.id] },
+    })
+
+    const body = await response.json() as { item: { tags: { slug: string }[]; categories: { slug: string }[] } }
+    expect(response.status).toBe(200)
+    expect(body.item.tags.map((t) => t.slug)).toEqual(['gaming'])
+    expect(body.item.categories.map((c) => c.slug)).toEqual(['electronique'])
   })
 })
 
