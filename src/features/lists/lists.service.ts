@@ -6,7 +6,7 @@ import { ListStatuses } from '../../shared/enums/list-status.js'
 import { serviceError } from '../../shared/utils/response.js'
 import { runWrite } from '../../shared/utils/admin-write.js'
 import { buildPaginatedResponse } from '../../shared/schemas/pagination.js'
-import { buildSlugFromName, buildSlugFromTitle } from '../../shared/utils/slug.js'
+import { buildSlugFromTitle, normalizeTagSlugs } from '../../shared/utils/slug.js'
 import { isPgForeignKeyViolation, isPgUniqueViolation } from '../../shared/db/pg-errors.js'
 import { logger } from '../../shared/utils/logger.js'
 import { insertItem } from '../../db/entities/items/items.repository.js'
@@ -20,10 +20,7 @@ import {
   softDeleteList,
 } from '../../db/entities/lists/lists.repository.js'
 import { insertOwnerCollaborator } from '../../db/entities/list-collaborators/list-collaborators.repository.js'
-import {
-  findTagsBySlugs,
-  insertTagsIgnoreConflict,
-} from '../../db/entities/tags/tags.repository.js'
+import { upsertTagsBySlugs } from '../../db/entities/tags/tags.repository.js'
 import {
   deleteListTag,
   insertListTagsIgnoreConflict,
@@ -125,7 +122,7 @@ export async function deleteUserList(id: string): Promise<ServiceResult<null>> {
 }
 
 export async function assignTagsToList(
-  listId: string,
+  existing: ListRowWithOwner,
   userId: string,
   names: string[],
 ): Promise<ServiceResult<{ list: ListDetail }>> {
@@ -133,8 +130,14 @@ export async function assignTagsToList(
   if (slugs === null) return serviceError(ErrorCode.TAG_INVALID_NAME)
 
   const tagIds = await upsertTagsBySlugs(slugs, userId)
-  await insertListTagsIgnoreConflict(listId, tagIds)
-  return buildListDetailResult(listId)
+  await insertListTagsIgnoreConflict(existing.id, tagIds)
+
+  const refreshed = await findListWithOwner(existing.id)
+  if (!refreshed) return serviceError(ErrorCode.NOT_FOUND)
+  return {
+    data: { list: toListDetail(refreshed, extractOwnerDetail(refreshed)) },
+    httpStatus: HttpStatus.OK,
+  }
 }
 
 export async function removeTagFromList(
@@ -144,37 +147,6 @@ export async function removeTagFromList(
   const removed = await deleteListTag(listId, tagId)
   if (!removed) return serviceError(ErrorCode.TAG_NOT_FOUND)
   return { data: null, httpStatus: HttpStatus.NO_CONTENT }
-}
-
-async function buildListDetailResult(
-  listId: string,
-): Promise<ServiceResult<{ list: ListDetail }>> {
-  const row = await findListWithOwner(listId)
-  if (!row) return serviceError(ErrorCode.NOT_FOUND)
-
-  return {
-    data: { list: toListDetail(row, extractOwnerDetail(row)) },
-    httpStatus: HttpStatus.OK,
-  }
-}
-
-function normalizeTagSlugs(names: string[]): string[] | null {
-  const slugs: string[] = []
-  for (const name of names) {
-    const slug = buildSlugFromName(name)
-    if (slug.length === 0) return null
-    slugs.push(slug)
-  }
-  return Array.from(new Set(slugs))
-}
-
-async function upsertTagsBySlugs(slugs: string[], userId: string): Promise<string[]> {
-  if (slugs.length === 0) return []
-  await insertTagsIgnoreConflict(
-    slugs.map((slug) => ({ name: slug, slug, createdByUserId: userId })),
-  )
-  const tags = await findTagsBySlugs(slugs)
-  return tags.map((tag) => tag.id)
 }
 
 export async function addItemToList(

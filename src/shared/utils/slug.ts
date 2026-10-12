@@ -15,6 +15,16 @@ export function buildSlugFromName(name: string): string {
   return slugify(name, { lower: true, strict: true, trim: true })
 }
 
+export function normalizeTagSlugs(names: string[]): string[] | null {
+  const slugs: string[] = []
+  for (const name of names) {
+    const slug = buildSlugFromName(name)
+    if (slug.length === 0) return null
+    slugs.push(slug)
+  }
+  return Array.from(new Set(slugs))
+}
+
 function randomSuffix(): string {
   const alphabetLength = SLUG_SUFFIX_ALPHABET.length
   let out = ''

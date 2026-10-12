@@ -4,7 +4,7 @@ import { serviceError } from '../../../shared/utils/response.js'
 import { logger } from '../../../shared/utils/logger.js'
 import { runWrite, buildChanges } from '../../../shared/utils/admin-write.js'
 import { buildPaginatedResponse } from '../../../shared/schemas/pagination.js'
-import { buildSlugFromName } from '../../../shared/utils/slug.js'
+import { normalizeTagSlugs } from '../../../shared/utils/slug.js'
 import {
   buildListUpdatePatch,
   findListWithOwner,
@@ -12,10 +12,7 @@ import {
   softDeleteList,
   restoreList,
 } from '../../../db/entities/lists/lists.repository.js'
-import {
-  findTagsBySlugs,
-  insertTagsIgnoreConflict,
-} from '../../../db/entities/tags/tags.repository.js'
+import { upsertTagsBySlugs } from '../../../db/entities/tags/tags.repository.js'
 import {
   deleteListTag,
   insertListTagsIgnoreConflict,
@@ -136,13 +133,13 @@ export async function assignTagsToList(
   listId: string,
   names: string[],
 ): Promise<ServiceResult<{ list: AdminListDetail }>> {
-  const existing = await findAdminListByIdWithOwner(listId)
+  const existing = await findAdminListById(listId)
   if (!existing) return serviceError(ErrorCode.NOT_FOUND)
 
   const slugs = normalizeTagSlugs(names)
   if (slugs === null) return serviceError(ErrorCode.TAG_INVALID_NAME)
 
-  const tagIds = await upsertTagsBySlugs(slugs)
+  const tagIds = await upsertTagsBySlugs(slugs, null)
   await insertListTagsIgnoreConflict(listId, tagIds)
 
   const refreshed = await findListWithOwner(listId)
@@ -165,25 +162,6 @@ export async function removeTagFromList(
 
   logger.info({ adminId, action: AdminAction.REMOVE_LIST_TAG, listId, tagId })
   return { data: null, httpStatus: HttpStatus.NO_CONTENT }
-}
-
-function normalizeTagSlugs(names: string[]): string[] | null {
-  const slugs: string[] = []
-  for (const name of names) {
-    const slug = buildSlugFromName(name)
-    if (slug.length === 0) return null
-    slugs.push(slug)
-  }
-  return Array.from(new Set(slugs))
-}
-
-async function upsertTagsBySlugs(slugs: string[]): Promise<string[]> {
-  if (slugs.length === 0) return []
-  await insertTagsIgnoreConflict(
-    slugs.map((slug) => ({ name: slug, slug, createdByUserId: null })),
-  )
-  const tags = await findTagsBySlugs(slugs)
-  return tags.map((tag) => tag.id)
 }
 
 function logChanges(adminId: string, listId: string, existingRow: List, fieldPatch: UpdateListFields): void {

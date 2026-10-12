@@ -2,7 +2,7 @@ import { HttpStatus } from '../../shared/enums/http.js'
 import { ErrorCode } from '../../shared/enums/error-code.js'
 import { serviceError } from '../../shared/utils/response.js'
 import { buildPaginatedResponse } from '../../shared/schemas/pagination.js'
-import { buildSlugFromName } from '../../shared/utils/slug.js'
+import { normalizeTagSlugs } from '../../shared/utils/slug.js'
 import {
   countAllItems,
   findAllItemsWithSources,
@@ -11,10 +11,7 @@ import {
 } from '../../db/entities/items/items.repository.js'
 import { findCategoriesByIds } from '../../db/entities/categories/categories.repository.js'
 import { replaceItemCategories } from '../../db/entities/item-categories/item-categories.repository.js'
-import {
-  findTagsBySlugs,
-  insertTagsIgnoreConflict,
-} from '../../db/entities/tags/tags.repository.js'
+import { upsertTagsBySlugs } from '../../db/entities/tags/tags.repository.js'
 import { replaceItemTags } from '../../db/entities/item-tags/item-tags.repository.js'
 import { toItemWithSources } from '../../shared/types/item.js'
 import { toCategoryPublic } from '../../shared/types/category.js'
@@ -87,23 +84,4 @@ export async function assignTagsToItem(
     data: { tags: assignments.map((assignment) => toTagPublic(assignment.tag)) },
     httpStatus: HttpStatus.OK,
   }
-}
-
-function normalizeTagSlugs(names: string[]): string[] | null {
-  const slugs: string[] = []
-  for (const name of names) {
-    const slug = buildSlugFromName(name)
-    if (slug.length === 0) return null
-    slugs.push(slug)
-  }
-  return Array.from(new Set(slugs))
-}
-
-async function upsertTagsBySlugs(slugs: string[], userId: string): Promise<string[]> {
-  if (slugs.length === 0) return []
-  await insertTagsIgnoreConflict(
-    slugs.map((slug) => ({ name: slug, slug, createdByUserId: userId })),
-  )
-  const tags = await findTagsBySlugs(slugs)
-  return tags.map((tag) => tag.id)
 }

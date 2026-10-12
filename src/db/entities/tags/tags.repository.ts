@@ -43,6 +43,20 @@ export async function insertTagsIgnoreConflict(
   await client.insert(tags).values(rows).onConflictDoNothing({ target: tags.slug })
 }
 
+export async function upsertTagsBySlugs(
+  slugs: string[],
+  createdByUserId: string | null,
+  client: DbClient = db,
+): Promise<string[]> {
+  if (slugs.length === 0) return []
+  await insertTagsIgnoreConflict(
+    slugs.map((slug) => ({ name: slug, slug, createdByUserId })),
+    client,
+  )
+  const rows = await findTagsBySlugs(slugs, client)
+  return rows.map((row) => row.id)
+}
+
 export async function updateTagRow(
   id: string,
   fields: UpdateTagFields,
