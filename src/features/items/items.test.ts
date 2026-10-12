@@ -436,17 +436,9 @@ const TAG_READING_ROW = {
   slug: 'reading',
 }
 
-function mockAssignTagsTransaction(assignments: { tag: typeof TAG_GAMING_ROW }[]): void {
+function mockUpdateItemTagsTransaction(tagsReturned: (typeof TAG_GAMING_ROW)[]): void {
   vi.mocked(db.transaction).mockImplementationOnce((callback) => {
-    const itemTagsFindMany = vi.fn().mockResolvedValueOnce(
-      assignments.map((assignment) => ({
-        itemId: OWNED_ITEM_ROW.id,
-        tagId: assignment.tag.id,
-        assignedAt: new Date(),
-        tag: assignment.tag,
-      })),
-    )
-    const tagsFindMany = vi.fn().mockResolvedValueOnce(assignments.map((assignment) => assignment.tag))
+    const tagsFindMany = vi.fn().mockResolvedValueOnce(tagsReturned)
     const tx = {
       delete: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
       insert: vi.fn().mockReturnValue({
@@ -454,74 +446,78 @@ function mockAssignTagsTransaction(assignments: { tag: typeof TAG_GAMING_ROW }[]
           onConflictDoNothing: vi.fn().mockResolvedValue([]),
         }),
       }),
-      query: {
-        itemTags: { findMany: itemTagsFindMany },
-        tags: { findMany: tagsFindMany },
-      },
+      query: { tags: { findMany: tagsFindMany } },
     }
     return callback(tx as never) as never
   })
 }
 
-describe('POST /v1/items/:id/tags', () => {
+function itemWithTagLinks(tags: (typeof TAG_GAMING_ROW)[]): object {
+  return {
+    ...OWNED_ITEM_ROW,
+    sources: [],
+    itemCategories: [],
+    itemTags: tags.map((tag) => ({ itemId: OWNED_ITEM_ROW.id, tagId: tag.id, assignedAt: new Date(), tag })),
+  }
+}
+
+describe('PATCH /v1/items/:id', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(OWNER_ACCESS_TOKEN_ENTRY as never)
   })
 
-  it('returns 200 and auto-creates missing tags by normalized slug', async () => {
+  it('replaces tags and returns item with hydrated tags when the user owns the item', async () => {
     const token = await generateTestToken(OWNER_USER.id)
     mockOwnerAuth()
-    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(OWNED_ITEM_ROW as never)
-    mockAssignTagsTransaction([{ tag: TAG_GAMING_ROW }, { tag: TAG_READING_ROW }])
+    vi.mocked(db.query.items.findFirst)
+      .mockResolvedValueOnce(OWNED_ITEM_ROW as never)
+      .mockResolvedValueOnce(itemWithTagLinks([TAG_GAMING_ROW, TAG_READING_ROW]) as never)
+    mockUpdateItemTagsTransaction([TAG_GAMING_ROW, TAG_READING_ROW])
 
-    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}/tags`, {
-      method: 'POST',
+    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}`, {
+      method: 'PATCH',
       token,
-      body: { names: ['Gaming', 'Reading'] },
+      body: { tags: ['Gaming', 'Reading'] },
     })
 
-    const body = await response.json() as { tags: { slug: string; name: string }[] }
+    const body = await response.json() as { item: { tags: { slug: string }[] } }
     expect(response.status).toBe(200)
-    expect(body.tags).toHaveLength(2)
-    expect(body.tags.map((tag) => tag.slug)).toEqual(
-      expect.arrayContaining(['gaming', 'reading']),
-    )
+    expect(body.item.tags.map((tag) => tag.slug)).toEqual(expect.arrayContaining(['gaming', 'reading']))
   })
 
-  it('deduplicates names that normalize to the same slug', async () => {
+  it('clears all tags when tags: [] is sent', async () => {
     const token = await generateTestToken(OWNER_USER.id)
     mockOwnerAuth()
-    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(OWNED_ITEM_ROW as never)
-    mockAssignTagsTransaction([{ tag: TAG_GAMING_ROW }])
+    vi.mocked(db.query.items.findFirst)
+      .mockResolvedValueOnce(OWNED_ITEM_ROW as never)
+      .mockResolvedValueOnce(itemWithTagLinks([]) as never)
+    mockUpdateItemTagsTransaction([])
 
-    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}/tags`, {
-      method: 'POST',
+    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}`, {
+      method: 'PATCH',
       token,
-      body: { names: ['Gaming', 'gaming', 'GAMING'] },
+      body: { tags: [] },
     })
 
-    const body = await response.json() as { tags: { slug: string }[] }
+    const body = await response.json() as { item: { tags: unknown[] } }
     expect(response.status).toBe(200)
-    expect(body.tags).toHaveLength(1)
-    expect(body.tags[0]?.slug).toBe('gaming')
+    expect(body.item.tags).toEqual([])
   })
 
-  it('returns 200 with empty tags when names is empty (clears existing)', async () => {
-    const token = await generateTestToken(OWNER_USER.id)
-    mockOwnerAuth()
+  it('returns 403 FORBIDDEN when the user does not own the item', async () => {
+    const token = await generateTestToken(OTHER_USER_ID)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(makeAccessTokenEntry(OTHER_USER_ID) as never)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce({ ...OWNER_USER, id: OTHER_USER_ID } as never)
     vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(OWNED_ITEM_ROW as never)
-    mockAssignTagsTransaction([])
 
-    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}/tags`, {
-      method: 'POST',
+    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}`, {
+      method: 'PATCH',
       token,
-      body: { names: [] },
+      body: { tags: ['gaming'] },
     })
 
-    const body = await response.json() as { tags: unknown[] }
-    expect(response.status).toBe(200)
-    expect(body.tags).toHaveLength(0)
+    expect(response.status).toBe(403)
   })
 
   it('returns 404 NOT_FOUND when the item does not exist', async () => {
@@ -529,40 +525,24 @@ describe('POST /v1/items/:id/tags', () => {
     mockOwnerAuth()
     vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(undefined)
 
-    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}/tags`, {
-      method: 'POST',
+    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}`, {
+      method: 'PATCH',
       token,
-      body: { names: ['gaming'] },
+      body: { tags: ['gaming'] },
     })
 
     expect(response.status).toBe(404)
   })
 
-  it('returns 403 FORBIDDEN when the user does not own the item', async () => {
-    const token = await generateTestToken(OWNER_USER.id)
-    mockOwnerAuth()
-    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(
-      { ...OWNED_ITEM_ROW, createdByUserId: OTHER_USER_ID } as never,
-    )
-
-    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}/tags`, {
-      method: 'POST',
-      token,
-      body: { names: ['gaming'] },
-    })
-
-    expect(response.status).toBe(403)
-  })
-
-  it('returns 422 TAG_INVALID_NAME when a name normalizes to an empty slug', async () => {
+  it('returns 422 TAG_INVALID_NAME when a tag name normalizes to an empty slug', async () => {
     const token = await generateTestToken(OWNER_USER.id)
     mockOwnerAuth()
     vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(OWNED_ITEM_ROW as never)
 
-    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}/tags`, {
-      method: 'POST',
+    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}`, {
+      method: 'PATCH',
       token,
-      body: { names: ['!!!'] },
+      body: { tags: ['!!!'] },
     })
 
     const body = await response.json() as { code: string }
@@ -570,37 +550,36 @@ describe('POST /v1/items/:id/tags', () => {
     expect(body.code).toBe('TAG_INVALID_NAME')
   })
 
-  it('returns 422 when names exceeds max count (20)', async () => {
+  it('returns 422 when tags exceeds max count (20)', async () => {
     const token = await generateTestToken(OWNER_USER.id)
     mockOwnerAuth()
 
-    const tooMany = Array.from({ length: 21 }, (_, index) => `tag-${String(index)}`)
-    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}/tags`, {
-      method: 'POST',
+    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}`, {
+      method: 'PATCH',
       token,
-      body: { names: tooMany },
+      body: { tags: Array.from({ length: 21 }, (_, i) => `tag-${String(i)}`) },
     })
 
     expect(response.status).toBe(422)
   })
 
-  it('returns 422 when id is not a UUID', async () => {
+  it('returns 422 when body is empty (no fields to update)', async () => {
     const token = await generateTestToken(OWNER_USER.id)
     mockOwnerAuth()
 
-    const response = await apiRequest('/v1/items/not-a-uuid/tags', {
-      method: 'POST',
+    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}`, {
+      method: 'PATCH',
       token,
-      body: { names: ['gaming'] },
+      body: {},
     })
 
     expect(response.status).toBe(422)
   })
 
   it('returns 401 when not authenticated', async () => {
-    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}/tags`, {
-      method: 'POST',
-      body: { names: ['gaming'] },
+    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}`, {
+      method: 'PATCH',
+      body: { tags: ['gaming'] },
     })
 
     expect(response.status).toBe(401)

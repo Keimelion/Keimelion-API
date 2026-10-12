@@ -16,13 +16,12 @@ import { upsertTagsBySlugs } from '../../db/entities/tags/tags.repository.js'
 import { replaceItemTags } from '../../db/entities/item-tags/item-tags.repository.js'
 import { toItemWithSources } from '../../shared/types/item.js'
 import { toCategoryPublic } from '../../shared/types/category.js'
-import { toTagPublic } from '../../shared/types/tag.js'
 import type { ItemWithSources } from '../../shared/types/item.js'
 import type { CategoryPublic } from '../../shared/types/category.js'
-import type { TagPublic } from '../../shared/types/tag.js'
 import type { PaginationInput } from '../../shared/schemas/pagination.js'
 import type { PaginatedResponse } from '../../shared/types/api.js'
 import type { ServiceResult } from '../../shared/types/service.js'
+import type { UpdateItemInput } from './endpoints/update.js'
 
 export async function listItems(
   pagination: PaginationInput,
@@ -67,24 +66,30 @@ export async function assignCategoriesToItem(
   }
 }
 
-export async function assignTagsToItem(
+export async function updateUserItem(
   itemId: string,
   userId: string,
-  names: string[],
-): Promise<ServiceResult<{ tags: TagPublic[] }>> {
+  input: UpdateItemInput,
+): Promise<ServiceResult<{ item: ItemWithSources }>> {
+  const { tags } = input
+  if (tags === undefined) return serviceError(ErrorCode.NO_FIELDS_TO_UPDATE)
+
   const item = await findItemById(itemId)
   if (!item) return serviceError(ErrorCode.NOT_FOUND)
   if (item.createdByUserId !== userId) return serviceError(ErrorCode.FORBIDDEN)
 
-  const slugs = normalizeTagSlugs(names)
+  const slugs = normalizeTagSlugs(tags)
   if (slugs === null) return serviceError(ErrorCode.TAG_INVALID_NAME)
 
-  const assignments = await db.transaction(async (tx) => {
+  await db.transaction(async (tx) => {
     const tagIds = await upsertTagsBySlugs(slugs, userId, tx)
-    return replaceItemTags(itemId, tagIds, tx)
+    await replaceItemTags(itemId, tagIds, tx)
   })
+
+  const refreshed = await findItemByIdWithSources(itemId)
+  if (!refreshed) return serviceError(ErrorCode.NOT_FOUND)
   return {
-    data: { tags: assignments.map((assignment) => toTagPublic(assignment.tag)) },
+    data: { item: toItemWithSources(refreshed) },
     httpStatus: HttpStatus.OK,
   }
 }
