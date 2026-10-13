@@ -85,6 +85,13 @@
       "when": 1791754204499,
       "tag": "0011_add-list-tags",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1791908727022,
+      "tag": "0012_add-category-translations",
+      "breakpoints": true
     }
   ]
 }

@@ -6,17 +6,22 @@ import { validationErrorHandler } from '../../../../shared/utils/validation.js'
 import { getAuthUser } from '../../../../shared/middlewares/auth.js'
 import { RATE_LIMITS } from '../../../../shared/utils/rate-limiter.js'
 import {
-  categoryNameSchema,
   categorySlugSchema,
+  categoryTranslationsCreateSchema,
 } from '../../../../db/entities/categories/categories.schemas.js'
 import type { FeatureRouter } from '../../../../shared/types/app.js'
 import { createCategory } from '../admin-categories.service.js'
 
 const adminCreateCategorySchema = z
   .object({
-    name: categoryNameSchema,
+    name: categoryTranslationsCreateSchema,
     slug: categorySlugSchema,
-    parentId: z.string().uuid().nullable().optional().transform((value) => value ?? null),
+    parentId: z
+      .string()
+      .uuid()
+      .nullable()
+      .optional()
+      .transform((value) => value ?? null),
   })
   .strict()
 

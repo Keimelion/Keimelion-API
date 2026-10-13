@@ -1,23 +1,22 @@
 import type { db as Db } from '../../client.js'
-import { categories } from './categories.schema.js'
+import { categories, categoryTranslations } from './categories.schema.js'
 
 const ROOT_CATEGORY_FIXTURES = [
-  { slug: 'electronique', name: 'Électronique' },
-  { slug: 'mode-accessoires', name: 'Mode & Accessoires' },
-  { slug: 'maison-decoration', name: 'Maison & Décoration' },
-  { slug: 'livres-medias', name: 'Livres & Médias' },
-  { slug: 'sports-loisirs', name: 'Sports & Loisirs' },
-  { slug: 'beaute-sante', name: 'Beauté & Santé' },
-  { slug: 'jouets-jeux', name: 'Jouets & Jeux' },
-  { slug: 'alimentation-boissons', name: 'Alimentation & Boissons' },
-  { slug: 'voyage', name: 'Voyage' },
-  { slug: 'autre', name: 'Autre' },
+  { slug: 'electronics', fr: 'Électronique', en: 'Electronics' },
+  { slug: 'fashion-accessories', fr: 'Mode & Accessoires', en: 'Fashion & Accessories' },
+  { slug: 'home-decor', fr: 'Maison & Décoration', en: 'Home & Decor' },
+  { slug: 'books-media', fr: 'Livres & Médias', en: 'Books & Media' },
+  { slug: 'sports-leisure', fr: 'Sports & Loisirs', en: 'Sports & Leisure' },
+  { slug: 'beauty-health', fr: 'Beauté & Santé', en: 'Beauty & Health' },
+  { slug: 'toys-games', fr: 'Jouets & Jeux', en: 'Toys & Games' },
+  { slug: 'food-beverages', fr: 'Alimentation & Boissons', en: 'Food & Beverages' },
+  { slug: 'travel', fr: 'Voyage', en: 'Travel' },
+  { slug: 'other', fr: 'Autre', en: 'Other' },
 ] as const
 
 export async function seedCategories(db: typeof Db): Promise<void> {
   const rows = ROOT_CATEGORY_FIXTURES.map((fixture) => ({
     slug: fixture.slug,
-    name: fixture.name,
     parentId: null,
     depth: 0,
   }))
@@ -27,6 +26,25 @@ export async function seedCategories(db: typeof Db): Promise<void> {
     .values(rows)
     .onConflictDoNothing()
     .returning({ id: categories.id, slug: categories.slug })
+
+  const existing = await db.query.categories.findMany({
+    columns: { id: true, slug: true },
+  })
+
+  const slugToId = new Map(existing.map((row) => [row.slug, row.id]))
+
+  const translationValues = ROOT_CATEGORY_FIXTURES.flatMap((fixture) => {
+    const id = slugToId.get(fixture.slug)
+    if (!id) return []
+    return [
+      { categoryId: id, locale: 'fr' as const, name: fixture.fr },
+      { categoryId: id, locale: 'en' as const, name: fixture.en },
+    ]
+  })
+
+  if (translationValues.length > 0) {
+    await db.insert(categoryTranslations).values(translationValues).onConflictDoNothing()
+  }
 
   console.log(`  categories   ${String(inserted.length)} rows`)
 }

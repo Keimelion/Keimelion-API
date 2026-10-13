@@ -5,6 +5,7 @@ import { RATE_LIMITS } from '../../../shared/utils/rate-limiter.js'
 import { jsonResult } from '../../../shared/utils/response.js'
 import { validationErrorHandler } from '../../../shared/utils/validation.js'
 import { uuidParamSchema } from '../../../shared/schemas/params.js'
+import { getLocale } from '../../../shared/middlewares/resolve-locale.js'
 import {
   MAX_TAGS_PER_RESOURCE,
   tagNameSchema,
@@ -46,7 +47,8 @@ export function mountUpdateItem(router: FeatureRouter): void {
       const user = getAuthUser(context)
       const { id } = context.req.valid('param')
       const input = context.req.valid('json')
-      return jsonResult(context, await updateUserItem(id, user.id, input))
+      const locale = getLocale(context)
+      return jsonResult(context, await updateUserItem(id, user.id, input, locale))
     },
   )
 }

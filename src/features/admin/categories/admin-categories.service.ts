@@ -5,18 +5,20 @@ import { MAX_CATEGORY_DEPTH, serviceError } from '../../../shared/utils/response
 import { logger } from '../../../shared/utils/logger.js'
 import { pickDefined } from '../../../shared/utils/partial-update.js'
 import { runWrite } from '../../../shared/utils/admin-write.js'
-import { findAllCategories } from './admin-categories.repository.js'
+import { findAllCategoriesForAdmin } from './admin-categories.repository.js'
 import {
   deleteCategory,
   findCategoriesByParentIds,
   findCategoryById,
+  findCategoryByIdWithTranslations,
   insertCategory,
   updateCategoryDepth,
   updateCategoryRow,
+  upsertCategoryTranslation,
 } from '../../../db/entities/categories/categories.repository.js'
 import { AdminAction } from '../admin.enums.js'
-import { toCategoryDetail } from '../../../shared/types/category.js'
-import type { CategoryDetail } from '../../../shared/types/category.js'
+import { toAdminCategoryDetail } from '../../../shared/types/category.js'
+import type { AdminCategoryDetail } from '../../../shared/types/category.js'
 import type { Category } from '../../../db/entities/categories/categories.schema.js'
 import type { ServiceResult } from '../../../shared/types/service.js'
 import type { CreateCategoryInput } from './endpoints/create.js'
@@ -26,62 +28,85 @@ const MAX_ALLOWED_DEPTH = MAX_CATEGORY_DEPTH - 1
 
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
+interface NameTranslationsPatch {
+  fr?: string | undefined
+  en?: string | undefined
+}
+
 export async function createCategory(
   adminId: string,
   input: CreateCategoryInput,
-): Promise<ServiceResult<{ category: CategoryDetail }>> {
+): Promise<ServiceResult<{ category: AdminCategoryDetail }>> {
   const depthResolution = await resolveDepthForNewParent(input.parentId)
   if ('errorCode' in depthResolution) return serviceError(depthResolution.errorCode)
 
   const outcome = await runWrite(() =>
-    insertCategory({
-      parentId: input.parentId,
-      name: input.name,
-      slug: input.slug,
-      depth: depthResolution.depth,
+    db.transaction(async (tx) => {
+      const row = await insertCategory(
+        {
+          parentId: input.parentId,
+          slug: input.slug,
+          depth: depthResolution.depth,
+        },
+        tx,
+      )
+      if (!row) return undefined
+      await upsertCategoryTranslation(row.id, 'fr', input.name.fr, tx)
+      await upsertCategoryTranslation(row.id, 'en', input.name.en, tx)
+      return row
     }),
   )
   if ('errorCode' in outcome) return serviceError(outcome.errorCode)
 
-  const category = toCategoryDetail(outcome.row)
-  logger.info({ adminId, action: AdminAction.CREATE_CATEGORY, categoryId: category.id, slug: category.slug })
+  const hydrated = await findCategoryByIdWithTranslations(outcome.row.id)
+  if (!hydrated) return serviceError(ErrorCode.INTERNAL_ERROR)
+
+  const category = toAdminCategoryDetail(hydrated)
+  logger.info({
+    adminId,
+    action: AdminAction.CREATE_CATEGORY,
+    categoryId: category.id,
+    slug: category.slug,
+  })
   return { data: { category }, httpStatus: HttpStatus.CREATED }
 }
 
-export async function listCategories(): Promise<ServiceResult<{ items: CategoryDetail[] }>> {
-  const rows = await findAllCategories()
+export async function listCategories(): Promise<ServiceResult<{ items: AdminCategoryDetail[] }>> {
+  const rows = await findAllCategoriesForAdmin()
   return {
-    data: { items: rows.map(toCategoryDetail) },
+    data: { items: rows.map(toAdminCategoryDetail) },
     httpStatus: HttpStatus.OK,
   }
 }
 
 export async function getCategoryById(
   id: string,
-): Promise<ServiceResult<{ category: CategoryDetail }>> {
-  const row = await findCategoryById(id)
+): Promise<ServiceResult<{ category: AdminCategoryDetail }>> {
+  const row = await findCategoryByIdWithTranslations(id)
   if (!row) return serviceError(ErrorCode.CATEGORY_NOT_FOUND)
-  return { data: { category: toCategoryDetail(row) }, httpStatus: HttpStatus.OK }
+  return { data: { category: toAdminCategoryDetail(row) }, httpStatus: HttpStatus.OK }
 }
 
 export async function updateCategoryById(
   adminId: string,
   id: string,
   input: UpdateCategoryInput,
-): Promise<ServiceResult<{ category: CategoryDetail }>> {
+): Promise<ServiceResult<{ category: AdminCategoryDetail }>> {
   const existing = await findCategoryById(id)
   if (!existing) return serviceError(ErrorCode.CATEGORY_NOT_FOUND)
 
-  const nameSlugPatch = pickDefined({ name: input.name, slug: input.slug })
+  const slugPatch = pickDefined({ slug: input.slug })
+  const nameTranslations = input.name ?? null
+  const hasChanges = Object.keys(slugPatch).length > 0 || nameTranslations !== null
 
   if (input.parentId === undefined) {
-    if (Object.keys(nameSlugPatch).length === 0) {
-      return { data: { category: toCategoryDetail(existing) }, httpStatus: HttpStatus.OK }
+    if (!hasChanges) {
+      return hydrateAdminCategoryResponse(id)
     }
-    return applySimplePatch(id, nameSlugPatch)
+    return applySimplePatch(id, slugPatch, nameTranslations)
   }
 
-  return applyParentChange(adminId, existing, input.parentId, nameSlugPatch)
+  return applyParentChange(adminId, existing, input.parentId, slugPatch, nameTranslations)
 }
 
 export async function deleteCategoryById(
@@ -92,7 +117,12 @@ export async function deleteCategoryById(
   if (!existing) return serviceError(ErrorCode.CATEGORY_NOT_FOUND)
 
   await deleteCategory(id)
-  logger.warn({ adminId, action: AdminAction.DELETE_CATEGORY, categoryId: id, slug: existing.slug })
+  logger.warn({
+    adminId,
+    action: AdminAction.DELETE_CATEGORY,
+    categoryId: id,
+    slug: existing.slug,
+  })
   return { data: null, httpStatus: HttpStatus.NO_CONTENT }
 }
 
@@ -116,19 +146,33 @@ async function resolveDepthForNewParent(
 
 async function applySimplePatch(
   id: string,
-  patch: { name?: string; slug?: string },
-): Promise<ServiceResult<{ category: CategoryDetail }>> {
-  const outcome = await runWrite(() => updateCategoryRow(id, patch))
+  slugPatch: { slug?: string },
+  nameTranslations: NameTranslationsPatch | null,
+): Promise<ServiceResult<{ category: AdminCategoryDetail }>> {
+  const outcome = await runWrite(() =>
+    db.transaction(async (tx) => {
+      if (Object.keys(slugPatch).length > 0) {
+        const updated = await updateCategoryRow(id, slugPatch, tx)
+        if (!updated) return undefined
+      }
+      if (nameTranslations !== null) {
+        await writeNameTranslations(id, nameTranslations, tx)
+      }
+      return findCategoryById(id, tx)
+    }),
+  )
   if ('errorCode' in outcome) return serviceError(outcome.errorCode)
-  return { data: { category: toCategoryDetail(outcome.row) }, httpStatus: HttpStatus.OK }
+
+  return hydrateAdminCategoryResponse(id)
 }
 
 async function applyParentChange(
   adminId: string,
   existing: Category,
   newParentId: string | null,
-  nameSlugPatch: { name?: string; slug?: string },
-): Promise<ServiceResult<{ category: CategoryDetail }>> {
+  slugPatch: { slug?: string },
+  nameTranslations: NameTranslationsPatch | null,
+): Promise<ServiceResult<{ category: AdminCategoryDetail }>> {
   if (newParentId === existing.id) return serviceError(ErrorCode.CATEGORY_CYCLE_DETECTED)
 
   const resolution = await resolveParentChange(existing, newParentId)
@@ -136,7 +180,14 @@ async function applyParentChange(
 
   const outcome = await runWrite(() =>
     db.transaction(async (tx) =>
-      applyParentChangeInTransaction(tx, existing, resolution, newParentId, nameSlugPatch),
+      applyParentChangeInTransaction(
+        tx,
+        existing,
+        resolution,
+        newParentId,
+        slugPatch,
+        nameTranslations,
+      ),
     ),
   )
   if ('errorCode' in outcome) return serviceError(outcome.errorCode)
@@ -148,7 +199,7 @@ async function applyParentChange(
     slug: existing.slug,
     changes: { parentId: { from: existing.parentId, to: newParentId } },
   })
-  return { data: { category: toCategoryDetail(outcome.row) }, httpStatus: HttpStatus.OK }
+  return hydrateAdminCategoryResponse(existing.id)
 }
 
 interface ParentChangeResolution {
@@ -192,14 +243,19 @@ async function applyParentChangeInTransaction(
   existing: Category,
   resolution: ParentChangeResolution,
   newParentId: string | null,
-  nameSlugPatch: { name?: string; slug?: string },
+  slugPatch: { slug?: string },
+  nameTranslations: NameTranslationsPatch | null,
 ): Promise<Category | undefined> {
   const row = await updateCategoryRow(
     existing.id,
-    { ...nameSlugPatch, parentId: newParentId, depth: resolution.newDepth },
+    { ...slugPatch, parentId: newParentId, depth: resolution.newDepth },
     tx,
   )
   if (!row) return undefined
+
+  if (nameTranslations !== null) {
+    await writeNameTranslations(existing.id, nameTranslations, tx)
+  }
 
   if (resolution.offset !== 0) {
     await Promise.all(
@@ -227,4 +283,25 @@ async function loadDescendants(rootId: string): Promise<Category[]> {
   if (children.length === 0) return []
   const grandchildren = await findCategoriesByParentIds(children.map((child) => child.id))
   return [...children, ...grandchildren]
+}
+
+async function writeNameTranslations(
+  categoryId: string,
+  translations: NameTranslationsPatch,
+  tx: DbTransaction,
+): Promise<void> {
+  if (translations.fr !== undefined) {
+    await upsertCategoryTranslation(categoryId, 'fr', translations.fr, tx)
+  }
+  if (translations.en !== undefined) {
+    await upsertCategoryTranslation(categoryId, 'en', translations.en, tx)
+  }
+}
+
+async function hydrateAdminCategoryResponse(
+  id: string,
+): Promise<ServiceResult<{ category: AdminCategoryDetail }>> {
+  const row = await findCategoryByIdWithTranslations(id)
+  if (!row) return serviceError(ErrorCode.INTERNAL_ERROR)
+  return { data: { category: toAdminCategoryDetail(row) }, httpStatus: HttpStatus.OK }
 }

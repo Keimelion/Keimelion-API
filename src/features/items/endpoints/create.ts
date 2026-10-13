@@ -4,6 +4,7 @@ import { authMiddleware, getAuthUser } from '../../../shared/middlewares/auth.js
 import { RATE_LIMITS } from '../../../shared/utils/rate-limiter.js'
 import { validationErrorHandler } from '../../../shared/utils/validation.js'
 import { jsonResult } from '../../../shared/utils/response.js'
+import { getLocale } from '../../../shared/middlewares/resolve-locale.js'
 import {
   itemDescriptionSchema,
   itemImageUrlSchema,
@@ -31,7 +32,8 @@ export function mountCreateItem(router: FeatureRouter): void {
     async (context) => {
       const user = getAuthUser(context)
       const input = context.req.valid('json')
-      return jsonResult(context, await createUserItem(user.id, input))
+      const locale = getLocale(context)
+      return jsonResult(context, await createUserItem(user.id, input, locale))
     },
   )
 }

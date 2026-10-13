@@ -45,7 +45,7 @@ export function findAllItemsWithSources(
     offset,
     with: {
       sources: { with: { shop: true } },
-      itemCategories: { with: { category: true } },
+      itemCategories: { with: { category: { with: { translations: true } } } },
       itemTags: { with: { tag: true } },
     },
   })

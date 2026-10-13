@@ -1,10 +1,11 @@
 import { asc } from 'drizzle-orm'
 import { db } from '../../../db/client.js'
 import { categories } from '../../../db/entities/categories/categories.schema.js'
-import type { Category } from '../../../db/entities/categories/categories.schema.js'
+import type { CategoryRowWithTranslations } from '../../../shared/types/category.js'
 
-export function findAllCategories(): Promise<Category[]> {
+export function findAllCategoriesForAdmin(): Promise<CategoryRowWithTranslations[]> {
   return db.query.categories.findMany({
-    orderBy: [asc(categories.depth), asc(categories.name)],
+    orderBy: [asc(categories.depth), asc(categories.slug)],
+    with: { translations: true },
   })
 }

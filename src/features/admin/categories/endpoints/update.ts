@@ -7,15 +7,15 @@ import { getAuthUser } from '../../../../shared/middlewares/auth.js'
 import { RATE_LIMITS } from '../../../../shared/utils/rate-limiter.js'
 import { uuidParamSchema } from '../../../../shared/schemas/params.js'
 import {
-  categoryNameSchema,
   categorySlugSchema,
+  categoryTranslationsUpdateSchema,
 } from '../../../../db/entities/categories/categories.schemas.js'
 import type { FeatureRouter } from '../../../../shared/types/app.js'
 import { updateCategoryById } from '../admin-categories.service.js'
 
 const adminUpdateCategorySchema = z
   .object({
-    name: categoryNameSchema.optional(),
+    name: categoryTranslationsUpdateSchema.optional(),
     slug: categorySlugSchema.optional(),
     parentId: z.string().uuid().nullable().optional(),
   })

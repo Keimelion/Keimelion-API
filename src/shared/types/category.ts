@@ -1,4 +1,9 @@
-import type { Category } from '../../db/entities/categories/categories.schema.js'
+import { DEFAULT_LOCALE } from '../enums/locale.js'
+import type { Locale } from '../enums/locale.js'
+import type {
+  Category,
+  CategoryTranslation,
+} from '../../db/entities/categories/categories.schema.js'
 
 export interface CategoryPublic {
   id: string
@@ -8,16 +13,35 @@ export interface CategoryPublic {
   depth: number
 }
 
-export interface CategoryDetail extends CategoryPublic {
-  createdAt: Date
-  updatedAt: Date
-}
-
 export interface CategoryTreeNode extends CategoryPublic {
   children: CategoryTreeNode[]
 }
 
-export function toCategoryPublic(row: Category): CategoryPublic {
+export interface CategoryRowWithResolvedName {
+  id: string
+  parentId: string | null
+  slug: string
+  depth: number
+  name: string
+}
+
+export interface CategoryRowWithTranslations extends Category {
+  translations: CategoryTranslation[]
+}
+
+export type CategoryTranslationsDict = Partial<Record<Locale, string>>
+
+export interface AdminCategoryDetail {
+  id: string
+  parentId: string | null
+  slug: string
+  depth: number
+  translations: CategoryTranslationsDict
+  createdAt: Date
+  updatedAt: Date
+}
+
+export function toCategoryPublic(row: CategoryRowWithResolvedName): CategoryPublic {
   return {
     id: row.id,
     parentId: row.parentId ?? null,
@@ -27,9 +51,33 @@ export function toCategoryPublic(row: Category): CategoryPublic {
   }
 }
 
-export function toCategoryDetail(row: Category): CategoryDetail {
+export function resolveCategoryName(
+  translations: readonly CategoryTranslation[],
+  locale: Locale,
+): string {
+  const match = translations.find((translation) => translation.locale === locale)
+  if (match) return match.name
+  const fallback = translations.find((translation) => translation.locale === DEFAULT_LOCALE)
+  return fallback?.name ?? ''
+}
+
+export function toTranslationsDict(
+  translations: readonly CategoryTranslation[],
+): CategoryTranslationsDict {
+  const dict: CategoryTranslationsDict = {}
+  for (const translation of translations) {
+    dict[translation.locale] = translation.name
+  }
+  return dict
+}
+
+export function toAdminCategoryDetail(row: CategoryRowWithTranslations): AdminCategoryDetail {
   return {
-    ...toCategoryPublic(row),
+    id: row.id,
+    parentId: row.parentId ?? null,
+    slug: row.slug,
+    depth: row.depth,
+    translations: toTranslationsDict(row.translations),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   }

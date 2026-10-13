@@ -11,3 +11,21 @@ export const categoryNameSchema = z
   .max(MAX_CATEGORY_NAME_LENGTH)
 
 export const categorySlugSchema = shopSlugSchema
+
+export const categoryTranslationsCreateSchema = z
+  .object({
+    fr: categoryNameSchema,
+    en: categoryNameSchema,
+  })
+  .strict()
+
+export const categoryTranslationsUpdateSchema = z
+  .object({
+    fr: categoryNameSchema.optional(),
+    en: categoryNameSchema.optional(),
+  })
+  .strict()
+  .refine(
+    (value) => value.fr !== undefined || value.en !== undefined,
+    'At least one translation must be provided',
+  )

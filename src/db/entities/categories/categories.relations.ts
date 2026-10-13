@@ -1,5 +1,5 @@
 import { relations } from 'drizzle-orm'
-import { categories } from './categories.schema.js'
+import { categories, categoryTranslations } from './categories.schema.js'
 import { itemCategories } from '../item-categories/item-categories.schema.js'
 
 export const categoriesRelations = relations(categories, ({ one, many }) => ({
@@ -10,4 +10,12 @@ export const categoriesRelations = relations(categories, ({ one, many }) => ({
   }),
   children: many(categories, { relationName: 'category_parent' }),
   itemCategories: many(itemCategories),
+  translations: many(categoryTranslations),
+}))
+
+export const categoryTranslationsRelations = relations(categoryTranslations, ({ one }) => ({
+  category: one(categories, {
+    fields: [categoryTranslations.categoryId],
+    references: [categories.id],
+  }),
 }))

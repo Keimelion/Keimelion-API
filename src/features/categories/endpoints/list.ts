@@ -1,24 +1,31 @@
 import { HttpStatus } from '../../../shared/enums/http.js'
 import { findAllCategoriesOrdered } from '../../../db/entities/categories/categories.repository.js'
+import { getLocale } from '../../../shared/middlewares/resolve-locale.js'
 import { jsonResult } from '../../../shared/utils/response.js'
 import { toCategoryPublic } from '../../../shared/types/category.js'
-import type { Category } from '../../../db/entities/categories/categories.schema.js'
-import type { CategoryTreeNode } from '../../../shared/types/category.js'
+import type {
+  CategoryRowWithResolvedName,
+  CategoryTreeNode,
+} from '../../../shared/types/category.js'
 import type { FeatureRouter } from '../../../shared/types/app.js'
+import type { Locale } from '../../../shared/enums/locale.js'
 import type { ServiceResult } from '../../../shared/types/service.js'
 
 export function mountListCategories(router: FeatureRouter): void {
   router.get('/', async (context) => {
-    return jsonResult(context, await listCategoryTree())
+    const locale = getLocale(context)
+    return jsonResult(context, await listCategoryTree(locale))
   })
 }
 
-async function listCategoryTree(): Promise<ServiceResult<{ categories: CategoryTreeNode[] }>> {
-  const rows = await findAllCategoriesOrdered()
+async function listCategoryTree(
+  locale: Locale,
+): Promise<ServiceResult<{ categories: CategoryTreeNode[] }>> {
+  const rows = await findAllCategoriesOrdered(locale)
   return { data: { categories: buildCategoryTree(rows) }, httpStatus: HttpStatus.OK }
 }
 
-function buildCategoryTree(rows: Category[]): CategoryTreeNode[] {
+function buildCategoryTree(rows: CategoryRowWithResolvedName[]): CategoryTreeNode[] {
   const nodesById = new Map<string, CategoryTreeNode>()
   for (const row of rows) {
     nodesById.set(row.id, { ...toCategoryPublic(row), children: [] })
