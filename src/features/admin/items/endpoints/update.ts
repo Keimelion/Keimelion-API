@@ -11,7 +11,7 @@ import {
   itemDescriptionSchema,
   itemImageUrlSchema,
 } from '../../../../db/entities/items/items.schemas.js'
-import { MAX_CATEGORIES_PER_ITEM } from '../../../../db/entities/item-categories/item-categories.schemas.js'
+import { itemCategoriesInputSchema } from '../../../../db/entities/item-categories/item-categories.schemas.js'
 import { getLocale } from '../../../../shared/middlewares/resolve-locale.js'
 import type { FeatureRouter } from '../../../../shared/types/app.js'
 import { updateItemById } from '../admin-items.service.js'
@@ -21,13 +21,7 @@ const adminUpdateItemSchema = z
     name: itemNameSchema.optional(),
     description: itemDescriptionSchema.optional(),
     imageUrl: itemImageUrlSchema.optional(),
-    categories: z
-      .array(z.string().uuid())
-      .max(
-        MAX_CATEGORIES_PER_ITEM,
-        `categories must contain at most ${String(MAX_CATEGORIES_PER_ITEM)} entries`,
-      )
-      .optional(),
+    categories: itemCategoriesInputSchema,
   })
   .strict()
 

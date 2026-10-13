@@ -3,6 +3,7 @@ import { db } from '../../../db/client.js'
 import { apiRequest } from '../../../shared/test/api-request.js'
 import { generateTestToken, makeAccessTokenEntry } from '../../../shared/test/auth.js'
 import { logger } from '../../../shared/utils/logger.js'
+import { MAX_CATEGORIES_PER_ITEM } from '../../../db/entities/item-categories/item-categories.schemas.js'
 
 vi.mock('../../../shared/utils/logger.js', () => ({
   logger: {
@@ -617,11 +618,11 @@ describe('POST /v1/admin/items', () => {
     expect(response.status).toBe(422)
   })
 
-  it('returns 422 when categories exceeds max count (20)', async () => {
+  it(`returns 422 when categories exceeds max count (${String(MAX_CATEGORIES_PER_ITEM)})`, async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
     const tooMany = Array.from(
-      { length: 21 },
+      { length: MAX_CATEGORIES_PER_ITEM + 1 },
       (_, i) => `00000000-0000-0000-0000-${String(i).padStart(12, '0')}`,
     )
 
@@ -1096,11 +1097,11 @@ describe('PATCH /v1/admin/items/:id', () => {
     expect(body.item.categories.map((category) => category.slug)).toEqual(['electronics'])
   })
 
-  it('returns 422 when categories exceeds max count (20)', async () => {
+  it(`returns 422 when categories exceeds max count (${String(MAX_CATEGORIES_PER_ITEM)})`, async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
     const tooMany = Array.from(
-      { length: 21 },
+      { length: MAX_CATEGORIES_PER_ITEM + 1 },
       (_, i) => `00000000-0000-0000-0000-${String(i).padStart(12, '0')}`,
     )
 
