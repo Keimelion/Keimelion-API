@@ -15,6 +15,8 @@ import {
   countListItemsReferencing,
 } from '../../../db/entities/items/items.repository.js'
 import { insertItemSource } from '../../../db/entities/item-sources/item-sources.repository.js'
+import { findCategoriesByIds } from '../../../db/entities/categories/categories.repository.js'
+import { replaceItemCategories } from '../../../db/entities/item-categories/item-categories.repository.js'
 import { findAllItemsWithSources, countItems } from './admin-items.repository.js'
 import { toItemWithSources } from '../../../shared/types/item.js'
 import { AdminAction } from '../admin.enums.js'
@@ -36,6 +38,14 @@ export async function createItem(
   input: CreateItemInput,
   locale: Locale,
 ): Promise<ServiceResult<{ item: ItemWithSources }>> {
+  const uniqueCategoryIds = input.categories ? Array.from(new Set(input.categories)) : []
+  if (uniqueCategoryIds.length > 0) {
+    const found = await findCategoriesByIds(uniqueCategoryIds)
+    if (found.length !== uniqueCategoryIds.length) {
+      return serviceError(ErrorCode.CATEGORY_NOT_FOUND)
+    }
+  }
+
   const outcome = await runWrite(() =>
     db.transaction(async (tx) => {
       const item = await insertItem(
@@ -61,6 +71,10 @@ export async function createItem(
           tx,
         )
         if (!inserted) throw new Error('item_source_insert_failed')
+      }
+
+      if (uniqueCategoryIds.length > 0) {
+        await replaceItemCategories(item.id, uniqueCategoryIds, tx)
       }
 
       return item
@@ -121,11 +135,34 @@ export async function updateItemById(
     imageUrl: input.imageUrl,
   })
 
-  if (Object.keys(fieldPatch).length === 0) {
+  const { categories } = input
+  if (Object.keys(fieldPatch).length === 0 && categories === undefined) {
     return serviceError(ErrorCode.NO_FIELDS_TO_UPDATE)
   }
 
-  const outcome = await runWrite(() => updateItem(id, fieldPatch))
+  let uniqueCategoryIds: string[] | null = null
+  if (categories !== undefined) {
+    uniqueCategoryIds = Array.from(new Set(categories))
+    if (uniqueCategoryIds.length > 0) {
+      const found = await findCategoriesByIds(uniqueCategoryIds)
+      if (found.length !== uniqueCategoryIds.length) {
+        return serviceError(ErrorCode.CATEGORY_NOT_FOUND)
+      }
+    }
+  }
+
+  const outcome = await runWrite(() =>
+    db.transaction(async (tx) => {
+      const updated =
+        Object.keys(fieldPatch).length > 0
+          ? await updateItem(id, fieldPatch, tx)
+          : existingRow
+      if (uniqueCategoryIds !== null) {
+        await replaceItemCategories(id, uniqueCategoryIds, tx)
+      }
+      return updated
+    }),
+  )
   if ('errorCode' in outcome) return serviceError(outcome.errorCode)
 
   const hydrated = await findItemByIdWithSources(outcome.row.id)

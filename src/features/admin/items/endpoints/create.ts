@@ -17,6 +17,7 @@ import {
   reportDuplicateSourceShopIds,
   shopIdSchema,
 } from '../../../../db/entities/item-sources/item-sources.schemas.js'
+import { MAX_CATEGORIES_PER_ITEM } from '../../../../db/entities/item-categories/item-categories.schemas.js'
 import { getLocale } from '../../../../shared/middlewares/resolve-locale.js'
 import type { FeatureRouter } from '../../../../shared/types/app.js'
 import { createItem } from '../admin-items.service.js'
@@ -36,6 +37,13 @@ const adminCreateItemSchema = z
     description: itemDescriptionSchema.optional().transform((value) => value ?? null),
     imageUrl: itemImageUrlSchema.optional().transform((value) => value ?? null),
     sources: z.array(createItemSourceInputSchema).min(1),
+    categories: z
+      .array(z.string().uuid())
+      .max(
+        MAX_CATEGORIES_PER_ITEM,
+        `categories must contain at most ${String(MAX_CATEGORIES_PER_ITEM)} entries`,
+      )
+      .optional(),
   })
   .strict()
   .superRefine((value, ctx) => {

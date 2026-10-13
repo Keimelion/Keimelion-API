@@ -97,6 +97,29 @@ const SOURCE_WITH_SHOP_ROW = {
   shop: SHOP_ROW,
 }
 
+const CATEGORY_ONE = {
+  id: '00000000-0000-0000-0000-000000000040',
+  parentId: null,
+  slug: 'electronics',
+  depth: 0,
+  createdAt: new Date('2024-01-01'),
+  updatedAt: new Date('2024-01-01'),
+  translations: [
+    { categoryId: '00000000-0000-0000-0000-000000000040', locale: 'en' as const, name: 'Electronics' },
+    { categoryId: '00000000-0000-0000-0000-000000000040', locale: 'fr' as const, name: 'Électronique' },
+  ],
+}
+
+const CATEGORY_TWO = {
+  ...CATEGORY_ONE,
+  id: '00000000-0000-0000-0000-000000000041',
+  slug: 'mode',
+  translations: [
+    { categoryId: '00000000-0000-0000-0000-000000000041', locale: 'en' as const, name: 'Mode' },
+    { categoryId: '00000000-0000-0000-0000-000000000041', locale: 'fr' as const, name: 'Mode' },
+  ],
+}
+
 const ACCESS_TOKEN_ENTRY = makeAccessTokenEntry(ADMIN_USER.id)
 
 function mockAdminAuth(): void {
@@ -169,6 +192,24 @@ function itemWith(sources: SourceRow[]): typeof ITEM_ROW & {
   return { ...ITEM_ROW, sources, itemCategories: [], itemTags: [] }
 }
 
+function itemWithCategoryLinks(categories: (typeof CATEGORY_ONE)[]): typeof ITEM_ROW & {
+  sources: SourceRow[]
+  itemCategories: { itemId: string; categoryId: string; assignedAt: Date; category: typeof CATEGORY_ONE }[]
+  itemTags: never[]
+} {
+  return {
+    ...ITEM_ROW,
+    sources: [],
+    itemCategories: categories.map((category) => ({
+      itemId: ITEM_ROW.id,
+      categoryId: category.id,
+      assignedAt: new Date('2024-01-01'),
+      category,
+    })),
+    itemTags: [],
+  }
+}
+
 function buildTxInsertMock(rows: unknown[]): ReturnType<typeof vi.fn> {
   const insert = vi.fn()
   for (const row of rows) {
@@ -183,10 +224,15 @@ function buildTxInsertMock(rows: unknown[]): ReturnType<typeof vi.fn> {
 
 function mockCreateItemTransaction(itemRow: unknown, sourceRows: unknown[]): void {
   vi.mocked(db.transaction).mockImplementationOnce((callback) => {
+    const insertMock = buildTxInsertMock([itemRow, ...sourceRows])
+    // Fallback for extra inserts (e.g. itemCategories from replaceItemCategories).
+    insertMock.mockReturnValue({
+      values: vi.fn().mockResolvedValue(undefined),
+    })
     const tx = {
-      insert: buildTxInsertMock([itemRow, ...sourceRows]),
+      insert: insertMock,
       update: vi.fn(),
-      delete: vi.fn(),
+      delete: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) }),
       select: vi.fn(),
     }
     return callback(tx as never) as never
@@ -498,6 +544,98 @@ describe('POST /v1/admin/items', () => {
     })
 
     expect(response.status).toBe(201)
+  })
+
+  it('inserts category links and returns hydrated categories when categories are provided', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    vi.mocked(db.query.categories.findMany).mockResolvedValueOnce([CATEGORY_ONE, CATEGORY_TWO] as never)
+    mockCreateItemTransaction(ITEM_ROW, [SOURCE_ROW])
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(
+      {
+        ...ITEM_ROW,
+        sources: [SOURCE_ROW],
+        itemCategories: [
+          { itemId: ITEM_ROW.id, categoryId: CATEGORY_ONE.id, assignedAt: new Date(), category: CATEGORY_ONE },
+          { itemId: ITEM_ROW.id, categoryId: CATEGORY_TWO.id, assignedAt: new Date(), category: CATEGORY_TWO },
+        ],
+        itemTags: [],
+      } as never,
+    )
+
+    const response = await apiRequest('/v1/admin/items', {
+      method: 'POST',
+      token,
+      body: {
+        name: 'Test Item',
+        sources: [{ currency: 'EUR' }],
+        categories: [CATEGORY_ONE.id, CATEGORY_TWO.id],
+      },
+    })
+
+    const body = await response.json() as { item: { categories: { slug: string }[] } }
+    expect(response.status).toBe(201)
+    expect(body.item.categories.map((category) => category.slug)).toEqual(
+      expect.arrayContaining(['electronics', 'mode']),
+    )
+  })
+
+  it('returns 404 CATEGORY_NOT_FOUND when a provided category UUID does not exist', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    vi.mocked(db.query.categories.findMany).mockResolvedValueOnce([CATEGORY_ONE] as never)
+
+    const response = await apiRequest('/v1/admin/items', {
+      method: 'POST',
+      token,
+      body: {
+        name: 'Test Item',
+        sources: [{ currency: 'EUR' }],
+        categories: [CATEGORY_ONE.id, CATEGORY_TWO.id],
+      },
+    })
+
+    const body = await response.json() as { code: string }
+    expect(response.status).toBe(404)
+    expect(body.code).toBe('CATEGORY_NOT_FOUND')
+  })
+
+  it('returns 422 when categories contains a non-UUID string', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    const response = await apiRequest('/v1/admin/items', {
+      method: 'POST',
+      token,
+      body: {
+        name: 'Test Item',
+        sources: [{ currency: 'EUR' }],
+        categories: ['not-a-uuid'],
+      },
+    })
+
+    expect(response.status).toBe(422)
+  })
+
+  it('returns 422 when categories exceeds max count (20)', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    const tooMany = Array.from(
+      { length: 21 },
+      (_, i) => `00000000-0000-0000-0000-${String(i).padStart(12, '0')}`,
+    )
+
+    const response = await apiRequest('/v1/admin/items', {
+      method: 'POST',
+      token,
+      body: {
+        name: 'Test Item',
+        sources: [{ currency: 'EUR' }],
+        categories: tooMany,
+      },
+    })
+
+    expect(response.status).toBe(422)
   })
 })
 
@@ -880,6 +1018,99 @@ describe('PATCH /v1/admin/items/:id', () => {
     })
 
     expect(response.status).toBe(401)
+  })
+
+  it('replaces categories when categories are provided', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindItemById(ITEM_ROW)
+    vi.mocked(db.query.categories.findMany).mockResolvedValueOnce([CATEGORY_ONE, CATEGORY_TWO] as never)
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(
+      itemWithCategoryLinks([CATEGORY_ONE, CATEGORY_TWO]) as never,
+    )
+
+    const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}`, {
+      method: 'PATCH',
+      token,
+      body: { categories: [CATEGORY_ONE.id, CATEGORY_TWO.id] },
+    })
+
+    const body = await response.json() as { item: { categories: { slug: string }[] } }
+    expect(response.status).toBe(200)
+    expect(body.item.categories.map((category) => category.slug)).toEqual(
+      expect.arrayContaining(['electronics', 'mode']),
+    )
+  })
+
+  it('clears all categories when categories: [] is sent', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindItemById(ITEM_ROW)
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(itemWithCategoryLinks([]) as never)
+
+    const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}`, {
+      method: 'PATCH',
+      token,
+      body: { categories: [] },
+    })
+
+    const body = await response.json() as { item: { categories: unknown[] } }
+    expect(response.status).toBe(200)
+    expect(body.item.categories).toEqual([])
+  })
+
+  it('returns 404 CATEGORY_NOT_FOUND when a category UUID does not exist', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindItemById(ITEM_ROW)
+    vi.mocked(db.query.categories.findMany).mockResolvedValueOnce([CATEGORY_ONE] as never)
+
+    const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}`, {
+      method: 'PATCH',
+      token,
+      body: { categories: [CATEGORY_ONE.id, CATEGORY_TWO.id] },
+    })
+
+    const body = await response.json() as { code: string }
+    expect(response.status).toBe(404)
+    expect(body.code).toBe('CATEGORY_NOT_FOUND')
+  })
+
+  it('accepts a categories-only patch (no scalar fields)', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindItemById(ITEM_ROW)
+    vi.mocked(db.query.categories.findMany).mockResolvedValueOnce([CATEGORY_ONE] as never)
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(
+      itemWithCategoryLinks([CATEGORY_ONE]) as never,
+    )
+
+    const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}`, {
+      method: 'PATCH',
+      token,
+      body: { categories: [CATEGORY_ONE.id] },
+    })
+
+    const body = await response.json() as { item: { categories: { slug: string }[] } }
+    expect(response.status).toBe(200)
+    expect(body.item.categories.map((category) => category.slug)).toEqual(['electronics'])
+  })
+
+  it('returns 422 when categories exceeds max count (20)', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    const tooMany = Array.from(
+      { length: 21 },
+      (_, i) => `00000000-0000-0000-0000-${String(i).padStart(12, '0')}`,
+    )
+
+    const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}`, {
+      method: 'PATCH',
+      token,
+      body: { categories: tooMany },
+    })
+
+    expect(response.status).toBe(422)
   })
 })
 

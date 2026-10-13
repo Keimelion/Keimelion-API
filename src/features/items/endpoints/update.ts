@@ -10,10 +10,9 @@ import {
   MAX_TAGS_PER_RESOURCE,
   tagNameSchema,
 } from '../../../db/entities/tags/tags.schemas.js'
+import { MAX_CATEGORIES_PER_ITEM } from '../../../db/entities/item-categories/item-categories.schemas.js'
 import type { FeatureRouter } from '../../../shared/types/app.js'
 import { updateUserItem } from '../items.service.js'
-
-const MAX_CATEGORIES_PER_ITEM = 20
 
 const updateItemSchema = z
   .object({
