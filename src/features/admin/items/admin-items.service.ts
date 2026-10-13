@@ -22,6 +22,7 @@ import type { items } from '../../../db/entities/items/items.schema.js'
 import type { ItemWithSources } from '../../../shared/types/item.js'
 import type { ServiceResult } from '../../../shared/types/service.js'
 import type { PaginatedResponse } from '../../../shared/types/api.js'
+import type { Locale } from '../../../shared/enums/locale.js'
 import type { ListItemsInput } from './endpoints/list.js'
 import type { CreateItemInput } from './endpoints/create.js'
 import type { UpdateItemInput } from './endpoints/update.js'
@@ -33,6 +34,7 @@ type ItemUpdateFields = Partial<Pick<typeof items.$inferInsert, 'name' | 'descri
 export async function createItem(
   adminId: string,
   input: CreateItemInput,
+  locale: Locale,
 ): Promise<ServiceResult<{ item: ItemWithSources }>> {
   const outcome = await runWrite(() =>
     db.transaction(async (tx) => {
@@ -70,30 +72,36 @@ export async function createItem(
   const hydrated = await findItemByIdWithSources(outcome.row.id)
   if (!hydrated) return serviceError(ErrorCode.INTERNAL_ERROR)
 
-  const item = toItemWithSources(hydrated)
+  const item = toItemWithSources(hydrated, locale)
   logger.info({ adminId, action: AdminAction.CREATE_ITEM, itemId: item.id })
   return { data: { item }, httpStatus: HttpStatus.CREATED }
 }
 
 export async function listItems(
   input: ListItemsInput,
+  locale: Locale,
 ): Promise<ServiceResult<PaginatedResponse<ItemWithSources>>> {
   const [rows, total] = await Promise.all([findAllItemsWithSources(input, input), countItems(input)])
 
   return {
-    data: buildPaginatedResponse(rows.map((row) => toItemWithSources(row)), input, total),
+    data: buildPaginatedResponse(
+      rows.map((row) => toItemWithSources(row, locale)),
+      input,
+      total,
+    ),
     httpStatus: HttpStatus.OK,
   }
 }
 
 export async function getItemById(
   id: string,
+  locale: Locale,
 ): Promise<ServiceResult<{ item: ItemWithSources }>> {
   const row = await findItemByIdWithSources(id)
   if (!row) return serviceError(ErrorCode.NOT_FOUND)
 
   return {
-    data: { item: toItemWithSources(row) },
+    data: { item: toItemWithSources(row, locale) },
     httpStatus: HttpStatus.OK,
   }
 }
@@ -102,6 +110,7 @@ export async function updateItemById(
   adminId: string,
   id: string,
   input: UpdateItemInput,
+  locale: Locale,
 ): Promise<ServiceResult<{ item: ItemWithSources }>> {
   const existingRow = await findItemById(id)
   if (!existingRow) return serviceError(ErrorCode.NOT_FOUND)
@@ -124,7 +133,7 @@ export async function updateItemById(
 
   const changes = buildChanges(existingRow, fieldPatch, { redactFields: URL_FIELDS, redactedValue: '<url>' })
   logger.info({ adminId, action: AdminAction.UPDATE_ITEM, itemId: id, changes })
-  return { data: { item: toItemWithSources(hydrated) }, httpStatus: HttpStatus.OK }
+  return { data: { item: toItemWithSources(hydrated, locale) }, httpStatus: HttpStatus.OK }
 }
 
 export async function deleteItemById(

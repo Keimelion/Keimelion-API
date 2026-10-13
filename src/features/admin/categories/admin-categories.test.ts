@@ -46,29 +46,51 @@ const NON_ADMIN_USER = {
 const ROOT_CATEGORY = {
   id: '00000000-0000-0000-0000-000000000010',
   parentId: null,
-  name: 'Électronique',
-  slug: 'electronique',
+  slug: 'electronics',
   depth: 0,
   createdAt: new Date('2024-01-01'),
   updatedAt: new Date('2024-01-01'),
+}
+
+const ROOT_CATEGORY_TRANSLATIONS = [
+  { categoryId: ROOT_CATEGORY.id, locale: 'fr' as const, name: 'Électronique' },
+  { categoryId: ROOT_CATEGORY.id, locale: 'en' as const, name: 'Electronics' },
+]
+
+const ROOT_CATEGORY_WITH_TRANSLATIONS = {
+  ...ROOT_CATEGORY,
+  translations: ROOT_CATEGORY_TRANSLATIONS,
 }
 
 const CHILD_CATEGORY = {
   ...ROOT_CATEGORY,
   id: '00000000-0000-0000-0000-000000000011',
   parentId: ROOT_CATEGORY.id,
-  name: 'Smartphones',
   slug: 'smartphones',
   depth: 1,
+}
+
+const CHILD_CATEGORY_WITH_TRANSLATIONS = {
+  ...CHILD_CATEGORY,
+  translations: [
+    { categoryId: CHILD_CATEGORY.id, locale: 'fr' as const, name: 'Téléphones' },
+    { categoryId: CHILD_CATEGORY.id, locale: 'en' as const, name: 'Smartphones' },
+  ],
 }
 
 const GRANDCHILD_CATEGORY = {
   ...ROOT_CATEGORY,
   id: '00000000-0000-0000-0000-000000000012',
   parentId: CHILD_CATEGORY.id,
-  name: 'Android',
   slug: 'android',
   depth: 2,
+}
+
+const GRANDCHILD_CATEGORY_WITH_TRANSLATIONS = {
+  ...GRANDCHILD_CATEGORY,
+  translations: [
+    { categoryId: GRANDCHILD_CATEGORY.id, locale: 'en' as const, name: 'Android' },
+  ],
 }
 
 const ACCESS_TOKEN_ENTRY = makeAccessTokenEntry(ADMIN_USER.id)
@@ -89,46 +111,108 @@ function mockFindCategoryById(row: unknown): void {
   vi.mocked(db.query.categories.findFirst).mockResolvedValueOnce(row as never)
 }
 
-function mockInsertCategory(returnRow: unknown): void {
-  vi.mocked(db.insert).mockReturnValueOnce({
+function buildInsertCategoryChain(returnRow: unknown): unknown {
+  return {
     values: vi.fn().mockReturnValueOnce({
       returning: vi.fn().mockResolvedValueOnce([returnRow]),
     }),
-  } as never)
+  }
 }
 
-function mockInsertCategoryUniqueViolation(): void {
-  const error = Object.assign(new Error('duplicate key value violates unique constraint'), {
-    code: '23505',
-  })
-  vi.mocked(db.insert).mockReturnValueOnce({
+function buildInsertTranslationChain(): unknown {
+  return {
     values: vi.fn().mockReturnValueOnce({
-      returning: vi.fn().mockRejectedValueOnce(error),
+      onConflictDoUpdate: vi.fn().mockResolvedValueOnce([]),
     }),
-  } as never)
+  }
 }
 
-function mockUpdateCategory(returnRow: unknown): void {
-  vi.mocked(db.update).mockReturnValueOnce({
-    set: vi.fn().mockReturnValueOnce({
-      where: vi.fn().mockReturnValueOnce({
-        returning: vi.fn().mockResolvedValueOnce([returnRow]),
-      }),
-    }),
-  } as never)
+function mockInsertCategoryTransaction(returnRow: unknown): void {
+  vi.mocked(db.transaction).mockImplementationOnce(async (callback) => {
+    const tx = {
+      insert: vi
+        .fn()
+        .mockReturnValueOnce(buildInsertCategoryChain(returnRow))
+        .mockReturnValueOnce(buildInsertTranslationChain())
+        .mockReturnValueOnce(buildInsertTranslationChain()),
+    }
+    return callback(tx as never)
+  })
 }
 
-function mockUpdateCategoryUniqueViolation(): void {
+function mockInsertCategoryTransactionUniqueViolation(): void {
   const error = Object.assign(new Error('duplicate key value violates unique constraint'), {
     code: '23505',
   })
-  vi.mocked(db.update).mockReturnValueOnce({
-    set: vi.fn().mockReturnValueOnce({
-      where: vi.fn().mockReturnValueOnce({
-        returning: vi.fn().mockRejectedValueOnce(error),
+  vi.mocked(db.transaction).mockImplementationOnce(async (callback) => {
+    const tx = {
+      insert: vi.fn().mockReturnValueOnce({
+        values: vi.fn().mockReturnValueOnce({
+          returning: vi.fn().mockRejectedValueOnce(error),
+        }),
       }),
-    }),
-  } as never)
+    }
+    return callback(tx as never)
+  })
+}
+
+function mockUpdateTransaction(options: {
+  updatedRow?: unknown
+  translationUpserts?: number
+  findInsideTx?: unknown
+}): void {
+  vi.mocked(db.transaction).mockImplementationOnce(async (callback) => {
+    const upsertCount = options.translationUpserts ?? 0
+    const insertMock = vi.fn()
+    for (let i = 0; i < upsertCount; i++) {
+      insertMock.mockReturnValueOnce(buildInsertTranslationChain())
+    }
+
+    const updateMock = options.updatedRow === undefined
+      ? vi.fn()
+      : vi.fn().mockReturnValueOnce({
+          set: vi.fn().mockReturnValueOnce({
+            where: vi.fn().mockReturnValueOnce({
+              returning: vi.fn().mockResolvedValueOnce([options.updatedRow]),
+            }),
+          }),
+        })
+
+    const tx = {
+      insert: insertMock,
+      update: updateMock,
+      query: {
+        categories: {
+          findFirst: vi.fn().mockResolvedValueOnce(options.findInsideTx),
+        },
+      },
+    }
+    return callback(tx as never)
+  })
+}
+
+function mockUpdateTransactionUniqueViolation(): void {
+  const error = Object.assign(new Error('duplicate key value violates unique constraint'), {
+    code: '23505',
+  })
+  vi.mocked(db.transaction).mockImplementationOnce(async (callback) => {
+    const tx = {
+      insert: vi.fn(),
+      update: vi.fn().mockReturnValueOnce({
+        set: vi.fn().mockReturnValueOnce({
+          where: vi.fn().mockReturnValueOnce({
+            returning: vi.fn().mockRejectedValueOnce(error),
+          }),
+        }),
+      }),
+      query: {
+        categories: {
+          findFirst: vi.fn(),
+        },
+      },
+    }
+    return callback(tx as never)
+  })
 }
 
 function mockDeleteCategory(returnRow: unknown): void {
@@ -139,43 +223,56 @@ function mockDeleteCategory(returnRow: unknown): void {
   } as never)
 }
 
+function mockFindCategoryByIdWithTranslations(row: unknown): void {
+  vi.mocked(db.query.categories.findFirst).mockResolvedValueOnce(row as never)
+}
+
 describe('POST /v1/admin/categories', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
   })
 
-  it('returns 201 with created root category', async () => {
+  it('returns 201 with created root category including translations dict', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
-    mockInsertCategory(ROOT_CATEGORY)
+    mockInsertCategoryTransaction(ROOT_CATEGORY)
+    mockFindCategoryByIdWithTranslations(ROOT_CATEGORY_WITH_TRANSLATIONS)
 
     const response = await apiRequest('/v1/admin/categories', {
       method: 'POST',
       token,
-      body: { name: 'Électronique', slug: 'electronique' },
+      body: { name: { fr: 'Électronique', en: 'Electronics' }, slug: 'electronics' },
     })
 
-    const body = await response.json() as { category: { slug: string; depth: number; parentId: string | null } }
+    const body = (await response.json()) as {
+      category: { slug: string; depth: number; parentId: string | null; translations: Record<string, string> }
+    }
     expect(response.status).toBe(201)
-    expect(body.category.slug).toBe('electronique')
+    expect(body.category.slug).toBe('electronics')
     expect(body.category.depth).toBe(0)
     expect(body.category.parentId).toBeNull()
+    expect(body.category.translations).toEqual({ fr: 'Électronique', en: 'Electronics' })
   })
 
   it('returns 201 with child category whose depth is parent.depth + 1', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
     mockFindCategoryById(ROOT_CATEGORY)
-    mockInsertCategory(CHILD_CATEGORY)
+    mockInsertCategoryTransaction(CHILD_CATEGORY)
+    mockFindCategoryByIdWithTranslations(CHILD_CATEGORY_WITH_TRANSLATIONS)
 
     const response = await apiRequest('/v1/admin/categories', {
       method: 'POST',
       token,
-      body: { name: 'Smartphones', slug: 'smartphones', parentId: ROOT_CATEGORY.id },
+      body: {
+        name: { fr: 'Téléphones', en: 'Smartphones' },
+        slug: 'smartphones',
+        parentId: ROOT_CATEGORY.id,
+      },
     })
 
-    const body = await response.json() as { category: { depth: number; parentId: string } }
+    const body = (await response.json()) as { category: { depth: number; parentId: string } }
     expect(response.status).toBe(201)
     expect(body.category.depth).toBe(1)
     expect(body.category.parentId).toBe(ROOT_CATEGORY.id)
@@ -190,13 +287,13 @@ describe('POST /v1/admin/categories', () => {
       method: 'POST',
       token,
       body: {
-        name: 'Orphan',
+        name: { fr: 'Orphelin', en: 'Orphan' },
         slug: 'orphan',
         parentId: '00000000-0000-0000-0000-0000000000ff',
       },
     })
 
-    const body = await response.json() as { code: string }
+    const body = (await response.json()) as { code: string }
     expect(response.status).toBe(404)
     expect(body.code).toBe('CATEGORY_NOT_FOUND')
   })
@@ -210,13 +307,13 @@ describe('POST /v1/admin/categories', () => {
       method: 'POST',
       token,
       body: {
-        name: 'Too deep',
+        name: { fr: 'Trop profond', en: 'Too deep' },
         slug: 'too-deep',
         parentId: GRANDCHILD_CATEGORY.id,
       },
     })
 
-    const body = await response.json() as { code: string; message: string }
+    const body = (await response.json()) as { code: string; message: string }
     expect(response.status).toBe(422)
     expect(body.code).toBe('CATEGORY_MAX_DEPTH_EXCEEDED')
     expect(body.message).toContain('3 levels')
@@ -225,15 +322,15 @@ describe('POST /v1/admin/categories', () => {
   it('returns 409 with CONFLICT when slug already exists', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
-    mockInsertCategoryUniqueViolation()
+    mockInsertCategoryTransactionUniqueViolation()
 
     const response = await apiRequest('/v1/admin/categories', {
       method: 'POST',
       token,
-      body: { name: 'Duplicate', slug: 'duplicate' },
+      body: { name: { fr: 'Doublon', en: 'Duplicate' }, slug: 'duplicate' },
     })
 
-    const body = await response.json() as { code: string }
+    const body = (await response.json()) as { code: string }
     expect(response.status).toBe(409)
     expect(body.code).toBe('CONFLICT')
   })
@@ -245,20 +342,33 @@ describe('POST /v1/admin/categories', () => {
     const response = await apiRequest('/v1/admin/categories', {
       method: 'POST',
       token,
-      body: { name: 'Bad slug', slug: 'Bad Slug!' },
+      body: { name: { fr: 'Mauvais slug', en: 'Bad slug' }, slug: 'Bad Slug!' },
     })
 
     expect(response.status).toBe(422)
   })
 
-  it('returns 422 when name is empty', async () => {
+  it('returns 422 when name.fr is empty', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
 
     const response = await apiRequest('/v1/admin/categories', {
       method: 'POST',
       token,
-      body: { name: '', slug: 'ok' },
+      body: { name: { fr: '', en: 'Ok' }, slug: 'ok' },
+    })
+
+    expect(response.status).toBe(422)
+  })
+
+  it('returns 422 when name.en is missing (both locales required on create)', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    const response = await apiRequest('/v1/admin/categories', {
+      method: 'POST',
+      token,
+      body: { name: { fr: 'Seulement FR' }, slug: 'only-fr' },
     })
 
     expect(response.status).toBe(422)
@@ -271,7 +381,11 @@ describe('POST /v1/admin/categories', () => {
     const response = await apiRequest('/v1/admin/categories', {
       method: 'POST',
       token,
-      body: { name: 'Bad parent', slug: 'bad-parent', parentId: 'not-a-uuid' },
+      body: {
+        name: { fr: 'Mauvais parent', en: 'Bad parent' },
+        slug: 'bad-parent',
+        parentId: 'not-a-uuid',
+      },
     })
 
     expect(response.status).toBe(422)
@@ -284,7 +398,7 @@ describe('POST /v1/admin/categories', () => {
     const response = await apiRequest('/v1/admin/categories', {
       method: 'POST',
       token,
-      body: { name: 'X', slug: 'x', unknownField: 'nope' },
+      body: { name: { fr: 'X', en: 'X' }, slug: 'x', unknownField: 'nope' },
     })
 
     expect(response.status).toBe(422)
@@ -297,7 +411,7 @@ describe('POST /v1/admin/categories', () => {
     const response = await apiRequest('/v1/admin/categories', {
       method: 'POST',
       token,
-      body: { name: 'Nope', slug: 'nope' },
+      body: { name: { fr: 'Non', en: 'Nope' }, slug: 'nope' },
     })
 
     expect(response.status).toBe(403)
@@ -306,7 +420,7 @@ describe('POST /v1/admin/categories', () => {
   it('returns 401 when not authenticated', async () => {
     const response = await apiRequest('/v1/admin/categories', {
       method: 'POST',
-      body: { name: 'X', slug: 'x' },
+      body: { name: { fr: 'X', en: 'X' }, slug: 'x' },
     })
 
     expect(response.status).toBe(401)
@@ -315,16 +429,17 @@ describe('POST /v1/admin/categories', () => {
   it('logs at info level on successful creation', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
-    mockInsertCategory(ROOT_CATEGORY)
+    mockInsertCategoryTransaction(ROOT_CATEGORY)
+    mockFindCategoryByIdWithTranslations(ROOT_CATEGORY_WITH_TRANSLATIONS)
 
     await apiRequest('/v1/admin/categories', {
       method: 'POST',
       token,
-      body: { name: 'Électronique', slug: 'electronique' },
+      body: { name: { fr: 'Électronique', en: 'Electronics' }, slug: 'electronics' },
     })
 
     expect(vi.mocked(logger.info)).toHaveBeenCalledWith(
-      expect.objectContaining({ action: 'admin_create_category', slug: 'electronique' }),
+      expect.objectContaining({ action: 'admin_create_category', slug: 'electronics' }),
     )
   })
 })
@@ -335,33 +450,42 @@ describe('GET /v1/admin/categories', () => {
     vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
   })
 
-  it('returns 200 with every category in a flat list (no pagination)', async () => {
+  it('returns 200 with every category and their translations dict in a flat list', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
-    vi.mocked(db.query.categories.findMany).mockResolvedValueOnce(
-      [ROOT_CATEGORY, CHILD_CATEGORY, GRANDCHILD_CATEGORY] as never,
-    )
+    vi.mocked(db.query.categories.findMany).mockResolvedValueOnce([
+      ROOT_CATEGORY_WITH_TRANSLATIONS,
+      CHILD_CATEGORY_WITH_TRANSLATIONS,
+      GRANDCHILD_CATEGORY_WITH_TRANSLATIONS,
+    ] as never)
 
     const response = await apiRequest('/v1/admin/categories', { token })
 
-    const body = await response.json() as {
-      items: { slug: string }[]
+    const body = (await response.json()) as {
+      items: { slug: string; translations: Record<string, string> }[]
       pagination?: unknown
     }
     expect(response.status).toBe(200)
     expect(body.items).toHaveLength(3)
-    expect(body.items.map((item) => item.slug)).toEqual(['electronique', 'smartphones', 'android'])
+    expect(body.items.map((item) => item.slug)).toEqual(['electronics', 'smartphones', 'android'])
+    expect(body.items[0]?.translations).toEqual({ fr: 'Électronique', en: 'Electronics' })
     expect(body.pagination).toBeUndefined()
   })
 
-  it('ignores unknown query params (no filter validation)', async () => {
+  it('returns an EN-only translations dict when the row only has an English translation', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
-    vi.mocked(db.query.categories.findMany).mockResolvedValueOnce([ROOT_CATEGORY] as never)
+    vi.mocked(db.query.categories.findMany).mockResolvedValueOnce([
+      GRANDCHILD_CATEGORY_WITH_TRANSLATIONS,
+    ] as never)
 
-    const response = await apiRequest('/v1/admin/categories?unknownField=foo', { token })
+    const response = await apiRequest('/v1/admin/categories', { token })
 
+    const body = (await response.json()) as {
+      items: { translations: Record<string, string> }[]
+    }
     expect(response.status).toBe(200)
+    expect(body.items[0]?.translations).toEqual({ en: 'Android' })
   })
 
   it('returns 403 when user is not admin', async () => {
@@ -384,26 +508,29 @@ describe('GET /v1/admin/categories/:id', () => {
     vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
   })
 
-  it('returns 200 with category when found', async () => {
+  it('returns 200 with category and full translations dict when found', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
-    mockFindCategoryById(ROOT_CATEGORY)
+    mockFindCategoryByIdWithTranslations(ROOT_CATEGORY_WITH_TRANSLATIONS)
 
     const response = await apiRequest(`/v1/admin/categories/${ROOT_CATEGORY.id}`, { token })
 
-    const body = await response.json() as { category: { id: string } }
+    const body = (await response.json()) as {
+      category: { id: string; translations: Record<string, string> }
+    }
     expect(response.status).toBe(200)
     expect(body.category.id).toBe(ROOT_CATEGORY.id)
+    expect(body.category.translations).toEqual({ fr: 'Électronique', en: 'Electronics' })
   })
 
   it('returns 404 with CATEGORY_NOT_FOUND when category does not exist', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
-    mockFindCategoryById(undefined)
+    mockFindCategoryByIdWithTranslations(undefined)
 
     const response = await apiRequest(`/v1/admin/categories/${ROOT_CATEGORY.id}`, { token })
 
-    const body = await response.json() as { code: string }
+    const body = (await response.json()) as { code: string }
     expect(response.status).toBe(404)
     expect(body.code).toBe('CATEGORY_NOT_FOUND')
   })
@@ -428,21 +555,59 @@ describe('PATCH /v1/admin/categories/:id', () => {
     vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
   })
 
-  it('returns 200 when patching only the name (no parent change)', async () => {
+  it('returns 200 when patching only the French translation', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
     mockFindCategoryById(ROOT_CATEGORY)
-    mockUpdateCategory({ ...ROOT_CATEGORY, name: 'Électronique updated' })
+    mockUpdateTransaction({
+      translationUpserts: 1,
+      findInsideTx: ROOT_CATEGORY,
+    })
+    mockFindCategoryByIdWithTranslations({
+      ...ROOT_CATEGORY,
+      translations: [
+        { categoryId: ROOT_CATEGORY.id, locale: 'fr' as const, name: 'Électronique mise à jour' },
+        { categoryId: ROOT_CATEGORY.id, locale: 'en' as const, name: 'Electronics' },
+      ],
+    })
 
     const response = await apiRequest(`/v1/admin/categories/${ROOT_CATEGORY.id}`, {
       method: 'PATCH',
       token,
-      body: { name: 'Électronique updated' },
+      body: { name: { fr: 'Électronique mise à jour' } },
     })
 
-    const body = await response.json() as { category: { name: string } }
+    const body = (await response.json()) as {
+      category: { translations: Record<string, string> }
+    }
     expect(response.status).toBe(200)
-    expect(body.category.name).toBe('Électronique updated')
+    expect(body.category.translations.fr).toBe('Électronique mise à jour')
+    expect(body.category.translations.en).toBe('Electronics')
+  })
+
+  it('returns 200 when patching only the slug', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindCategoryById(ROOT_CATEGORY)
+    mockUpdateTransaction({
+      updatedRow: { ...ROOT_CATEGORY, slug: 'electronics-new' },
+      findInsideTx: { ...ROOT_CATEGORY, slug: 'electronics-new' },
+    })
+    mockFindCategoryByIdWithTranslations({
+      ...ROOT_CATEGORY,
+      slug: 'electronics-new',
+      translations: ROOT_CATEGORY_TRANSLATIONS,
+    })
+
+    const response = await apiRequest(`/v1/admin/categories/${ROOT_CATEGORY.id}`, {
+      method: 'PATCH',
+      token,
+      body: { slug: 'electronics-new' },
+    })
+
+    const body = (await response.json()) as { category: { slug: string } }
+    expect(response.status).toBe(200)
+    expect(body.category.slug).toBe('electronics-new')
   })
 
   it('returns 404 when category not found', async () => {
@@ -453,7 +618,7 @@ describe('PATCH /v1/admin/categories/:id', () => {
     const response = await apiRequest(`/v1/admin/categories/${ROOT_CATEGORY.id}`, {
       method: 'PATCH',
       token,
-      body: { name: 'Nope' },
+      body: { name: { fr: 'Non' } },
     })
 
     expect(response.status).toBe(404)
@@ -463,7 +628,7 @@ describe('PATCH /v1/admin/categories/:id', () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
     mockFindCategoryById(ROOT_CATEGORY)
-    mockUpdateCategoryUniqueViolation()
+    mockUpdateTransactionUniqueViolation()
 
     const response = await apiRequest(`/v1/admin/categories/${ROOT_CATEGORY.id}`, {
       method: 'PATCH',
@@ -471,7 +636,7 @@ describe('PATCH /v1/admin/categories/:id', () => {
       body: { slug: 'duplicate' },
     })
 
-    const body = await response.json() as { code: string }
+    const body = (await response.json()) as { code: string }
     expect(response.status).toBe(409)
     expect(body.code).toBe('CONFLICT')
   })
@@ -487,7 +652,7 @@ describe('PATCH /v1/admin/categories/:id', () => {
       body: { parentId: ROOT_CATEGORY.id },
     })
 
-    const body = await response.json() as { code: string }
+    const body = (await response.json()) as { code: string }
     expect(response.status).toBe(422)
     expect(body.code).toBe('CATEGORY_CYCLE_DETECTED')
   })
@@ -505,7 +670,7 @@ describe('PATCH /v1/admin/categories/:id', () => {
       body: { parentId: CHILD_CATEGORY.id },
     })
 
-    const body = await response.json() as { code: string }
+    const body = (await response.json()) as { code: string }
     expect(response.status).toBe(422)
     expect(body.code).toBe('CATEGORY_CYCLE_DETECTED')
   })
@@ -522,7 +687,7 @@ describe('PATCH /v1/admin/categories/:id', () => {
       body: { parentId: '00000000-0000-0000-0000-0000000000ff' },
     })
 
-    const body = await response.json() as { code: string }
+    const body = (await response.json()) as { code: string }
     expect(response.status).toBe(404)
     expect(body.code).toBe('CATEGORY_NOT_FOUND')
   })
@@ -534,7 +699,20 @@ describe('PATCH /v1/admin/categories/:id', () => {
     const response = await apiRequest('/v1/admin/categories/not-a-uuid', {
       method: 'PATCH',
       token,
-      body: { name: 'X' },
+      body: { name: { fr: 'X' } },
+    })
+
+    expect(response.status).toBe(422)
+  })
+
+  it('returns 422 when name is an empty translations dict', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    const response = await apiRequest(`/v1/admin/categories/${ROOT_CATEGORY.id}`, {
+      method: 'PATCH',
+      token,
+      body: { name: {} },
     })
 
     expect(response.status).toBe(422)
@@ -560,7 +738,7 @@ describe('PATCH /v1/admin/categories/:id', () => {
     const response = await apiRequest(`/v1/admin/categories/${ROOT_CATEGORY.id}`, {
       method: 'PATCH',
       token,
-      body: { name: 'X' },
+      body: { name: { fr: 'X' } },
     })
 
     expect(response.status).toBe(403)
@@ -573,7 +751,7 @@ describe('DELETE /v1/admin/categories/:id', () => {
     vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
   })
 
-  it('returns 204 and deletes the category', async () => {
+  it('returns 204 and deletes the category (translations cascade via FK)', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
     mockFindCategoryById(ROOT_CATEGORY)
@@ -597,7 +775,7 @@ describe('DELETE /v1/admin/categories/:id', () => {
       token,
     })
 
-    const body = await response.json() as { code: string }
+    const body = (await response.json()) as { code: string }
     expect(response.status).toBe(404)
     expect(body.code).toBe('CATEGORY_NOT_FOUND')
   })
@@ -645,7 +823,7 @@ describe('DELETE /v1/admin/categories/:id', () => {
     })
 
     expect(vi.mocked(logger.warn)).toHaveBeenCalledWith(
-      expect.objectContaining({ action: 'admin_delete_category', slug: 'electronique' }),
+      expect.objectContaining({ action: 'admin_delete_category', slug: 'electronics' }),
     )
   })
 })

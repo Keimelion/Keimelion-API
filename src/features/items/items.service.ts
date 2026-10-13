@@ -20,16 +20,22 @@ import type { ItemWithSources } from '../../shared/types/item.js'
 import type { PaginationInput } from '../../shared/schemas/pagination.js'
 import type { PaginatedResponse } from '../../shared/types/api.js'
 import type { ServiceResult } from '../../shared/types/service.js'
+import type { Locale } from '../../shared/enums/locale.js'
 import type { CreateItemInput } from './endpoints/create.js'
 import type { UpdateItemInput } from './endpoints/update.js'
 
 export async function listItems(
   pagination: PaginationInput,
+  locale: Locale,
 ): Promise<ServiceResult<PaginatedResponse<ItemWithSources>>> {
   const [rows, total] = await Promise.all([findAllItemsWithSources(pagination), countAllItems()])
 
   return {
-    data: buildPaginatedResponse(rows.map((row) => toItemWithSources(row)), pagination, total),
+    data: buildPaginatedResponse(
+      rows.map((row) => toItemWithSources(row, locale)),
+      pagination,
+      total,
+    ),
     httpStatus: HttpStatus.OK,
   }
 }
@@ -37,6 +43,7 @@ export async function listItems(
 export async function createUserItem(
   userId: string,
   input: CreateItemInput,
+  locale: Locale,
 ): Promise<ServiceResult<{ item: ItemWithSources }>> {
   const inserted = await insertItem({
     name: input.name,
@@ -49,17 +56,20 @@ export async function createUserItem(
   const row = await findItemByIdWithSources(inserted.id)
   if (!row) return serviceError(ErrorCode.INTERNAL_ERROR)
   return {
-    data: { item: toItemWithSources(row) },
+    data: { item: toItemWithSources(row, locale) },
     httpStatus: HttpStatus.CREATED,
   }
 }
 
-export async function getItemById(id: string): Promise<ServiceResult<{ item: ItemWithSources }>> {
+export async function getItemById(
+  id: string,
+  locale: Locale,
+): Promise<ServiceResult<{ item: ItemWithSources }>> {
   const row = await findItemByIdWithSources(id)
   if (!row) return serviceError(ErrorCode.NOT_FOUND)
 
   return {
-    data: { item: toItemWithSources(row) },
+    data: { item: toItemWithSources(row, locale) },
     httpStatus: HttpStatus.OK,
   }
 }
@@ -68,6 +78,7 @@ export async function updateUserItem(
   itemId: string,
   userId: string,
   input: UpdateItemInput,
+  locale: Locale,
 ): Promise<ServiceResult<{ item: ItemWithSources }>> {
   const { tags, categories } = input
   if (tags === undefined && categories === undefined) {
@@ -108,7 +119,7 @@ export async function updateUserItem(
   const refreshed = await findItemByIdWithSources(itemId)
   if (!refreshed) return serviceError(ErrorCode.NOT_FOUND)
   return {
-    data: { item: toItemWithSources(refreshed) },
+    data: { item: toItemWithSources(refreshed, locale) },
     httpStatus: HttpStatus.OK,
   }
 }

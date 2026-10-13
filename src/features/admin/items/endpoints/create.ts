@@ -17,6 +17,7 @@ import {
   reportDuplicateSourceShopIds,
   shopIdSchema,
 } from '../../../../db/entities/item-sources/item-sources.schemas.js'
+import { getLocale } from '../../../../shared/middlewares/resolve-locale.js'
 import type { FeatureRouter } from '../../../../shared/types/app.js'
 import { createItem } from '../admin-items.service.js'
 
@@ -53,7 +54,8 @@ export function mountCreateItem(router: FeatureRouter): void {
     async (context) => {
       const admin = getAuthUser(context)
       const input = context.req.valid('json')
-      return jsonResult(context, await createItem(admin.id, input))
+      const locale = getLocale(context)
+      return jsonResult(context, await createItem(admin.id, input, locale))
     },
   )
 }

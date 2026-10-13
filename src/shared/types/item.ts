@@ -4,13 +4,17 @@ import type { ItemCategory } from '../../db/entities/item-categories/item-catego
 import type { ItemTag } from '../../db/entities/item-tags/item-tags.schema.js'
 import type { ListItem } from '../../db/entities/list-items/list-items.schema.js'
 import type { Shop } from '../../db/entities/shops/shops.schema.js'
-import type { Category } from '../../db/entities/categories/categories.schema.js'
+import type {
+  Category,
+  CategoryTranslation,
+} from '../../db/entities/categories/categories.schema.js'
 import type { Tag } from '../../db/entities/tags/tags.schema.js'
 import type { ShopPublic } from './shop.js'
 import type { CategoryPublic } from './category.js'
 import type { TagPublic } from './tag.js'
+import type { Locale } from '../enums/locale.js'
 import { toShopPublic } from './shop.js'
-import { toCategoryPublic } from './category.js'
+import { resolveCategoryName, toCategoryPublic } from './category.js'
 import { toTagPublic } from './tag.js'
 
 export interface ItemDetail {
@@ -51,8 +55,12 @@ export interface ItemSourceWithShop extends ItemSource {
   shop: Shop | null
 }
 
+export interface CategoryRowWithTranslationsForItem extends Category {
+  translations: CategoryTranslation[]
+}
+
 export interface ItemCategoryWithCategoryRow extends ItemCategory {
-  category: Category
+  category: CategoryRowWithTranslationsForItem
 }
 
 export interface ItemTagWithTagRow extends ItemTag {
@@ -114,11 +122,19 @@ export function toItemSourceDetailWithoutShop(source: ItemSource): ItemSourceDet
   return toItemSourceDetail({ ...source, shop: null })
 }
 
-export function toItemWithSources(item: ItemRowWithSources): ItemWithSources {
+export function toItemWithSources(item: ItemRowWithSources, locale: Locale): ItemWithSources {
   return {
     ...toItemDetail(item),
     sources: item.sources.map((source) => toItemSourceDetail(source)),
-    categories: item.itemCategories.map((link) => toCategoryPublic(link.category)),
+    categories: item.itemCategories.map((link) =>
+      toCategoryPublic({
+        id: link.category.id,
+        parentId: link.category.parentId,
+        slug: link.category.slug,
+        depth: link.category.depth,
+        name: resolveCategoryName(link.category.translations, locale),
+      }),
+    ),
     tags: item.itemTags.map((link) => toTagPublic(link.tag)),
   }
 }

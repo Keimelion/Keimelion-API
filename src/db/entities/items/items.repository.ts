@@ -19,7 +19,7 @@ type UpdateItemFields = Partial<Pick<typeof items.$inferInsert, 'name' | 'descri
 
 const ITEM_WITH_SOURCES_WITH = {
   sources: { with: { shop: true } },
-  itemCategories: { with: { category: true } },
+  itemCategories: { with: { category: { with: { translations: true } } } },
   itemTags: { with: { tag: true } },
 } as const
 

@@ -5,6 +5,7 @@ import { jsonResult, sendError } from '../../../../shared/utils/response.js'
 import { ErrorCode } from '../../../../shared/enums/error-code.js'
 import { paginationQuerySchema } from '../../../../shared/schemas/pagination.js'
 import { validationErrorHandler } from '../../../../shared/utils/validation.js'
+import { getLocale } from '../../../../shared/middlewares/resolve-locale.js'
 import type { FeatureRouter } from '../../../../shared/types/app.js'
 import type { FilterInput } from '../../../../shared/db/filter-parser.js'
 import { listItems } from '../admin-items.service.js'
@@ -33,7 +34,8 @@ export function mountListItems(router: FeatureRouter): void {
         return sendError(ErrorCode.UNPROCESSABLE_ENTITY)
       }
 
-      return jsonResult(context, await listItems({ ...query, genericFilters }))
+      const locale = getLocale(context)
+      return jsonResult(context, await listItems({ ...query, genericFilters }, locale))
     },
   )
 }

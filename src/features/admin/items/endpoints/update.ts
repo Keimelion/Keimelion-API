@@ -11,6 +11,7 @@ import {
   itemDescriptionSchema,
   itemImageUrlSchema,
 } from '../../../../db/entities/items/items.schemas.js'
+import { getLocale } from '../../../../shared/middlewares/resolve-locale.js'
 import type { FeatureRouter } from '../../../../shared/types/app.js'
 import { updateItemById } from '../admin-items.service.js'
 
@@ -35,7 +36,8 @@ export function mountUpdateItem(router: FeatureRouter): void {
       const admin = getAuthUser(context)
       const { id } = context.req.valid('param')
       const input = context.req.valid('json')
-      return jsonResult(context, await updateItemById(admin.id, id, input))
+      const locale = getLocale(context)
+      return jsonResult(context, await updateItemById(admin.id, id, input, locale))
     },
   )
 }

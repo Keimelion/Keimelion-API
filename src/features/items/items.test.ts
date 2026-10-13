@@ -252,18 +252,24 @@ const OWNED_ITEM_ROW = {
 const CATEGORY_ONE = {
   id: '00000000-0000-0000-0000-000000000060',
   parentId: null,
-  name: 'Électronique',
-  slug: 'electronique',
+  slug: 'electronics',
   depth: 0,
   createdAt: new Date('2024-01-01'),
   updatedAt: new Date('2024-01-01'),
+  translations: [
+    { categoryId: '00000000-0000-0000-0000-000000000060', locale: 'en' as const, name: 'Electronics' },
+    { categoryId: '00000000-0000-0000-0000-000000000060', locale: 'fr' as const, name: 'Électronique' },
+  ],
 }
 
 const CATEGORY_TWO = {
   ...CATEGORY_ONE,
   id: '00000000-0000-0000-0000-000000000061',
-  name: 'Mode',
   slug: 'mode',
+  translations: [
+    { categoryId: '00000000-0000-0000-0000-000000000061', locale: 'en' as const, name: 'Mode' },
+    { categoryId: '00000000-0000-0000-0000-000000000061', locale: 'fr' as const, name: 'Mode' },
+  ],
 }
 
 const OWNER_ACCESS_TOKEN_ENTRY = makeAccessTokenEntry(OWNER_USER.id)
@@ -524,7 +530,7 @@ describe('PATCH /v1/items/:id', () => {
 
     const body = await response.json() as { item: { categories: { slug: string }[] } }
     expect(response.status).toBe(200)
-    expect(body.item.categories.map((c) => c.slug)).toEqual(expect.arrayContaining(['electronique', 'mode']))
+    expect(body.item.categories.map((c) => c.slug)).toEqual(expect.arrayContaining(['electronics', 'mode']))
   })
 
   it('returns 404 CATEGORY_NOT_FOUND when a categoryId does not exist', async () => {
@@ -571,7 +577,7 @@ describe('PATCH /v1/items/:id', () => {
     const body = await response.json() as { item: { tags: { slug: string }[]; categories: { slug: string }[] } }
     expect(response.status).toBe(200)
     expect(body.item.tags.map((t) => t.slug)).toEqual(['gaming'])
-    expect(body.item.categories.map((c) => c.slug)).toEqual(['electronique'])
+    expect(body.item.categories.map((c) => c.slug)).toEqual(['electronics'])
   })
 })
 
