@@ -5,11 +5,7 @@ import { MAX_CATEGORY_DEPTH, serviceError } from '../../../shared/utils/response
 import { logger } from '../../../shared/utils/logger.js'
 import { pickDefined } from '../../../shared/utils/partial-update.js'
 import { runWrite } from '../../../shared/utils/admin-write.js'
-import { buildPaginatedResponse } from '../../../shared/schemas/pagination.js'
-import {
-  findAllCategories,
-  countCategories,
-} from './admin-categories.repository.js'
+import { findAllCategories } from './admin-categories.repository.js'
 import {
   deleteCategory,
   findCategoriesByParentIds,
@@ -23,8 +19,6 @@ import { toCategoryDetail } from '../../../shared/types/category.js'
 import type { CategoryDetail } from '../../../shared/types/category.js'
 import type { Category } from '../../../db/entities/categories/categories.schema.js'
 import type { ServiceResult } from '../../../shared/types/service.js'
-import type { PaginatedResponse } from '../../../shared/types/api.js'
-import type { ListCategoriesInput } from './endpoints/list.js'
 import type { CreateCategoryInput } from './endpoints/create.js'
 import type { UpdateCategoryInput } from './endpoints/update.js'
 
@@ -54,13 +48,10 @@ export async function createCategory(
   return { data: { category }, httpStatus: HttpStatus.CREATED }
 }
 
-export async function listCategories(
-  input: ListCategoriesInput,
-): Promise<ServiceResult<PaginatedResponse<CategoryDetail>>> {
-  const [rows, total] = await Promise.all([findAllCategories(input, input), countCategories(input)])
-
+export async function listCategories(): Promise<ServiceResult<{ items: CategoryDetail[] }>> {
+  const rows = await findAllCategories()
   return {
-    data: buildPaginatedResponse(rows.map(toCategoryDetail), input, total),
+    data: { items: rows.map(toCategoryDetail) },
     httpStatus: HttpStatus.OK,
   }
 }
