@@ -10,10 +10,9 @@ import {
   MAX_TAGS_PER_RESOURCE,
   tagNameSchema,
 } from '../../../db/entities/tags/tags.schemas.js'
+import { itemCategoriesInputSchema } from '../../../db/entities/item-categories/item-categories.schemas.js'
 import type { FeatureRouter } from '../../../shared/types/app.js'
 import { updateUserItem } from '../items.service.js'
-
-const MAX_CATEGORIES_PER_ITEM = 20
 
 const updateItemSchema = z
   .object({
@@ -24,13 +23,7 @@ const updateItemSchema = z
         `tags must contain at most ${String(MAX_TAGS_PER_RESOURCE)} entries`,
       )
       .optional(),
-    categories: z
-      .array(z.string().uuid())
-      .max(
-        MAX_CATEGORIES_PER_ITEM,
-        `categories must contain at most ${String(MAX_CATEGORIES_PER_ITEM)} entries`,
-      )
-      .optional(),
+    categories: itemCategoriesInputSchema,
   })
   .strict()
 

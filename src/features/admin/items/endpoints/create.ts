@@ -17,6 +17,7 @@ import {
   reportDuplicateSourceShopIds,
   shopIdSchema,
 } from '../../../../db/entities/item-sources/item-sources.schemas.js'
+import { itemCategoriesInputSchema } from '../../../../db/entities/item-categories/item-categories.schemas.js'
 import { getLocale } from '../../../../shared/middlewares/resolve-locale.js'
 import type { FeatureRouter } from '../../../../shared/types/app.js'
 import { createItem } from '../admin-items.service.js'
@@ -36,6 +37,7 @@ const adminCreateItemSchema = z
     description: itemDescriptionSchema.optional().transform((value) => value ?? null),
     imageUrl: itemImageUrlSchema.optional().transform((value) => value ?? null),
     sources: z.array(createItemSourceInputSchema).min(1),
+    categories: itemCategoriesInputSchema,
   })
   .strict()
   .superRefine((value, ctx) => {
