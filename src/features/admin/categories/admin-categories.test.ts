@@ -139,14 +139,6 @@ function mockDeleteCategory(returnRow: unknown): void {
   } as never)
 }
 
-function mockCountChain(total: number): void {
-  const chain = {
-    from: vi.fn().mockReturnThis(),
-    where: vi.fn().mockResolvedValueOnce([{ count: total }]),
-  }
-  vi.mocked(db.select).mockReturnValueOnce(chain as never)
-}
-
 describe('POST /v1/admin/categories', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -343,49 +335,31 @@ describe('GET /v1/admin/categories', () => {
     vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
   })
 
-  it('returns 200 with paginated categories', async () => {
+  it('returns 200 with every category in a flat list (no pagination)', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
-    vi.mocked(db.query.categories.findMany).mockResolvedValueOnce([ROOT_CATEGORY] as never)
-    mockCountChain(1)
+    vi.mocked(db.query.categories.findMany).mockResolvedValueOnce(
+      [ROOT_CATEGORY, CHILD_CATEGORY, GRANDCHILD_CATEGORY] as never,
+    )
 
     const response = await apiRequest('/v1/admin/categories', { token })
 
     const body = await response.json() as {
       items: { slug: string }[]
-      pagination: { total: number }
+      pagination?: unknown
     }
     expect(response.status).toBe(200)
-    expect(body.items).toHaveLength(1)
-    expect(body.pagination.total).toBe(1)
-    expect(body.items[0]?.slug).toBe('electronique')
+    expect(body.items).toHaveLength(3)
+    expect(body.items.map((item) => item.slug)).toEqual(['electronique', 'smartphones', 'android'])
+    expect(body.pagination).toBeUndefined()
   })
 
-  it('returns 422 when sort field is invalid', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
-    mockAdminAuth()
-
-    const response = await apiRequest('/v1/admin/categories?sort=unknown:asc', { token })
-
-    expect(response.status).toBe(422)
-  })
-
-  it('returns 422 when bracket-syntax uses an unknown field', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
-    mockAdminAuth()
-
-    const response = await apiRequest('/v1/admin/categories?unknownField%5Beq%5D=foo', { token })
-
-    expect(response.status).toBe(422)
-  })
-
-  it('accepts parentId[isNull]=true filter', async () => {
+  it('ignores unknown query params (no filter validation)', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
     vi.mocked(db.query.categories.findMany).mockResolvedValueOnce([ROOT_CATEGORY] as never)
-    mockCountChain(1)
 
-    const response = await apiRequest('/v1/admin/categories?parentId%5BisNull%5D=true', { token })
+    const response = await apiRequest('/v1/admin/categories?unknownField=foo', { token })
 
     expect(response.status).toBe(200)
   })
