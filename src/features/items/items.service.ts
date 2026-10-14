@@ -45,11 +45,46 @@ export async function createUserItem(
   input: CreateItemInput,
   locale: Locale,
 ): Promise<ServiceResult<{ item: ItemWithSources }>> {
-  const inserted = await insertItem({
-    name: input.name,
-    description: input.description ?? null,
-    imageUrl: input.imageUrl ?? null,
-    createdByUserId: userId,
+  const { tags, categories } = input
+
+  let tagSlugs: string[] | null = null
+  if (tags !== undefined) {
+    tagSlugs = normalizeTagSlugs(tags)
+    if (tagSlugs === null) return serviceError(ErrorCode.TAG_INVALID_NAME)
+  }
+
+  let uniqueCategoryIds: string[] | null = null
+  if (categories !== undefined) {
+    uniqueCategoryIds = Array.from(new Set(categories))
+    if (uniqueCategoryIds.length > 0) {
+      const found = await findCategoriesByIds(uniqueCategoryIds)
+      if (found.length !== uniqueCategoryIds.length) {
+        return serviceError(ErrorCode.CATEGORY_NOT_FOUND)
+      }
+    }
+  }
+
+  const inserted = await db.transaction(async (tx) => {
+    const item = await insertItem(
+      {
+        name: input.name,
+        description: input.description ?? null,
+        imageUrl: input.imageUrl ?? null,
+        createdByUserId: userId,
+      },
+      tx,
+    )
+    if (!item) return undefined
+
+    if (tagSlugs !== null) {
+      const tagIds = await upsertTagsBySlugs(tagSlugs, userId, tx)
+      await replaceItemTags(item.id, tagIds, tx)
+    }
+    if (uniqueCategoryIds !== null) {
+      await replaceItemCategories(item.id, uniqueCategoryIds, tx)
+    }
+
+    return item
   })
   if (!inserted) return serviceError(ErrorCode.INTERNAL_ERROR)
 

@@ -10,6 +10,11 @@ import {
   itemImageUrlSchema,
   itemNameSchema,
 } from '../../../db/entities/items/items.schemas.js'
+import {
+  MAX_TAGS_PER_RESOURCE,
+  tagNameSchema,
+} from '../../../db/entities/tags/tags.schemas.js'
+import { itemCategoriesInputSchema } from '../../../db/entities/item-categories/item-categories.schemas.js'
 import type { FeatureRouter } from '../../../shared/types/app.js'
 import { createUserItem } from '../items.service.js'
 
@@ -18,6 +23,14 @@ const createItemSchema = z
     name: itemNameSchema,
     description: itemDescriptionSchema.optional(),
     imageUrl: itemImageUrlSchema.optional(),
+    tags: z
+      .array(tagNameSchema)
+      .max(
+        MAX_TAGS_PER_RESOURCE,
+        `tags must contain at most ${String(MAX_TAGS_PER_RESOURCE)} entries`,
+      )
+      .optional(),
+    categories: itemCategoriesInputSchema,
   })
   .strict()
 
