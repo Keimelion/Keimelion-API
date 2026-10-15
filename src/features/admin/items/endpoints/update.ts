@@ -12,6 +12,7 @@ import {
   itemImageUrlSchema,
 } from '../../../../db/entities/items/items.schemas.js'
 import { itemCategoriesInputSchema } from '../../../../db/entities/item-categories/item-categories.schemas.js'
+import { itemTagsInputSchema } from '../../../../db/entities/item-tags/item-tags.schemas.js'
 import { getLocale } from '../../../../shared/middlewares/resolve-locale.js'
 import type { FeatureRouter } from '../../../../shared/types/app.js'
 import { updateItemById } from '../admin-items.service.js'
@@ -22,6 +23,7 @@ const adminUpdateItemSchema = z
     description: itemDescriptionSchema.optional(),
     imageUrl: itemImageUrlSchema.optional(),
     categories: itemCategoriesInputSchema,
+    tags: itemTagsInputSchema,
   })
   .strict()
 
