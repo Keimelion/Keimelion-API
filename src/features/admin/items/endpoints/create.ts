@@ -18,10 +18,7 @@ import {
   shopIdSchema,
 } from '../../../../db/entities/item-sources/item-sources.schemas.js'
 import { itemCategoriesInputSchema } from '../../../../db/entities/item-categories/item-categories.schemas.js'
-import {
-  MAX_TAGS_PER_RESOURCE,
-  tagNameSchema,
-} from '../../../../db/entities/tags/tags.schemas.js'
+import { itemTagsInputSchema } from '../../../../db/entities/item-tags/item-tags.schemas.js'
 import { getLocale } from '../../../../shared/middlewares/resolve-locale.js'
 import type { FeatureRouter } from '../../../../shared/types/app.js'
 import { createItem } from '../admin-items.service.js'
@@ -42,13 +39,7 @@ const adminCreateItemSchema = z
     imageUrl: itemImageUrlSchema.optional().transform((value) => value ?? null),
     sources: z.array(createItemSourceInputSchema).min(1),
     categories: itemCategoriesInputSchema,
-    tags: z
-      .array(tagNameSchema)
-      .max(
-        MAX_TAGS_PER_RESOURCE,
-        `tags must contain at most ${String(MAX_TAGS_PER_RESOURCE)} entries`,
-      )
-      .optional(),
+    tags: itemTagsInputSchema,
   })
   .strict()
   .superRefine((value, ctx) => {
