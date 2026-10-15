@@ -12,6 +12,10 @@ import {
   itemImageUrlSchema,
 } from '../../../../db/entities/items/items.schemas.js'
 import { itemCategoriesInputSchema } from '../../../../db/entities/item-categories/item-categories.schemas.js'
+import {
+  MAX_TAGS_PER_RESOURCE,
+  tagNameSchema,
+} from '../../../../db/entities/tags/tags.schemas.js'
 import { getLocale } from '../../../../shared/middlewares/resolve-locale.js'
 import type { FeatureRouter } from '../../../../shared/types/app.js'
 import { updateItemById } from '../admin-items.service.js'
@@ -22,6 +26,13 @@ const adminUpdateItemSchema = z
     description: itemDescriptionSchema.optional(),
     imageUrl: itemImageUrlSchema.optional(),
     categories: itemCategoriesInputSchema,
+    tags: z
+      .array(tagNameSchema)
+      .max(
+        MAX_TAGS_PER_RESOURCE,
+        `tags must contain at most ${String(MAX_TAGS_PER_RESOURCE)} entries`,
+      )
+      .optional(),
   })
   .strict()
 

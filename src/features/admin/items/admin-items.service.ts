@@ -17,6 +17,9 @@ import {
 import { insertItemSource } from '../../../db/entities/item-sources/item-sources.repository.js'
 import { findCategoriesByIds } from '../../../db/entities/categories/categories.repository.js'
 import { replaceItemCategories } from '../../../db/entities/item-categories/item-categories.repository.js'
+import { upsertTagsBySlugs } from '../../../db/entities/tags/tags.repository.js'
+import { replaceItemTags } from '../../../db/entities/item-tags/item-tags.repository.js'
+import { normalizeTagSlugs } from '../../../shared/utils/slug.js'
 import { findAllItemsWithSources, countItems } from './admin-items.repository.js'
 import { toItemWithSources } from '../../../shared/types/item.js'
 import { AdminAction } from '../admin.enums.js'
@@ -44,6 +47,12 @@ export async function createItem(
     if (found.length !== uniqueCategoryIds.length) {
       return serviceError(ErrorCode.CATEGORY_NOT_FOUND)
     }
+  }
+
+  let tagSlugs: string[] | null = null
+  if (input.tags !== undefined) {
+    tagSlugs = normalizeTagSlugs(input.tags)
+    if (tagSlugs === null) return serviceError(ErrorCode.TAG_INVALID_NAME)
   }
 
   const outcome = await runWrite(() =>
@@ -75,6 +84,11 @@ export async function createItem(
 
       if (uniqueCategoryIds.length > 0) {
         await replaceItemCategories(item.id, uniqueCategoryIds, tx)
+      }
+
+      if (tagSlugs !== null) {
+        const tagIds = await upsertTagsBySlugs(tagSlugs, null, tx)
+        await replaceItemTags(item.id, tagIds, tx)
       }
 
       return item
@@ -135,8 +149,8 @@ export async function updateItemById(
     imageUrl: input.imageUrl,
   })
 
-  const { categories } = input
-  if (Object.keys(fieldPatch).length === 0 && categories === undefined) {
+  const { categories, tags } = input
+  if (Object.keys(fieldPatch).length === 0 && categories === undefined && tags === undefined) {
     return serviceError(ErrorCode.NO_FIELDS_TO_UPDATE)
   }
 
@@ -151,6 +165,12 @@ export async function updateItemById(
     }
   }
 
+  let tagSlugs: string[] | null = null
+  if (tags !== undefined) {
+    tagSlugs = normalizeTagSlugs(tags)
+    if (tagSlugs === null) return serviceError(ErrorCode.TAG_INVALID_NAME)
+  }
+
   const outcome = await runWrite(() =>
     db.transaction(async (tx) => {
       const updated =
@@ -159,6 +179,10 @@ export async function updateItemById(
           : existingRow
       if (uniqueCategoryIds !== null) {
         await replaceItemCategories(id, uniqueCategoryIds, tx)
+      }
+      if (tagSlugs !== null) {
+        const tagIds = await upsertTagsBySlugs(tagSlugs, null, tx)
+        await replaceItemTags(id, tagIds, tx)
       }
       return updated
     }),

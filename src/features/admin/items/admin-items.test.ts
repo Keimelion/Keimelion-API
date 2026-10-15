@@ -121,6 +121,22 @@ const CATEGORY_TWO = {
   ],
 }
 
+const TAG_ONE = {
+  id: '00000000-0000-0000-0000-000000000050',
+  name: 'premium',
+  slug: 'premium',
+  createdByUserId: null,
+  createdAt: new Date('2024-01-01'),
+  updatedAt: new Date('2024-01-01'),
+}
+
+const TAG_TWO = {
+  ...TAG_ONE,
+  id: '00000000-0000-0000-0000-000000000051',
+  name: 'exclusive',
+  slug: 'exclusive',
+}
+
 const ACCESS_TOKEN_ENTRY = makeAccessTokenEntry(ADMIN_USER.id)
 
 function mockAdminAuth(): void {
@@ -211,6 +227,48 @@ function itemWithCategoryLinks(categories: (typeof CATEGORY_ONE)[]): typeof ITEM
   }
 }
 
+function itemWithTagLinks(tagRows: (typeof TAG_ONE)[]): typeof ITEM_ROW & {
+  sources: SourceRow[]
+  itemCategories: never[]
+  itemTags: { itemId: string; tagId: string; assignedAt: Date; tag: typeof TAG_ONE }[]
+} {
+  return {
+    ...ITEM_ROW,
+    sources: [],
+    itemCategories: [],
+    itemTags: tagRows.map((tag) => ({
+      itemId: ITEM_ROW.id,
+      tagId: tag.id,
+      assignedAt: new Date('2024-01-01'),
+      tag,
+    })),
+  }
+}
+
+function mockPatchTagsTransaction(tagRows: (typeof TAG_ONE)[]): void {
+  vi.mocked(db.transaction).mockImplementationOnce((callback) => {
+    const tx = {
+      insert: vi.fn().mockReturnValue({
+        values: vi.fn().mockReturnValue({
+          onConflictDoNothing: vi.fn().mockResolvedValue(undefined),
+          returning: vi.fn().mockResolvedValue([ITEM_ROW]),
+        }),
+      }),
+      update: vi.fn().mockReturnValue({
+        set: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({
+            returning: vi.fn().mockResolvedValue([ITEM_ROW]),
+          }),
+        }),
+      }),
+      delete: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) }),
+      select: vi.fn(),
+      query: { tags: { findMany: vi.fn().mockResolvedValue(tagRows) } },
+    }
+    return callback(tx as never) as never
+  })
+}
+
 function buildTxInsertMock(rows: unknown[]): ReturnType<typeof vi.fn> {
   const insert = vi.fn()
   for (const row of rows) {
@@ -223,18 +281,25 @@ function buildTxInsertMock(rows: unknown[]): ReturnType<typeof vi.fn> {
   return insert
 }
 
-function mockCreateItemTransaction(itemRow: unknown, sourceRows: unknown[]): void {
+function mockCreateItemTransaction(
+  itemRow: unknown,
+  sourceRows: unknown[],
+  tagRows: unknown[] = [],
+): void {
   vi.mocked(db.transaction).mockImplementationOnce((callback) => {
     const insertMock = buildTxInsertMock([itemRow, ...sourceRows])
-    // Fallback for extra inserts (e.g. itemCategories from replaceItemCategories).
+    // Fallback for extra inserts (itemCategories, tags upsert, item_tags).
     insertMock.mockReturnValue({
-      values: vi.fn().mockResolvedValue(undefined),
+      values: vi.fn().mockReturnValue({
+        onConflictDoNothing: vi.fn().mockResolvedValue(undefined),
+      }),
     })
     const tx = {
       insert: insertMock,
       update: vi.fn(),
       delete: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) }),
       select: vi.fn(),
+      query: { tags: { findMany: vi.fn().mockResolvedValue(tagRows) } },
     }
     return callback(tx as never) as never
   })
@@ -633,6 +698,65 @@ describe('POST /v1/admin/items', () => {
         name: 'Test Item',
         sources: [{ currency: 'EUR' }],
         categories: tooMany,
+      },
+    })
+
+    expect(response.status).toBe(422)
+  })
+
+  it('creates an item with tags and returns the hydrated item', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockCreateItemTransaction(ITEM_ROW, [SOURCE_ROW], [TAG_ONE, TAG_TWO])
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(itemWithTagLinks([TAG_ONE, TAG_TWO]) as never)
+
+    const response = await apiRequest('/v1/admin/items', {
+      method: 'POST',
+      token,
+      body: {
+        name: 'Premium Item',
+        sources: [{ currency: 'EUR' }],
+        tags: ['premium', 'exclusive'],
+      },
+    })
+
+    const body = await response.json() as { item: { tags: { slug: string }[] } }
+    expect(response.status).toBe(201)
+    expect(body.item.tags.map((tag) => tag.slug)).toEqual(
+      expect.arrayContaining(['premium', 'exclusive']),
+    )
+  })
+
+  it('returns 422 TAG_INVALID_NAME on create when a tag normalizes to an empty slug', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    const response = await apiRequest('/v1/admin/items', {
+      method: 'POST',
+      token,
+      body: {
+        name: 'Test Item',
+        sources: [{ currency: 'EUR' }],
+        tags: ['!!!'],
+      },
+    })
+
+    const body = await response.json() as { code: string }
+    expect(response.status).toBe(422)
+    expect(body.code).toBe('TAG_INVALID_NAME')
+  })
+
+  it('returns 422 on create when tags exceeds max count (20)', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    const response = await apiRequest('/v1/admin/items', {
+      method: 'POST',
+      token,
+      body: {
+        name: 'Test Item',
+        sources: [{ currency: 'EUR' }],
+        tags: Array.from({ length: 21 }, (_, i) => `tag-${String(i)}`),
       },
     })
 
@@ -1109,6 +1233,91 @@ describe('PATCH /v1/admin/items/:id', () => {
       method: 'PATCH',
       token,
       body: { categories: tooMany },
+    })
+
+    expect(response.status).toBe(422)
+  })
+
+  it('replaces tags when tags are provided', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindItemById(ITEM_ROW)
+    mockPatchTagsTransaction([TAG_ONE, TAG_TWO])
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(itemWithTagLinks([TAG_ONE, TAG_TWO]) as never)
+
+    const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}`, {
+      method: 'PATCH',
+      token,
+      body: { tags: ['premium', 'exclusive'] },
+    })
+
+    const body = await response.json() as { item: { tags: { slug: string }[] } }
+    expect(response.status).toBe(200)
+    expect(body.item.tags.map((tag) => tag.slug)).toEqual(
+      expect.arrayContaining(['premium', 'exclusive']),
+    )
+  })
+
+  it('clears all tags when tags: [] is sent', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindItemById(ITEM_ROW)
+    mockPatchTagsTransaction([])
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(itemWithTagLinks([]) as never)
+
+    const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}`, {
+      method: 'PATCH',
+      token,
+      body: { tags: [] },
+    })
+
+    const body = await response.json() as { item: { tags: unknown[] } }
+    expect(response.status).toBe(200)
+    expect(body.item.tags).toEqual([])
+  })
+
+  it('accepts a tags-only patch (no scalar fields, no categories)', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindItemById(ITEM_ROW)
+    mockPatchTagsTransaction([TAG_ONE])
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(itemWithTagLinks([TAG_ONE]) as never)
+
+    const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}`, {
+      method: 'PATCH',
+      token,
+      body: { tags: ['premium'] },
+    })
+
+    const body = await response.json() as { item: { tags: { slug: string }[] } }
+    expect(response.status).toBe(200)
+    expect(body.item.tags.map((tag) => tag.slug)).toEqual(['premium'])
+  })
+
+  it('returns 422 TAG_INVALID_NAME on PATCH when a tag normalizes to an empty slug', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindItemById(ITEM_ROW)
+
+    const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}`, {
+      method: 'PATCH',
+      token,
+      body: { tags: ['!!!'] },
+    })
+
+    const body = await response.json() as { code: string }
+    expect(response.status).toBe(422)
+    expect(body.code).toBe('TAG_INVALID_NAME')
+  })
+
+  it('returns 422 on PATCH when tags exceeds max count (20)', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}`, {
+      method: 'PATCH',
+      token,
+      body: { tags: Array.from({ length: 21 }, (_, i) => `tag-${String(i)}`) },
     })
 
     expect(response.status).toBe(422)
