@@ -306,6 +306,13 @@ function mockUpdateItemTagsTransaction(tagsReturned: (typeof TAG_GAMING_ROW)[]):
           onConflictDoNothing: vi.fn().mockResolvedValue([]),
         }),
       }),
+      update: vi.fn().mockReturnValue({
+        set: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({
+            returning: vi.fn().mockResolvedValue([OWNED_ITEM_ROW]),
+          }),
+        }),
+      }),
       query: { tags: { findMany: tagsFindMany } },
     }
     return callback(tx as never) as never
@@ -327,18 +334,30 @@ describe('POST /v1/items', () => {
     vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(OWNER_ACCESS_TOKEN_ENTRY as never)
   })
 
-  function mockInsertItem(returnRow: unknown): void {
-    vi.mocked(db.insert).mockReturnValueOnce({
-      values: vi.fn().mockReturnValueOnce({
-        returning: vi.fn().mockResolvedValueOnce([returnRow]),
-      }),
-    } as never)
+  function mockCreateItemTransaction(
+    insertedItem: unknown,
+    tagsReturned: (typeof TAG_GAMING_ROW)[] = [],
+  ): void {
+    vi.mocked(db.transaction).mockImplementationOnce((callback) => {
+      const tagsFindMany = vi.fn().mockResolvedValueOnce(tagsReturned)
+      const tx = {
+        insert: vi.fn().mockReturnValue({
+          values: vi.fn().mockReturnValue({
+            returning: vi.fn().mockResolvedValueOnce([insertedItem]),
+            onConflictDoNothing: vi.fn().mockResolvedValue([]),
+          }),
+        }),
+        delete: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
+        query: { tags: { findMany: tagsFindMany } },
+      }
+      return callback(tx as never) as never
+    })
   }
 
   it('returns 201 with the created item scoped to the authed user', async () => {
     const token = await generateTestToken(OWNER_USER.id)
     mockOwnerAuth()
-    mockInsertItem(OWNED_ITEM_ROW)
+    mockCreateItemTransaction(OWNED_ITEM_ROW)
     vi.mocked(db.query.items.findFirst).mockResolvedValueOnce({
       ...OWNED_ITEM_ROW,
       sources: [],
@@ -352,11 +371,14 @@ describe('POST /v1/items', () => {
       body: { name: 'Nintendo Switch' },
     })
 
-    const body = await response.json() as { item: { id: string; sources: unknown[]; tags: unknown[] } }
+    const body = await response.json() as {
+      item: { id: string; sources: unknown[]; tags: unknown[]; categories: unknown[] }
+    }
     expect(response.status).toBe(201)
     expect(body.item.id).toBe(OWNED_ITEM_ROW.id)
     expect(body.item.sources).toEqual([])
     expect(body.item.tags).toEqual([])
+    expect(body.item.categories).toEqual([])
   })
 
   it('returns 422 when name is missing', async () => {
@@ -379,6 +401,182 @@ describe('POST /v1/items', () => {
     })
 
     expect(response.status).toBe(401)
+  })
+
+  it('creates an item with tags and returns them hydrated', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+    mockCreateItemTransaction(OWNED_ITEM_ROW, [TAG_GAMING_ROW, TAG_READING_ROW])
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(
+      itemWithTagLinks([TAG_GAMING_ROW, TAG_READING_ROW]) as never,
+    )
+
+    const response = await apiRequest('/v1/items', {
+      method: 'POST',
+      token,
+      body: { name: 'Nintendo Switch', tags: ['Gaming', 'Reading'] },
+    })
+
+    const body = await response.json() as { item: { tags: { slug: string }[] } }
+    expect(response.status).toBe(201)
+    expect(body.item.tags.map((tag) => tag.slug)).toEqual(
+      expect.arrayContaining(['gaming', 'reading']),
+    )
+  })
+
+  it('creates an item with categories and returns them hydrated', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+    vi.mocked(db.query.categories.findMany).mockResolvedValueOnce([CATEGORY_ONE, CATEGORY_TWO] as never)
+    mockCreateItemTransaction(OWNED_ITEM_ROW)
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce({
+      ...OWNED_ITEM_ROW,
+      sources: [],
+      itemCategories: [
+        { itemId: OWNED_ITEM_ROW.id, categoryId: CATEGORY_ONE.id, assignedAt: new Date(), category: CATEGORY_ONE },
+        { itemId: OWNED_ITEM_ROW.id, categoryId: CATEGORY_TWO.id, assignedAt: new Date(), category: CATEGORY_TWO },
+      ],
+      itemTags: [],
+    } as never)
+
+    const response = await apiRequest('/v1/items', {
+      method: 'POST',
+      token,
+      body: { name: 'Nintendo Switch', categories: [CATEGORY_ONE.id, CATEGORY_TWO.id] },
+    })
+
+    const body = await response.json() as { item: { categories: { slug: string }[] } }
+    expect(response.status).toBe(201)
+    expect(body.item.categories.map((c) => c.slug)).toEqual(
+      expect.arrayContaining(['electronics', 'mode']),
+    )
+  })
+
+  it('creates an item with both tags and categories in a single request', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+    vi.mocked(db.query.categories.findMany).mockResolvedValueOnce([CATEGORY_ONE] as never)
+    mockCreateItemTransaction(OWNED_ITEM_ROW, [TAG_GAMING_ROW])
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce({
+      ...OWNED_ITEM_ROW,
+      sources: [],
+      itemCategories: [
+        { itemId: OWNED_ITEM_ROW.id, categoryId: CATEGORY_ONE.id, assignedAt: new Date(), category: CATEGORY_ONE },
+      ],
+      itemTags: [
+        { itemId: OWNED_ITEM_ROW.id, tagId: TAG_GAMING_ROW.id, assignedAt: new Date(), tag: TAG_GAMING_ROW },
+      ],
+    } as never)
+
+    const response = await apiRequest('/v1/items', {
+      method: 'POST',
+      token,
+      body: { name: 'Nintendo Switch', tags: ['Gaming'], categories: [CATEGORY_ONE.id] },
+    })
+
+    const body = await response.json() as {
+      item: { tags: { slug: string }[]; categories: { slug: string }[] }
+    }
+    expect(response.status).toBe(201)
+    expect(body.item.tags.map((t) => t.slug)).toEqual(['gaming'])
+    expect(body.item.categories.map((c) => c.slug)).toEqual(['electronics'])
+  })
+
+  it('returns 422 TAG_INVALID_NAME when a tag name normalizes to an empty slug', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+
+    const response = await apiRequest('/v1/items', {
+      method: 'POST',
+      token,
+      body: { name: 'Nintendo Switch', tags: ['!!!'] },
+    })
+
+    const body = await response.json() as { code: string }
+    expect(response.status).toBe(422)
+    expect(body.code).toBe('TAG_INVALID_NAME')
+  })
+
+  it('returns 422 when tags exceeds max count (20)', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+
+    const response = await apiRequest('/v1/items', {
+      method: 'POST',
+      token,
+      body: {
+        name: 'Nintendo Switch',
+        tags: Array.from({ length: 21 }, (_, i) => `tag-${String(i)}`),
+      },
+    })
+
+    expect(response.status).toBe(422)
+  })
+
+  it('returns 404 CATEGORY_NOT_FOUND when a categoryId does not exist', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+    vi.mocked(db.query.categories.findMany).mockResolvedValueOnce([CATEGORY_ONE] as never)
+
+    const response = await apiRequest('/v1/items', {
+      method: 'POST',
+      token,
+      body: {
+        name: 'Nintendo Switch',
+        categories: [CATEGORY_ONE.id, CATEGORY_TWO.id],
+      },
+    })
+
+    const body = await response.json() as { code: string }
+    expect(response.status).toBe(404)
+    expect(body.code).toBe('CATEGORY_NOT_FOUND')
+  })
+
+  it('returns 422 when a category id is not a UUID', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+
+    const response = await apiRequest('/v1/items', {
+      method: 'POST',
+      token,
+      body: { name: 'Nintendo Switch', categories: ['not-a-uuid'] },
+    })
+
+    expect(response.status).toBe(422)
+  })
+
+  it('rolls back the item insert when category replacement fails inside the transaction', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+    vi.mocked(db.query.categories.findMany).mockResolvedValueOnce([CATEGORY_ONE] as never)
+    vi.mocked(db.transaction).mockImplementationOnce(async (callback) => {
+      const tx = {
+        insert: vi.fn().mockImplementation(() => ({
+          values: vi.fn().mockImplementation((rows: unknown) => {
+            if (
+              Array.isArray(rows) &&
+              rows.length > 0 &&
+              (rows[0] as Record<string, unknown>).categoryId !== undefined
+            ) {
+              throw new Error('item_categories insert failed')
+            }
+            return { returning: vi.fn().mockResolvedValue([OWNED_ITEM_ROW]) }
+          }),
+        })),
+        delete: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
+        query: { tags: { findMany: vi.fn().mockResolvedValue([]) } },
+      }
+      return (await callback(tx as never)) as never
+    })
+
+    const response = await apiRequest('/v1/items', {
+      method: 'POST',
+      token,
+      body: { name: 'Nintendo Switch', categories: [CATEGORY_ONE.id] },
+    })
+
+    expect(response.status).toBe(500)
+    expect(vi.mocked(db.query.items.findFirst)).not.toHaveBeenCalled()
   })
 })
 
@@ -578,6 +776,139 @@ describe('PATCH /v1/items/:id', () => {
     expect(response.status).toBe(200)
     expect(body.item.tags.map((t) => t.slug)).toEqual(['gaming'])
     expect(body.item.categories.map((c) => c.slug)).toEqual(['electronics'])
+  })
+
+  it('renames an item when only name is sent', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+    const renamed = { ...OWNED_ITEM_ROW, name: 'Renamed Item' }
+    vi.mocked(db.query.items.findFirst)
+      .mockResolvedValueOnce(OWNED_ITEM_ROW as never)
+      .mockResolvedValueOnce({ ...renamed, sources: [], itemCategories: [], itemTags: [] } as never)
+    mockUpdateItemTagsTransaction([])
+
+    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}`, {
+      method: 'PATCH',
+      token,
+      body: { name: 'Renamed Item' },
+    })
+
+    const body = await response.json() as { item: { name: string; tags: unknown[]; categories: unknown[] } }
+    expect(response.status).toBe(200)
+    expect(body.item.name).toBe('Renamed Item')
+    expect(body.item.tags).toEqual([])
+    expect(body.item.categories).toEqual([])
+  })
+
+  it('updates description when only description is sent', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+    const updated = { ...OWNED_ITEM_ROW, description: 'A new description' }
+    vi.mocked(db.query.items.findFirst)
+      .mockResolvedValueOnce(OWNED_ITEM_ROW as never)
+      .mockResolvedValueOnce({ ...updated, sources: [], itemCategories: [], itemTags: [] } as never)
+    mockUpdateItemTagsTransaction([])
+
+    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}`, {
+      method: 'PATCH',
+      token,
+      body: { description: 'A new description' },
+    })
+
+    const body = await response.json() as { item: { description: string | null } }
+    expect(response.status).toBe(200)
+    expect(body.item.description).toBe('A new description')
+  })
+
+  it('clears description when description: null is sent', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+    vi.mocked(db.query.items.findFirst)
+      .mockResolvedValueOnce(OWNED_ITEM_ROW as never)
+      .mockResolvedValueOnce({ ...OWNED_ITEM_ROW, description: null, sources: [], itemCategories: [], itemTags: [] } as never)
+    mockUpdateItemTagsTransaction([])
+
+    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}`, {
+      method: 'PATCH',
+      token,
+      body: { description: null },
+    })
+
+    const body = await response.json() as { item: { description: string | null } }
+    expect(response.status).toBe(200)
+    expect(body.item.description).toBeNull()
+  })
+
+  it('updates imageUrl when only imageUrl is sent', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+    const newUrl = 'https://example.com/img.jpg'
+    vi.mocked(db.query.items.findFirst)
+      .mockResolvedValueOnce(OWNED_ITEM_ROW as never)
+      .mockResolvedValueOnce({ ...OWNED_ITEM_ROW, imageUrl: newUrl, sources: [], itemCategories: [], itemTags: [] } as never)
+    mockUpdateItemTagsTransaction([])
+
+    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}`, {
+      method: 'PATCH',
+      token,
+      body: { imageUrl: newUrl },
+    })
+
+    const body = await response.json() as { item: { imageUrl: string | null } }
+    expect(response.status).toBe(200)
+    expect(body.item.imageUrl).toBe(newUrl)
+  })
+
+  it('updates name and tags together', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+    vi.mocked(db.query.items.findFirst)
+      .mockResolvedValueOnce(OWNED_ITEM_ROW as never)
+      .mockResolvedValueOnce({
+        ...OWNED_ITEM_ROW,
+        name: 'Renamed',
+        sources: [],
+        itemCategories: [],
+        itemTags: [{ itemId: OWNED_ITEM_ROW.id, tagId: TAG_GAMING_ROW.id, assignedAt: new Date(), tag: TAG_GAMING_ROW }],
+      } as never)
+    mockUpdateItemTagsTransaction([TAG_GAMING_ROW])
+
+    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}`, {
+      method: 'PATCH',
+      token,
+      body: { name: 'Renamed', tags: ['Gaming'] },
+    })
+
+    const body = await response.json() as { item: { name: string; tags: { slug: string }[] } }
+    expect(response.status).toBe(200)
+    expect(body.item.name).toBe('Renamed')
+    expect(body.item.tags.map((t) => t.slug)).toEqual(['gaming'])
+  })
+
+  it('returns 422 when name is sent as empty string', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+
+    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}`, {
+      method: 'PATCH',
+      token,
+      body: { name: '' },
+    })
+
+    expect(response.status).toBe(422)
+  })
+
+  it('returns 422 when an unknown field is sent (strict schema)', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+
+    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}`, {
+      method: 'PATCH',
+      token,
+      body: { unknownField: 'value' },
+    })
+
+    expect(response.status).toBe(422)
   })
 })
 

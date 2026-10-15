@@ -10,6 +10,7 @@ import {
   findItemById,
   findItemByIdWithSources,
   insertItem,
+  updateItem,
 } from '../../db/entities/items/items.repository.js'
 import { findCategoriesByIds } from '../../db/entities/categories/categories.repository.js'
 import { replaceItemCategories } from '../../db/entities/item-categories/item-categories.repository.js'
@@ -45,11 +46,46 @@ export async function createUserItem(
   input: CreateItemInput,
   locale: Locale,
 ): Promise<ServiceResult<{ item: ItemWithSources }>> {
-  const inserted = await insertItem({
-    name: input.name,
-    description: input.description ?? null,
-    imageUrl: input.imageUrl ?? null,
-    createdByUserId: userId,
+  const { tags, categories } = input
+
+  let tagSlugs: string[] | null = null
+  if (tags !== undefined) {
+    tagSlugs = normalizeTagSlugs(tags)
+    if (tagSlugs === null) return serviceError(ErrorCode.TAG_INVALID_NAME)
+  }
+
+  let uniqueCategoryIds: string[] | null = null
+  if (categories !== undefined) {
+    uniqueCategoryIds = Array.from(new Set(categories))
+    if (uniqueCategoryIds.length > 0) {
+      const found = await findCategoriesByIds(uniqueCategoryIds)
+      if (found.length !== uniqueCategoryIds.length) {
+        return serviceError(ErrorCode.CATEGORY_NOT_FOUND)
+      }
+    }
+  }
+
+  const inserted = await db.transaction(async (tx) => {
+    const item = await insertItem(
+      {
+        name: input.name,
+        description: input.description ?? null,
+        imageUrl: input.imageUrl ?? null,
+        createdByUserId: userId,
+      },
+      tx,
+    )
+    if (!item) return undefined
+
+    if (tagSlugs !== null) {
+      const tagIds = await upsertTagsBySlugs(tagSlugs, userId, tx)
+      await replaceItemTags(item.id, tagIds, tx)
+    }
+    if (uniqueCategoryIds !== null) {
+      await replaceItemCategories(item.id, uniqueCategoryIds, tx)
+    }
+
+    return item
   })
   if (!inserted) return serviceError(ErrorCode.INTERNAL_ERROR)
 
@@ -80,8 +116,14 @@ export async function updateUserItem(
   input: UpdateItemInput,
   locale: Locale,
 ): Promise<ServiceResult<{ item: ItemWithSources }>> {
-  const { tags, categories } = input
-  if (tags === undefined && categories === undefined) {
+  const { name, description, imageUrl, tags, categories } = input
+  if (
+    name === undefined &&
+    description === undefined &&
+    imageUrl === undefined &&
+    tags === undefined &&
+    categories === undefined
+  ) {
     return serviceError(ErrorCode.NO_FIELDS_TO_UPDATE)
   }
 
@@ -106,7 +148,15 @@ export async function updateUserItem(
     }
   }
 
+  const scalarFields: Parameters<typeof updateItem>[1] = {}
+  if (name !== undefined) scalarFields.name = name
+  if (description !== undefined) scalarFields.description = description
+  if (imageUrl !== undefined) scalarFields.imageUrl = imageUrl
+
   await db.transaction(async (tx) => {
+    if (Object.keys(scalarFields).length > 0) {
+      await updateItem(itemId, scalarFields, tx)
+    }
     if (tagSlugs !== null) {
       const tagIds = await upsertTagsBySlugs(tagSlugs, userId, tx)
       await replaceItemTags(itemId, tagIds, tx)
