@@ -4,7 +4,6 @@ import { serviceError } from '../../../shared/utils/response.js'
 import { logger } from '../../../shared/utils/logger.js'
 import { runWrite } from '../../../shared/utils/admin-write.js'
 import { buildPaginatedResponse } from '../../../shared/schemas/pagination.js'
-import { buildSlugFromName } from '../../../shared/utils/slug.js'
 import { findAllTags, countTags } from './admin-tags.repository.js'
 import {
   deleteTag,
@@ -25,11 +24,8 @@ export async function createTag(
   adminId: string,
   input: CreateTagInput,
 ): Promise<ServiceResult<{ tag: TagDetail }>> {
-  const slug = buildSlugFromName(input.name)
-  if (slug.length === 0) return serviceError(ErrorCode.TAG_INVALID_NAME)
-
   const outcome = await runWrite(() =>
-    insertTag({ name: slug, slug, createdByUserId: adminId }),
+    insertTag({ name: input.name, slug: input.slug, createdByUserId: adminId }),
   )
   if ('errorCode' in outcome) return serviceError(outcome.errorCode)
 
@@ -65,9 +61,9 @@ export async function updateTagById(
   const existing = await findTagById(id)
   if (!existing) return serviceError(ErrorCode.TAG_NOT_FOUND)
 
-  const patchResult = buildUpdatePatch(input)
-  if ('errorCode' in patchResult) return serviceError(patchResult.errorCode)
-  const patch = patchResult.patch
+  const patch: { name?: string; slug?: string } = {}
+  if (input.name !== undefined) patch.name = input.name
+  if (input.slug !== undefined) patch.slug = input.slug
   if (Object.keys(patch).length === 0) {
     return { data: { tag: toTagDetail(existing) }, httpStatus: HttpStatus.OK }
   }
@@ -91,21 +87,3 @@ export async function deleteTagById(
   return { data: null, httpStatus: HttpStatus.NO_CONTENT }
 }
 
-interface UpdatePatchSuccess {
-  patch: { name?: string; slug?: string }
-}
-interface UpdatePatchFailure {
-  errorCode: ErrorCode
-}
-
-function buildUpdatePatch(input: UpdateTagInput): UpdatePatchSuccess | UpdatePatchFailure {
-  if (input.slug !== undefined) {
-    return { patch: { name: input.slug, slug: input.slug } }
-  }
-  if (input.name !== undefined) {
-    const normalized = buildSlugFromName(input.name)
-    if (normalized.length === 0) return { errorCode: ErrorCode.TAG_INVALID_NAME }
-    return { patch: { name: normalized, slug: normalized } }
-  }
-  return { patch: {} }
-}

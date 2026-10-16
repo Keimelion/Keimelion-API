@@ -5,13 +5,17 @@ import { jsonResult } from '../../../../shared/utils/response.js'
 import { validationErrorHandler } from '../../../../shared/utils/validation.js'
 import { getAuthUser } from '../../../../shared/middlewares/auth.js'
 import { RATE_LIMITS } from '../../../../shared/utils/rate-limiter.js'
-import { tagNameSchema } from '../../../../db/entities/tags/tags.schemas.js'
+import {
+  tagNameSchema,
+  tagSlugSchema,
+} from '../../../../db/entities/tags/tags.schemas.js'
 import type { FeatureRouter } from '../../../../shared/types/app.js'
 import { createTag } from '../admin-tags.service.js'
 
 const adminCreateTagSchema = z
   .object({
     name: tagNameSchema,
+    slug: tagSlugSchema,
   })
   .strict()
 
