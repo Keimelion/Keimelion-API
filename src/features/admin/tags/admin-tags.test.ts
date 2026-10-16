@@ -123,36 +123,21 @@ describe('POST /v1/admin/tags', () => {
     vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
   })
 
-  it('returns 201 with created tag (name is normalized to slug)', async () => {
+  it('returns 201 with created tag using the admin-provided name and slug', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
-    mockInsertTag(TAG_ROW)
+    mockInsertTag({ ...TAG_ROW, name: 'Gaming', slug: 'gaming' })
 
     const response = await apiRequest('/v1/admin/tags', {
       method: 'POST',
       token,
-      body: { name: 'Gaming' },
+      body: { name: 'Gaming', slug: 'gaming' },
     })
 
     const body = await response.json() as { tag: { slug: string; name: string } }
     expect(response.status).toBe(201)
+    expect(body.tag.name).toBe('Gaming')
     expect(body.tag.slug).toBe('gaming')
-    expect(body.tag.name).toBe('gaming')
-  })
-
-  it('returns 422 TAG_INVALID_NAME when normalized slug is empty', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
-    mockAdminAuth()
-
-    const response = await apiRequest('/v1/admin/tags', {
-      method: 'POST',
-      token,
-      body: { name: '!!!' },
-    })
-
-    const body = await response.json() as { code: string }
-    expect(response.status).toBe(422)
-    expect(body.code).toBe('TAG_INVALID_NAME')
   })
 
   it('returns 422 when name is empty', async () => {
@@ -162,7 +147,33 @@ describe('POST /v1/admin/tags', () => {
     const response = await apiRequest('/v1/admin/tags', {
       method: 'POST',
       token,
-      body: { name: '' },
+      body: { name: '', slug: 'gaming' },
+    })
+
+    expect(response.status).toBe(422)
+  })
+
+  it('returns 422 when slug is missing', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    const response = await apiRequest('/v1/admin/tags', {
+      method: 'POST',
+      token,
+      body: { name: 'Gaming' },
+    })
+
+    expect(response.status).toBe(422)
+  })
+
+  it('returns 422 when slug fails kebab-case validation', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    const response = await apiRequest('/v1/admin/tags', {
+      method: 'POST',
+      token,
+      body: { name: 'Gaming', slug: 'Bad Slug!' },
     })
 
     expect(response.status).toBe(422)
@@ -175,7 +186,7 @@ describe('POST /v1/admin/tags', () => {
     const response = await apiRequest('/v1/admin/tags', {
       method: 'POST',
       token,
-      body: { name: 'ok', unknownField: 'nope' },
+      body: { name: 'ok', slug: 'ok', unknownField: 'nope' },
     })
 
     expect(response.status).toBe(422)
@@ -188,7 +199,7 @@ describe('POST /v1/admin/tags', () => {
     const response = await apiRequest('/v1/admin/tags', {
       method: 'POST',
       token,
-      body: { name: 'gaming' },
+      body: { name: 'Gaming', slug: 'gaming' },
     })
 
     expect(response.status).toBe(403)
@@ -197,7 +208,7 @@ describe('POST /v1/admin/tags', () => {
   it('returns 401 when not authenticated', async () => {
     const response = await apiRequest('/v1/admin/tags', {
       method: 'POST',
-      body: { name: 'gaming' },
+      body: { name: 'Gaming', slug: 'gaming' },
     })
 
     expect(response.status).toBe(401)
@@ -206,12 +217,12 @@ describe('POST /v1/admin/tags', () => {
   it('logs at info level on successful creation', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
-    mockInsertTag(TAG_ROW)
+    mockInsertTag({ ...TAG_ROW, name: 'Gaming', slug: 'gaming' })
 
     await apiRequest('/v1/admin/tags', {
       method: 'POST',
       token,
-      body: { name: 'Gaming' },
+      body: { name: 'Gaming', slug: 'gaming' },
     })
 
     expect(vi.mocked(logger.info)).toHaveBeenCalledWith(
@@ -328,11 +339,11 @@ describe('PATCH /v1/admin/tags/:id', () => {
     vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
   })
 
-  it('returns 200 when renaming via name (normalizes to slug)', async () => {
+  it('returns 200 when renaming the display name (slug stays unchanged)', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
     mockFindTagById(TAG_ROW)
-    mockUpdateTag({ ...TAG_ROW, name: 'video-games', slug: 'video-games' })
+    mockUpdateTag({ ...TAG_ROW, name: 'Video Games', slug: 'gaming' })
 
     const response = await apiRequest(`/v1/admin/tags/${TAG_ROW.id}`, {
       method: 'PATCH',
@@ -342,15 +353,15 @@ describe('PATCH /v1/admin/tags/:id', () => {
 
     const body = await response.json() as { tag: { slug: string; name: string } }
     expect(response.status).toBe(200)
-    expect(body.tag.slug).toBe('video-games')
-    expect(body.tag.name).toBe('video-games')
+    expect(body.tag.name).toBe('Video Games')
+    expect(body.tag.slug).toBe('gaming')
   })
 
-  it('returns 200 when renaming via explicit slug', async () => {
+  it('returns 200 when renaming via explicit slug (name stays unchanged)', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
     mockFindTagById(TAG_ROW)
-    mockUpdateTag({ ...TAG_ROW, name: 'video-games', slug: 'video-games' })
+    mockUpdateTag({ ...TAG_ROW, name: 'gaming', slug: 'video-games' })
 
     const response = await apiRequest(`/v1/admin/tags/${TAG_ROW.id}`, {
       method: 'PATCH',
@@ -358,8 +369,27 @@ describe('PATCH /v1/admin/tags/:id', () => {
       body: { slug: 'video-games' },
     })
 
-    const body = await response.json() as { tag: { slug: string } }
+    const body = await response.json() as { tag: { slug: string; name: string } }
     expect(response.status).toBe(200)
+    expect(body.tag.name).toBe('gaming')
+    expect(body.tag.slug).toBe('video-games')
+  })
+
+  it('returns 200 when updating both name and slug together', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindTagById(TAG_ROW)
+    mockUpdateTag({ ...TAG_ROW, name: 'Video Games', slug: 'video-games' })
+
+    const response = await apiRequest(`/v1/admin/tags/${TAG_ROW.id}`, {
+      method: 'PATCH',
+      token,
+      body: { name: 'Video Games', slug: 'video-games' },
+    })
+
+    const body = await response.json() as { tag: { slug: string; name: string } }
+    expect(response.status).toBe(200)
+    expect(body.tag.name).toBe('Video Games')
     expect(body.tag.slug).toBe('video-games')
   })
 
@@ -412,20 +442,17 @@ describe('PATCH /v1/admin/tags/:id', () => {
     expect(body.code).toBe('TAG_NOT_FOUND')
   })
 
-  it('returns 422 TAG_INVALID_NAME when normalized name is empty', async () => {
+  it('returns 422 when name is empty', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
-    mockFindTagById(TAG_ROW)
 
     const response = await apiRequest(`/v1/admin/tags/${TAG_ROW.id}`, {
       method: 'PATCH',
       token,
-      body: { name: '!!!' },
+      body: { name: '' },
     })
 
-    const body = await response.json() as { code: string }
     expect(response.status).toBe(422)
-    expect(body.code).toBe('TAG_INVALID_NAME')
   })
 
   it('returns 422 when slug fails kebab-case validation', async () => {
