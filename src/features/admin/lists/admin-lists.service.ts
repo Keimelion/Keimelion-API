@@ -37,6 +37,7 @@ import type { AdminListItemResponse } from './admin-list-items.mapper.js'
 import type { ServiceResult } from '../../../shared/types/service.js'
 import type { PaginatedResponse } from '../../../shared/types/api.js'
 import type { PaginationInput } from '../../../shared/schemas/pagination.js'
+import type { Locale } from '../../../shared/enums/locale.js'
 import type { ListListsInput } from './endpoints/list.js'
 import type { UpdateListInput } from './endpoints/update.js'
 
@@ -80,6 +81,7 @@ export async function getListById(id: string): Promise<ServiceResult<{ list: Adm
 export async function listListItemsByListId(
   id: string,
   pagination: PaginationInput,
+  locale: Locale,
 ): Promise<ServiceResult<PaginatedResponse<AdminListItemResponse>>> {
   const list = await findAdminListById(id)
   if (!list || list.deletedAt) return serviceError(ErrorCode.NOT_FOUND)
@@ -90,7 +92,11 @@ export async function listListItemsByListId(
   ])
 
   return {
-    data: buildPaginatedResponse(rows.map(toAdminListItemResponse), pagination, total),
+    data: buildPaginatedResponse(
+      rows.map((row) => toAdminListItemResponse(row, locale)),
+      pagination,
+      total,
+    ),
     httpStatus: HttpStatus.OK,
   }
 }

@@ -1,5 +1,6 @@
 import { zValidator } from '@hono/zod-validator'
 import { adminOnly } from '../../../../shared/middlewares/admin-only.js'
+import { getLocale } from '../../../../shared/middlewares/resolve-locale.js'
 import { jsonResult } from '../../../../shared/utils/response.js'
 import { validationErrorHandler } from '../../../../shared/utils/validation.js'
 import { uuidParamSchema } from '../../../../shared/schemas/params.js'
@@ -16,7 +17,8 @@ export function mountListListItems(router: FeatureRouter): void {
     async (context) => {
       const { id } = context.req.valid('param')
       const pagination = context.req.valid('query')
-      return jsonResult(context, await listListItemsByListId(id, pagination))
+      const locale = getLocale(context)
+      return jsonResult(context, await listListItemsByListId(id, pagination, locale))
     },
   )
 }
