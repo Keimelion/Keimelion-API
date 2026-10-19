@@ -1,8 +1,10 @@
-import { and, count, eq, inArray, type SQL } from 'drizzle-orm'
+import { and, count, eq, inArray, sql, type SQL } from 'drizzle-orm'
 import { z } from 'zod'
 import { db } from '../../../db/client.js'
 import { lists } from '../../../db/entities/lists/lists.schema.js'
 import { listCollaborators } from '../../../db/entities/list-collaborators/list-collaborators.schema.js'
+import { listItems } from '../../../db/entities/list-items/list-items.schema.js'
+import { itemSources } from '../../../db/entities/item-sources/item-sources.schema.js'
 import {
   LIST_DEFAULT_SORT,
   LIST_SORTABLE_FIELDS,
@@ -15,6 +17,7 @@ import { defineEntity, buildSoftDeleteDefault } from '../../../shared/db/entity-
 import { LIST_STATUS_VALUES } from '../../../shared/enums/list-status.js'
 import type { List } from '../../../db/entities/lists/lists.schema.js'
 import type { ListRowWithOwner } from '../../../shared/types/list.js'
+import { getOffset } from '../../../shared/schemas/pagination.js'
 import type { PaginationInput } from '../../../shared/schemas/pagination.js'
 import type { SortInput } from '../../../shared/schemas/sort.js'
 import type { FilterInput } from '../../../shared/db/filter-parser.js'
@@ -46,7 +49,7 @@ export function findAllListsWithOwner(
   input: PaginationInput,
   filters: ListListsFilters,
 ): Promise<ListRowWithOwner[]> {
-  const offset = (input.page - 1) * input.limit
+  const offset = getOffset(input)
   return db.query.lists.findMany({
     where: buildListsWhere(filters),
     orderBy: listsEntity.buildOrderBy(filters.sort),
@@ -70,6 +73,57 @@ export function findAdminListById(id: string): Promise<List | undefined> {
 
 export function findAdminListByIdWithOwner(id: string): Promise<ListRowWithOwner | undefined> {
   return findListWithOwner(id)
+}
+
+export interface ListAggregateRow {
+  listId: string
+  itemCount: number
+  totalEstimatedPrice: string | null
+}
+
+interface RawAggregateRow extends Record<string, unknown> {
+  list_id: string
+  item_count: number | string
+  total_estimated_price: string | null
+}
+
+/**
+ * Returns per-list aggregates for the given list IDs.
+ *
+ * `itemCount`  = COUNT(list_items.id) regardless of `item_status`.
+ * `totalEstimatedPrice` = SUM over each list_item of AVG(item_sources.price) where price IS NOT NULL.
+ *   AVG() already ignores NULL prices, so a LEFT JOIN preserves list_items without any priced source
+ *   (their item_avg is NULL and does not contribute to the SUM). The final SUM is NULL when every
+ *   item lacks any priced source, matching the spec.
+ *
+ * Lists with zero list_items are absent from the result; the service defaults them to `{ 0, null }`.
+ */
+export async function findListAggregatesByIds(listIds: string[]): Promise<ListAggregateRow[]> {
+  if (listIds.length === 0) return []
+  const rows = await db.execute<RawAggregateRow>(sql`
+    WITH item_averages AS (
+      SELECT
+        ${listItems.listId} AS list_id,
+        ${listItems.id} AS list_item_id,
+        AVG(${itemSources.price}) AS item_avg
+      FROM ${listItems}
+      LEFT JOIN ${itemSources}
+        ON ${itemSources.itemId} = ${listItems.itemId}
+      WHERE ${inArray(listItems.listId, listIds)}
+      GROUP BY ${listItems.listId}, ${listItems.id}
+    )
+    SELECT
+      list_id,
+      COUNT(list_item_id)::int AS item_count,
+      SUM(item_avg)::numeric(10,2) AS total_estimated_price
+    FROM item_averages
+    GROUP BY list_id
+  `)
+  return Array.from(rows).map((row) => ({
+    listId: row.list_id,
+    itemCount: Number(row.item_count),
+    totalEstimatedPrice: row.total_estimated_price,
+  }))
 }
 
 export async function findListIdsByOwnerUserId(ownerUserId: string): Promise<string[]> {

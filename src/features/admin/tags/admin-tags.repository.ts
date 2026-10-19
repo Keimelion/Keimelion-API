@@ -3,6 +3,7 @@ import { db } from '../../../db/client.js'
 import { tags } from '../../../db/entities/tags/tags.schema.js'
 import { defineEntity } from '../../../shared/db/entity-descriptor.js'
 import type { Tag } from '../../../db/entities/tags/tags.schema.js'
+import { getOffset } from '../../../shared/schemas/pagination.js'
 import type { PaginationInput } from '../../../shared/schemas/pagination.js'
 import type { SortInput } from '../../../shared/schemas/sort.js'
 import type { FilterInput } from '../../../shared/db/filter-parser.js'
@@ -41,7 +42,7 @@ export function findAllTags(
   input: PaginationInput,
   filters: ListTagsFilters,
 ): Promise<Tag[]> {
-  const offset = (input.page - 1) * input.limit
+  const offset = getOffset(input)
   return db.query.tags.findMany({
     where: buildTagsWhere(filters),
     orderBy: tagsEntity.buildOrderBy(filters.sort),

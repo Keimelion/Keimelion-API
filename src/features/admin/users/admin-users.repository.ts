@@ -7,6 +7,7 @@ import { defineEntity, buildSoftDeleteDefault } from '../../../shared/db/entity-
 import type { User } from '../../../db/entities/users/users.schema.js'
 
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
+import { getOffset } from '../../../shared/schemas/pagination.js'
 import type { PaginationInput } from '../../../shared/schemas/pagination.js'
 import type { UserRole } from '../../../shared/enums/user-role.js'
 import type { SortInput } from '../../../shared/schemas/sort.js'
@@ -65,7 +66,7 @@ export async function countUsers(filters: ListUsersFilters): Promise<number> {
 }
 
 export function findAllUsers(input: PaginationInput, filters: ListUsersFilters): Promise<User[]> {
-  const offset = (input.page - 1) * input.limit
+  const offset = getOffset(input)
 
   return db.query.users.findMany({
     where: buildUsersWhere(filters),

@@ -10,6 +10,7 @@ import { listCollaborators } from '../../db/entities/list-collaborators/list-col
 import { CollabRoles } from '../../shared/enums/collab-role.js'
 import { defineEntity } from '../../shared/db/entity-descriptor.js'
 import type { ListRowWithOwner } from '../../shared/types/list.js'
+import { getOffset } from '../../shared/schemas/pagination.js'
 import type { PaginationInput } from '../../shared/schemas/pagination.js'
 import type { SortInput } from '../../shared/schemas/sort.js'
 
@@ -26,7 +27,7 @@ export async function findListsOwnedBy(
   pagination: PaginationInput,
   sort: SortInput<UserListsSortField> | undefined,
 ): Promise<ListRowWithOwner[]> {
-  const offset = (pagination.page - 1) * pagination.limit
+  const offset = getOffset(pagination)
   return db.query.lists.findMany({
     where: ownedListsWhere(userId),
     orderBy: userListsEntity.buildOrderBy(sort),

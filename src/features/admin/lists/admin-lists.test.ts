@@ -133,6 +133,20 @@ function mockOwnerListIdsChain(listIds: string[]): void {
   vi.mocked(db.select).mockReturnValueOnce(chain as never)
 }
 
+interface AggregateRawRow {
+  list_id: string
+  item_count: number
+  total_estimated_price: string | null
+}
+
+function mockListAggregatesEmpty(): void {
+  vi.mocked(db.execute).mockResolvedValueOnce([] as never)
+}
+
+function mockListAggregates(rows: AggregateRawRow[]): void {
+  vi.mocked(db.execute).mockResolvedValueOnce(rows as never)
+}
+
 function mockUpdateList(returnRow: unknown): void {
   vi.mocked(db.update).mockReturnValueOnce({
     set: vi.fn().mockReturnValueOnce({
@@ -147,6 +161,7 @@ describe('GET /v1/admin/lists', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.execute).mockResolvedValue([] as never)
   })
 
   it('returns 200 with paginated lists including owner', async () => {
@@ -166,6 +181,64 @@ describe('GET /v1/admin/lists', () => {
     expect(body.items).toHaveLength(1)
     expect(body.pagination.total).toBe(1)
     expect(body.items[0]?.owner?.id).toBe(OWNER_USER.id)
+  })
+
+  it('returns itemCount=0 and totalEstimatedPrice=null when the list has no items', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    vi.mocked(db.query.lists.findMany).mockResolvedValueOnce([rowWithOwner(LIST_ROW, OWNER_USER)] as never)
+    mockCountChain(1)
+    mockListAggregatesEmpty()
+
+    const response = await apiRequest('/v1/admin/lists', { token })
+
+    const body = await response.json() as {
+      items: { itemCount: number; totalEstimatedPrice: string | null }[]
+    }
+    expect(response.status).toBe(200)
+    expect(body.items[0]?.itemCount).toBe(0)
+    expect(body.items[0]?.totalEstimatedPrice).toBeNull()
+  })
+
+  it('returns itemCount>0 and totalEstimatedPrice=null when items exist but none have priced sources', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    vi.mocked(db.query.lists.findMany).mockResolvedValueOnce([rowWithOwner(LIST_ROW, OWNER_USER)] as never)
+    mockCountChain(1)
+    mockListAggregates([
+      { list_id: LIST_ROW.id, item_count: 3, total_estimated_price: null },
+    ])
+
+    const response = await apiRequest('/v1/admin/lists', { token })
+
+    const body = await response.json() as {
+      items: { itemCount: number; totalEstimatedPrice: string | null }[]
+    }
+    expect(response.status).toBe(200)
+    expect(body.items[0]?.itemCount).toBe(3)
+    expect(body.items[0]?.totalEstimatedPrice).toBeNull()
+  })
+
+  it('returns totalEstimatedPrice from SUM(AVG(item_sources.price)) for multi-source items', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    vi.mocked(db.query.lists.findMany).mockResolvedValueOnce([rowWithOwner(LIST_ROW, OWNER_USER)] as never)
+    mockCountChain(1)
+    mockListAggregates([
+      { list_id: LIST_ROW.id, item_count: 2, total_estimated_price: '49.99' },
+    ])
+
+    const response = await apiRequest('/v1/admin/lists', { token })
+
+    const body = await response.json() as {
+      items: { itemCount: number; totalEstimatedPrice: string | null }[]
+    }
+    expect(response.status).toBe(200)
+    expect(body.items[0]?.itemCount).toBe(2)
+    expect(body.items[0]?.totalEstimatedPrice).toBe('49.99')
   })
 
   it('returns owner=null when the owner user is soft-deleted (collaborator FK set null)', async () => {
@@ -317,6 +390,7 @@ describe('GET /v1/admin/lists/:id', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.execute).mockResolvedValue([] as never)
   })
 
   it('returns 200 with list and owner', async () => {
@@ -330,6 +404,40 @@ describe('GET /v1/admin/lists/:id', () => {
     expect(response.status).toBe(200)
     expect(body.list.title).toBe(LIST_ROW.title)
     expect(body.list.owner.id).toBe(OWNER_USER.id)
+  })
+
+  it('returns itemCount and totalEstimatedPrice on the single list', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindListByIdWithOwner(LIST_ROW, OWNER_USER)
+    mockListAggregates([
+      { list_id: LIST_ROW.id, item_count: 4, total_estimated_price: '129.95' },
+    ])
+
+    const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}`, { token })
+
+    const body = await response.json() as {
+      list: { itemCount: number; totalEstimatedPrice: string | null }
+    }
+    expect(response.status).toBe(200)
+    expect(body.list.itemCount).toBe(4)
+    expect(body.list.totalEstimatedPrice).toBe('129.95')
+  })
+
+  it('defaults itemCount=0 and totalEstimatedPrice=null when the list has no items', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindListByIdWithOwner(LIST_ROW, OWNER_USER)
+    mockListAggregatesEmpty()
+
+    const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}`, { token })
+
+    const body = await response.json() as {
+      list: { itemCount: number; totalEstimatedPrice: string | null }
+    }
+    expect(response.status).toBe(200)
+    expect(body.list.itemCount).toBe(0)
+    expect(body.list.totalEstimatedPrice).toBeNull()
   })
 
   it('returns 200 with deletedAt populated for soft-deleted lists (admins see everything)', async () => {
@@ -379,6 +487,7 @@ describe('PATCH /v1/admin/lists/:id', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.execute).mockResolvedValue([] as never)
   })
 
   it('returns 200 with updated list when patching title', async () => {
@@ -619,6 +728,7 @@ describe('DELETE /v1/admin/lists/:id (soft delete)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.execute).mockResolvedValue([] as never)
   })
 
   it('returns 204 and soft-deletes an active list', async () => {
@@ -708,6 +818,7 @@ describe('POST /v1/admin/lists/:id/restore', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.execute).mockResolvedValue([] as never)
   })
 
   it('returns 200 with restored list', async () => {

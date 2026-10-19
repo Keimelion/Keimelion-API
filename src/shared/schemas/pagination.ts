@@ -12,6 +12,10 @@ export const paginationQuerySchema = z.object({
 
 export type PaginationInput = z.infer<typeof paginationQuerySchema>
 
+export function getOffset(input: PaginationInput): number {
+  return (input.page - 1) * input.limit
+}
+
 export function buildPaginatedResponse<TItem>(
   items: TItem[],
   input: PaginationInput,

@@ -109,13 +109,29 @@ function extractPropertyValue(property) {
   }
 }
 
+const NOTION_PROPERTY_TYPE_KEYS = new Set([
+  'title', 'rich_text', 'select', 'status', 'multi_select', 'url', 'email',
+  'phone_number', 'number', 'checkbox', 'date', 'people', 'relation', 'files',
+])
+
+function isAlreadyWrappedProperty(value) {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false
+  return Object.keys(value).some((key) => NOTION_PROPERTY_TYPE_KEYS.has(key))
+}
+
+function splitCsv(value) {
+  return value.split(',').map((entry) => entry.trim()).filter(Boolean)
+}
+
 function buildPropertyPatch(type, rawValue) {
   switch (type) {
     case 'status': return { status: { name: rawValue } }
     case 'select': return { select: { name: rawValue } }
     case 'multi_select': {
-      const names = rawValue.split(',').map((name) => name.trim()).filter(Boolean)
-      return { multi_select: names.map((name) => ({ name })) }
+      return { multi_select: splitCsv(rawValue).map((name) => ({ name })) }
+    }
+    case 'relation': {
+      return { relation: splitCsv(rawValue).map((id) => ({ id })) }
     }
     case 'url': return { url: rawValue }
     case 'email': return { email: rawValue }
@@ -129,12 +145,38 @@ function buildPropertyPatch(type, rawValue) {
       return { number: numeric }
     }
     case 'checkbox': return { checkbox: rawValue === 'true' }
+    case 'date': return { date: { start: rawValue } }
     case 'title': return { title: [{ type: 'text', text: { content: rawValue } }] }
     case 'rich_text': return { rich_text: [{ type: 'text', text: { content: rawValue } }] }
     default:
       console.error(`Unsupported property type: ${type}`)
       process.exit(1)
   }
+}
+
+/**
+ * Build a Notion property value from a loosely-typed JS value, routed by the
+ * database-declared `type`. Accepts:
+ *   - an already-wrapped Notion object  → pass-through
+ *   - null                              → clear
+ *   - boolean/number for matching types → wrap directly
+ *   - array for multi_select/relation/people → wrap each entry
+ *   - string → delegate to buildPropertyPatch (same auto-wrap as set-property)
+ */
+function buildPropertyValue(type, value, propName) {
+  if (isAlreadyWrappedProperty(value)) return value
+  if (value === null) return { [type]: null }
+  if (Array.isArray(value)) {
+    if (type === 'multi_select') return { multi_select: value.map((name) => ({ name: String(name) })) }
+    if (type === 'relation') return { relation: value.map((id) => ({ id: String(id) })) }
+    if (type === 'people') return { people: value.map((id) => ({ id: String(id) })) }
+    console.error(`Property "${propName}" (${type}) does not accept an array value`)
+    process.exit(1)
+  }
+  if (typeof value === 'boolean' && type === 'checkbox') return { checkbox: value }
+  if (typeof value === 'number' && type === 'number') return { number: value }
+  if (typeof value === 'object' && type === 'date') return { date: value }
+  return buildPropertyPatch(type, String(value))
 }
 
 async function fetchPageBlocks(pageId) {
@@ -331,9 +373,37 @@ async function queryDatabase(rawId, payloadArg) {
   process.stdout.write(`${JSON.stringify(collected, null, 2)}\n`)
 }
 
+async function fetchDatabaseSchema(databaseId) {
+  const database = await notionFetch(`/databases/${databaseId}`)
+  const schema = {}
+  for (const [name, property] of Object.entries(database.properties ?? {})) {
+    const entry = { type: property.type }
+    const options = property[property.type]?.options
+    if (Array.isArray(options)) entry.options = options.map((option) => option.name)
+    schema[name] = entry
+  }
+  return { id: database.id, title: richTextToPlain(database.title ?? []), properties: schema }
+}
+
+async function describeDatabase(rawId) {
+  const databaseId = normalizeId(rawId)
+  const schema = await fetchDatabaseSchema(databaseId)
+  process.stdout.write(`${JSON.stringify(schema, null, 2)}\n`)
+}
+
 async function createPage(rawParentId, propertiesArg) {
   const parentId = normalizeId(rawParentId)
-  const properties = await readJsonArg(propertiesArg, 'create-page properties')
+  const input = await readJsonArg(propertiesArg, 'create-page properties')
+  const schema = await fetchDatabaseSchema(parentId)
+  const properties = {}
+  for (const [name, value] of Object.entries(input)) {
+    const type = schema.properties[name]?.type
+    if (!type) {
+      console.error(`Property "${name}" does not exist on database ${parentId}`)
+      process.exit(1)
+    }
+    properties[name] = buildPropertyValue(type, value, name)
+  }
   const response = await notionFetch('/pages', {
     method: 'POST',
     body: JSON.stringify({
@@ -350,15 +420,21 @@ function printUsage() {
     '',
     'Read:',
     '  get-page <page-id>',
-    '  search <query> [<object-type>]             # object-type: page | database (optional)',
+    '  describe-database <db-id>                  # print property names, types and select options',
+    '  search <query> [<object-type>]             # object-type: page | database (optional).',
+    '                                             # Full-text only — does NOT match unique_id prefixes like KEI-110;',
+    '                                             # use query-database with a unique_id filter for ticket-ID lookups.',
     '  query-database <db-id> [<payload-json>]    # payload: {filter, sorts, page_size, limit}; use `-` for stdin',
     '                                             # page_size: rows per request (max 100). limit: total cap (default: all).',
     '',
     'Write:',
     '  set-status <page-id> <status>              # convenience for the Status property',
-    '  set-property <page-id> <name> <value>      # any property; type auto-detected',
+    '  set-property <page-id> <name> <value>      # any property; type auto-detected (relation/multi_select: comma-separated)',
     '  add-comment <page-id> <text>',
-    '  create-page <database-id> <properties>    # properties: JSON object; use `-` for stdin',
+    '  create-page <database-id> <properties>     # properties: JSON object; use `-` for stdin.',
+    '                                             # Each value may be a plain string/number/bool/array/null — the wrapper',
+    '                                             # fetches the DB schema and auto-wraps per property type. Pass a fully',
+    '                                             # Notion-shaped object (e.g. {rich_text:[...]}) to override the auto-wrap.',
     '',
     'Env:',
     '  NOTION_TOKEN       (required) Notion integration secret',
@@ -398,6 +474,11 @@ async function main() {
     case 'query-database': {
       if (!args[0]) { printUsage(); process.exit(1) }
       await queryDatabase(args[0], args[1])
+      return
+    }
+    case 'describe-database': {
+      if (!args[0]) { printUsage(); process.exit(1) }
+      await describeDatabase(args[0])
       return
     }
     case 'create-page': {
