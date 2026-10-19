@@ -108,6 +108,24 @@ const UNPRICED_SOURCE: SourceRow = {
   shop: null,
 }
 
+interface CategoryLinkRow {
+  itemId: string
+  categoryId: string
+  category: {
+    id: string
+    parentId: string | null
+    slug: string
+    depth: number
+    translations: { locale: string; name: string }[]
+  }
+}
+
+interface TagLinkRow {
+  itemId: string
+  tagId: string
+  tag: { id: string; slug: string; name: string }
+}
+
 interface ListItemRow {
   id: string
   listId: string
@@ -119,10 +137,24 @@ interface ListItemRow {
   creatorNote: string | null
   createdAt: Date
   updatedAt: Date
-  item: typeof ITEM_ROW & { sources: SourceRow[] }
+  item: typeof ITEM_ROW & {
+    sources: SourceRow[]
+    itemCategories: CategoryLinkRow[]
+    itemTags: TagLinkRow[]
+  }
 }
 
-function buildListItemRow(id: string, sortOrder: number | null, sources: SourceRow[]): ListItemRow {
+interface BuildListItemRowOptions {
+  itemCategories?: CategoryLinkRow[]
+  itemTags?: TagLinkRow[]
+}
+
+function buildListItemRow(
+  id: string,
+  sortOrder: number | null,
+  sources: SourceRow[],
+  options: BuildListItemRowOptions = {},
+): ListItemRow {
   return {
     id,
     listId: LIST_ROW.id,
@@ -134,8 +166,34 @@ function buildListItemRow(id: string, sortOrder: number | null, sources: SourceR
     creatorNote: null,
     createdAt: new Date('2024-01-01'),
     updatedAt: new Date('2024-01-01'),
-    item: { ...ITEM_ROW, sources },
+    item: {
+      ...ITEM_ROW,
+      sources,
+      itemCategories: options.itemCategories ?? [],
+      itemTags: options.itemTags ?? [],
+    },
   }
+}
+
+const CATEGORY_LINK: CategoryLinkRow = {
+  itemId: ITEM_ROW.id,
+  categoryId: '00000000-0000-0000-0000-000000000070',
+  category: {
+    id: '00000000-0000-0000-0000-000000000070',
+    parentId: null,
+    slug: 'books',
+    depth: 0,
+    translations: [
+      { locale: 'en', name: 'Books' },
+      { locale: 'fr', name: 'Livres' },
+    ],
+  },
+}
+
+const TAG_LINK: TagLinkRow = {
+  itemId: ITEM_ROW.id,
+  tagId: '00000000-0000-0000-0000-000000000080',
+  tag: { id: '00000000-0000-0000-0000-000000000080', slug: 'fantasy', name: 'fantasy' },
 }
 
 const LIST_ITEM_WITH_PRICED = buildListItemRow(
@@ -215,6 +273,40 @@ describe('GET /v1/admin/lists/:id/items', () => {
     expect(body.items[0]?.sources[0]?.price).toBe('19.99')
     expect(body.items[1]?.sources).toHaveLength(2)
     expect(body.items[1]?.sources.map((source) => source.price)).toEqual(['19.99', null])
+  })
+
+  it('returns 200 with item.tags and item.categories hydrated (locale picks the right translation)', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindListById(LIST_ROW)
+    mockFindListItems([
+      buildListItemRow('00000000-0000-0000-0000-000000000060', 30, [], {
+        itemCategories: [CATEGORY_LINK],
+        itemTags: [TAG_LINK],
+      }),
+    ])
+    mockCountChain(1)
+
+    const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}/items`, {
+      token,
+      headers: { 'Accept-Language': 'fr' },
+    })
+
+    const body = await response.json() as {
+      items: {
+        item: {
+          categories: { id: string; slug: string; name: string }[]
+          tags: { id: string; slug: string; name: string }[]
+        }
+      }[]
+    }
+    expect(response.status).toBe(200)
+    expect(body.items[0]?.item.categories).toEqual([
+      { id: CATEGORY_LINK.categoryId, parentId: null, slug: 'books', depth: 0, name: 'Livres' },
+    ])
+    expect(body.items[0]?.item.tags).toEqual([
+      { id: TAG_LINK.tagId, slug: 'fantasy', name: 'fantasy' },
+    ])
   })
 
   it('returns 200 with empty sources[] for list items whose item has no sources', async () => {
