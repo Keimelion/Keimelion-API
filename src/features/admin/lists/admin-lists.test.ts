@@ -300,6 +300,17 @@ describe('GET /v1/admin/lists', () => {
     expect(response.status).toBe(200)
   })
 
+  it('filters by title[ilike]', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    vi.mocked(db.query.lists.findMany).mockResolvedValueOnce([rowWithOwner(LIST_ROW, OWNER_USER)] as never)
+    mockCountChain(1)
+
+    const response = await apiRequest('/v1/admin/lists?title%5Bilike%5D=birthday', { token })
+    expect(response.status).toBe(200)
+  })
+
   it('excludes soft-deleted lists by default', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()

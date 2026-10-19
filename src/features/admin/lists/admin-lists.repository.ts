@@ -29,6 +29,7 @@ export const listsEntity = defineEntity({
   sortable: LIST_SORTABLE_FIELDS,
   defaultSort: LIST_DEFAULT_SORT,
   filterable: {
+    title:          { column: lists.title,          operators: ['eq', 'ilike'] },
     listStatus:     { column: lists.listStatus,     operators: ['eq', 'in'],   valueSchema: listStatusSchema },
     occasionTypeId: { column: lists.occasionTypeId, operators: ['eq', 'isNull'], valueSchema: occasionTypeIdSchema },
     createdAt:      { column: lists.createdAt, operators: ['gte', 'lte', 'between'], valueType: 'date' },
