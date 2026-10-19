@@ -20,15 +20,23 @@ import {
   countLists,
   findAdminListById,
   findAdminListByIdWithOwner,
+  findListAggregatesByIds,
   findListIdsByOwnerUserId,
 } from './admin-lists.repository.js'
+import {
+  countListItemsByListId,
+  findListItemsByListIdPaged,
+} from './admin-list-items.repository.js'
 import { toAdminListDetail } from './admin-lists.mapper.js'
+import { toAdminListItemResponse } from './admin-list-items.mapper.js'
 import { AdminAction } from '../admin.enums.js'
 import type { List } from '../../../db/entities/lists/lists.schema.js'
 import type { UpdateListFields } from '../../../db/entities/lists/lists.repository.js'
-import type { AdminListDetail } from './admin-lists.mapper.js'
+import type { AdminListAggregate, AdminListDetail } from './admin-lists.mapper.js'
+import type { AdminListItemResponse } from './admin-list-items.mapper.js'
 import type { ServiceResult } from '../../../shared/types/service.js'
 import type { PaginatedResponse } from '../../../shared/types/api.js'
+import type { PaginationInput } from '../../../shared/schemas/pagination.js'
 import type { ListListsInput } from './endpoints/list.js'
 import type { UpdateListInput } from './endpoints/update.js'
 
@@ -45,8 +53,14 @@ export async function listLists(
   const filters = { sort: input.sort, genericFilters: input.genericFilters, ownerListIds }
   const [rows, total] = await Promise.all([findAllListsWithOwner(input, filters), countLists(filters)])
 
+  const aggregates = await buildAggregateMap(rows.map((row) => row.id))
+
   return {
-    data: buildPaginatedResponse(rows.map((row) => toAdminListDetail(row)), input, total),
+    data: buildPaginatedResponse(
+      rows.map((row) => toAdminListDetail(row, aggregates.get(row.id))),
+      input,
+      total,
+    ),
     httpStatus: HttpStatus.OK,
   }
 }
@@ -55,8 +69,28 @@ export async function getListById(id: string): Promise<ServiceResult<{ list: Adm
   const row = await findAdminListByIdWithOwner(id)
   if (!row) return serviceError(ErrorCode.NOT_FOUND)
 
+  const aggregates = await buildAggregateMap([row.id])
+
   return {
-    data: { list: toAdminListDetail(row) },
+    data: { list: toAdminListDetail(row, aggregates.get(row.id)) },
+    httpStatus: HttpStatus.OK,
+  }
+}
+
+export async function listListItemsByListId(
+  id: string,
+  pagination: PaginationInput,
+): Promise<ServiceResult<PaginatedResponse<AdminListItemResponse>>> {
+  const list = await findAdminListById(id)
+  if (!list || list.deletedAt) return serviceError(ErrorCode.NOT_FOUND)
+
+  const [rows, total] = await Promise.all([
+    findListItemsByListIdPaged(id, pagination),
+    countListItemsByListId(id),
+  ])
+
+  return {
+    data: buildPaginatedResponse(rows.map(toAdminListItemResponse), pagination, total),
     httpStatus: HttpStatus.OK,
   }
 }
@@ -101,6 +135,8 @@ export async function updateListById(
 
   logChanges(adminId, id, existingRow, fieldPatch)
 
+  const aggregates = await buildAggregateMap([id])
+
   if (tagSlugs === null) {
     const updatedRow = {
       ...outcome.row,
@@ -108,7 +144,7 @@ export async function updateListById(
       listTags: existingRow.listTags,
     }
     return {
-      data: { list: toAdminListDetail(updatedRow) },
+      data: { list: toAdminListDetail(updatedRow, aggregates.get(id)) },
       httpStatus: HttpStatus.OK,
     }
   }
@@ -116,7 +152,7 @@ export async function updateListById(
   const refreshed = await findListWithOwner(id)
   if (!refreshed) return serviceError(ErrorCode.INTERNAL_ERROR)
   return {
-    data: { list: toAdminListDetail(refreshed) },
+    data: { list: toAdminListDetail(refreshed, aggregates.get(id)) },
     httpStatus: HttpStatus.OK,
   }
 }
@@ -143,15 +179,27 @@ export async function restoreListById(
 
   logger.info({ adminId, action: AdminAction.RESTORE_LIST, listId: id })
 
+  const aggregates = await buildAggregateMap([id])
+
   const restoredRow = {
     ...restored,
     collaborators: existingRow.collaborators,
     listTags: existingRow.listTags,
   }
   return {
-    data: { list: toAdminListDetail(restoredRow) },
+    data: { list: toAdminListDetail(restoredRow, aggregates.get(id)) },
     httpStatus: HttpStatus.OK,
   }
+}
+
+async function buildAggregateMap(listIds: string[]): Promise<Map<string, AdminListAggregate>> {
+  const rows = await findListAggregatesByIds(listIds)
+  return new Map(
+    rows.map((row) => [
+      row.listId,
+      { itemCount: row.itemCount, totalEstimatedPrice: row.totalEstimatedPrice },
+    ]),
+  )
 }
 
 function logChanges(adminId: string, listId: string, existingRow: List, fieldPatch: UpdateListFields): void {
