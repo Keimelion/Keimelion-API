@@ -3,6 +3,7 @@ import { db } from '../../../db/client.js'
 import { items } from '../../../db/entities/items/items.schema.js'
 import { defineEntity } from '../../../shared/db/entity-descriptor.js'
 import type { ItemRowWithSources } from '../../../shared/types/item.js'
+import { getOffset } from '../../../shared/schemas/pagination.js'
 import type { PaginationInput } from '../../../shared/schemas/pagination.js'
 import type { SortInput } from '../../../shared/schemas/sort.js'
 import type { FilterInput } from '../../../shared/db/filter-parser.js'
@@ -37,7 +38,7 @@ export function findAllItemsWithSources(
   input: PaginationInput,
   filters: ListItemsFilters,
 ): Promise<ItemRowWithSources[]> {
-  const offset = (input.page - 1) * input.limit
+  const offset = getOffset(input)
   return db.query.items.findMany({
     where: buildItemsWhere(filters),
     orderBy: itemsEntity.buildOrderBy(filters.sort),

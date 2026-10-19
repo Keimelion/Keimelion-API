@@ -17,6 +17,7 @@ import { defineEntity, buildSoftDeleteDefault } from '../../../shared/db/entity-
 import { LIST_STATUS_VALUES } from '../../../shared/enums/list-status.js'
 import type { List } from '../../../db/entities/lists/lists.schema.js'
 import type { ListRowWithOwner } from '../../../shared/types/list.js'
+import { getOffset } from '../../../shared/schemas/pagination.js'
 import type { PaginationInput } from '../../../shared/schemas/pagination.js'
 import type { SortInput } from '../../../shared/schemas/sort.js'
 import type { FilterInput } from '../../../shared/db/filter-parser.js'
@@ -48,7 +49,7 @@ export function findAllListsWithOwner(
   input: PaginationInput,
   filters: ListListsFilters,
 ): Promise<ListRowWithOwner[]> {
-  const offset = (input.page - 1) * input.limit
+  const offset = getOffset(input)
   return db.query.lists.findMany({
     where: buildListsWhere(filters),
     orderBy: listsEntity.buildOrderBy(filters.sort),

@@ -2,7 +2,7 @@ import { and, asc, count, ilike, type SQL } from 'drizzle-orm'
 import { HttpStatus } from '../../shared/enums/http.js'
 import { db } from '../../db/client.js'
 import { tags } from '../../db/entities/tags/tags.schema.js'
-import { buildPaginatedResponse } from '../../shared/schemas/pagination.js'
+import { buildPaginatedResponse, getOffset } from '../../shared/schemas/pagination.js'
 import { toTagPublic } from '../../shared/types/tag.js'
 import type { TagPublic } from '../../shared/types/tag.js'
 import type { PaginationInput } from '../../shared/schemas/pagination.js'
@@ -17,7 +17,7 @@ export async function listPublicTags(
   input: ListTagsPublicInput,
 ): Promise<ServiceResult<PaginatedResponse<TagPublic>>> {
   const whereClause = buildPublicTagsWhere(input.name)
-  const offset = (input.page - 1) * input.limit
+  const offset = getOffset(input)
 
   const [rows, total] = await Promise.all([
     db.query.tags.findMany({

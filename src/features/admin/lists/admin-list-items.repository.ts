@@ -4,6 +4,7 @@ import { listItems } from '../../../db/entities/list-items/list-items.schema.js'
 import type { Item } from '../../../db/entities/items/items.schema.js'
 import type { ListItem } from '../../../db/entities/list-items/list-items.schema.js'
 import type { ItemSourceWithShop } from '../../../shared/types/item.js'
+import { getOffset } from '../../../shared/schemas/pagination.js'
 import type { PaginationInput } from '../../../shared/schemas/pagination.js'
 
 export interface ItemWithSourcesRow extends Item {
@@ -18,7 +19,7 @@ export function findListItemsByListIdPaged(
   listId: string,
   pagination: PaginationInput,
 ): Promise<AdminListItemRow[]> {
-  const offset = (pagination.page - 1) * pagination.limit
+  const offset = getOffset(pagination)
   return db.query.listItems.findMany({
     where: eq(listItems.listId, listId),
     orderBy: [sql`${listItems.sortOrder} ASC NULLS LAST`, asc(listItems.createdAt)],

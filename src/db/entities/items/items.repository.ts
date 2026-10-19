@@ -2,6 +2,7 @@ import { count, desc, eq } from 'drizzle-orm'
 import { db } from '../../client.js'
 import { items } from './items.schema.js'
 import { listItems } from '../list-items/list-items.schema.js'
+import { getOffset } from '../../../shared/schemas/pagination.js'
 import type { PaginationInput } from '../../../shared/schemas/pagination.js'
 import type { Item } from './items.schema.js'
 import type { ItemRowWithSources } from '../../../shared/types/item.js'
@@ -66,7 +67,7 @@ export async function countListItemsReferencing(itemId: string, tx?: DbTransacti
 }
 
 export function findAllItemsWithSources(pagination: PaginationInput): Promise<ItemRowWithSources[]> {
-  const offset = (pagination.page - 1) * pagination.limit
+  const offset = getOffset(pagination)
   return db.query.items.findMany({
     orderBy: [desc(items.createdAt)],
     limit: pagination.limit,

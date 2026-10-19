@@ -4,6 +4,7 @@ import { shops } from '../../../db/entities/shops/shops.schema.js'
 import { itemSources } from '../../../db/entities/item-sources/item-sources.schema.js'
 import { defineEntity } from '../../../shared/db/entity-descriptor.js'
 import type { Shop } from '../../../db/entities/shops/shops.schema.js'
+import { getOffset } from '../../../shared/schemas/pagination.js'
 import type { PaginationInput } from '../../../shared/schemas/pagination.js'
 import type { SortInput } from '../../../shared/schemas/sort.js'
 import type { FilterInput } from '../../../shared/db/filter-parser.js'
@@ -44,7 +45,7 @@ function buildShopsWhere(filters: ListShopsFilters): SQL | undefined {
 }
 
 export function findAllShops(input: PaginationInput, filters: ListShopsFilters): Promise<Shop[]> {
-  const offset = (input.page - 1) * input.limit
+  const offset = getOffset(input)
   return db.query.shops.findMany({
     where: buildShopsWhere(filters),
     orderBy: shopsEntity.buildOrderBy(filters.sort),
@@ -65,7 +66,7 @@ export function findItemSourcesByShopId(
   shopId: string,
   input: PaginationInput,
 ): Promise<ItemSourceWithItem[]> {
-  const offset = (input.page - 1) * input.limit
+  const offset = getOffset(input)
   return db.query.itemSources.findMany({
     where: eq(itemSources.shopId, shopId),
     with: { item: { columns: { id: true, name: true } } },
