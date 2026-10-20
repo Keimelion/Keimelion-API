@@ -244,7 +244,6 @@ function mockCountChain(total: number): void {
 
 interface ListItemAverageRawRow {
   list_item_id: string
-  currency: string
   average_price: string
 }
 
@@ -286,65 +285,47 @@ describe('GET /v1/admin/lists/:id/items', () => {
     expect(body.items[1]?.sources.map((source) => source.price)).toEqual(['19.99', null])
   })
 
-  it('returns averagePrice keyed by currency for an EUR-only item', async () => {
+  it('returns averagePrice as a USD scalar by default', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
     mockFindListById(LIST_ROW)
     mockFindListItems([LIST_ITEM_WITH_PRICED])
     mockCountChain(1)
     mockListItemAverages([
-      { list_item_id: LIST_ITEM_WITH_PRICED.id, currency: 'EUR', average_price: '19.99' },
+      { list_item_id: LIST_ITEM_WITH_PRICED.id, average_price: '21.73' },
     ])
 
     const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}/items`, { token })
 
     const body = await response.json() as {
-      items: { averagePrice: Record<string, string> }[]
+      items: { averagePrice: string | null; displayCurrency: string }[]
     }
     expect(response.status).toBe(200)
-    expect(body.items[0]?.averagePrice).toEqual({ EUR: '19.99' })
+    expect(body.items[0]?.averagePrice).toBe('21.73')
+    expect(body.items[0]?.displayCurrency).toBe('USD')
   })
 
-  it('returns averagePrice keyed by currency for a USD-only item', async () => {
+  it('echoes the requested displayCurrency on each item', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
     mockFindListById(LIST_ROW)
     mockFindListItems([LIST_ITEM_WITH_PRICED])
     mockCountChain(1)
     mockListItemAverages([
-      { list_item_id: LIST_ITEM_WITH_PRICED.id, currency: 'USD', average_price: '24.50' },
+      { list_item_id: LIST_ITEM_WITH_PRICED.id, average_price: '19.99' },
     ])
 
-    const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}/items`, { token })
+    const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}/items?currency=EUR`, { token })
 
     const body = await response.json() as {
-      items: { averagePrice: Record<string, string> }[]
+      items: { averagePrice: string | null; displayCurrency: string }[]
     }
     expect(response.status).toBe(200)
-    expect(body.items[0]?.averagePrice).toEqual({ USD: '24.50' })
+    expect(body.items[0]?.averagePrice).toBe('19.99')
+    expect(body.items[0]?.displayCurrency).toBe('EUR')
   })
 
-  it('returns averagePrice with one entry per currency for mixed-currency items', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
-    mockAdminAuth()
-    mockFindListById(LIST_ROW)
-    mockFindListItems([LIST_ITEM_WITH_MIXED])
-    mockCountChain(1)
-    mockListItemAverages([
-      { list_item_id: LIST_ITEM_WITH_MIXED.id, currency: 'EUR', average_price: '19.99' },
-      { list_item_id: LIST_ITEM_WITH_MIXED.id, currency: 'USD', average_price: '25.00' },
-    ])
-
-    const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}/items`, { token })
-
-    const body = await response.json() as {
-      items: { averagePrice: Record<string, string> }[]
-    }
-    expect(response.status).toBe(200)
-    expect(body.items[0]?.averagePrice).toEqual({ EUR: '19.99', USD: '25.00' })
-  })
-
-  it('returns averagePrice={} when the item has no priced sources', async () => {
+  it('returns averagePrice=null and echoes displayCurrency when the item has no priced sources', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
     mockFindListById(LIST_ROW)
@@ -352,33 +333,22 @@ describe('GET /v1/admin/lists/:id/items', () => {
     mockCountChain(1)
     mockListItemAverages([])
 
-    const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}/items`, { token })
+    const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}/items?currency=GBP`, { token })
 
     const body = await response.json() as {
-      items: { averagePrice: Record<string, string> }[]
+      items: { averagePrice: string | null; displayCurrency: string }[]
     }
     expect(response.status).toBe(200)
-    expect(body.items[0]?.averagePrice).toEqual({})
+    expect(body.items[0]?.averagePrice).toBeNull()
+    expect(body.items[0]?.displayCurrency).toBe('GBP')
   })
 
-  it('drops currencies outside the supported set from averagePrice', async () => {
+  it('returns 422 when ?currency is unsupported', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
-    mockFindListById(LIST_ROW)
-    mockFindListItems([LIST_ITEM_WITH_PRICED])
-    mockCountChain(1)
-    mockListItemAverages([
-      { list_item_id: LIST_ITEM_WITH_PRICED.id, currency: 'EUR', average_price: '19.99' },
-      { list_item_id: LIST_ITEM_WITH_PRICED.id, currency: 'XYZ', average_price: '99.00' },
-    ])
 
-    const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}/items`, { token })
-
-    const body = await response.json() as {
-      items: { averagePrice: Record<string, string> }[]
-    }
-    expect(response.status).toBe(200)
-    expect(body.items[0]?.averagePrice).toEqual({ EUR: '19.99' })
+    const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}/items?currency=XYZ`, { token })
+    expect(response.status).toBe(422)
   })
 
   it('returns 200 with item.tags and item.categories hydrated (locale picks the right translation)', async () => {

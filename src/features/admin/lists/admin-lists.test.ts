@@ -136,8 +136,7 @@ function mockOwnerListIdsChain(listIds: string[]): void {
 interface AggregateRawRow {
   list_id: string
   item_count: number
-  currency: string | null
-  currency_total: string | null
+  total_estimated_price: string | null
 }
 
 function mockListAggregatesEmpty(): void {
@@ -184,7 +183,7 @@ describe('GET /v1/admin/lists', () => {
     expect(body.items[0]?.owner?.id).toBe(OWNER_USER.id)
   })
 
-  it('returns itemCount=0 and empty totalEstimatedPrice when the list has no items', async () => {
+  it('returns itemCount=0 and null totalEstimatedPrice when the list has no items', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
 
@@ -195,112 +194,82 @@ describe('GET /v1/admin/lists', () => {
     const response = await apiRequest('/v1/admin/lists', { token })
 
     const body = await response.json() as {
-      items: { itemCount: number; totalEstimatedPrice: Record<string, string> }[]
+      items: { itemCount: number; totalEstimatedPrice: string | null; displayCurrency: string }[]
     }
     expect(response.status).toBe(200)
     expect(body.items[0]?.itemCount).toBe(0)
-    expect(body.items[0]?.totalEstimatedPrice).toEqual({})
+    expect(body.items[0]?.totalEstimatedPrice).toBeNull()
+    expect(body.items[0]?.displayCurrency).toBe('USD')
   })
 
-  it('returns itemCount>0 and empty totalEstimatedPrice when items exist but none have priced sources', async () => {
+  it('returns itemCount>0 and null totalEstimatedPrice when items exist but none have priced sources', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
 
     vi.mocked(db.query.lists.findMany).mockResolvedValueOnce([rowWithOwner(LIST_ROW, OWNER_USER)] as never)
     mockCountChain(1)
     mockListAggregates([
-      { list_id: LIST_ROW.id, item_count: 3, currency: null, currency_total: null },
+      { list_id: LIST_ROW.id, item_count: 3, total_estimated_price: null },
     ])
 
     const response = await apiRequest('/v1/admin/lists', { token })
 
     const body = await response.json() as {
-      items: { itemCount: number; totalEstimatedPrice: Record<string, string> }[]
+      items: { itemCount: number; totalEstimatedPrice: string | null; displayCurrency: string }[]
     }
     expect(response.status).toBe(200)
     expect(body.items[0]?.itemCount).toBe(3)
-    expect(body.items[0]?.totalEstimatedPrice).toEqual({})
+    expect(body.items[0]?.totalEstimatedPrice).toBeNull()
+    expect(body.items[0]?.displayCurrency).toBe('USD')
   })
 
-  it('returns totalEstimatedPrice keyed by currency for a single-currency list', async () => {
+  it('returns totalEstimatedPrice as a USD scalar when ?currency is omitted', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
 
     vi.mocked(db.query.lists.findMany).mockResolvedValueOnce([rowWithOwner(LIST_ROW, OWNER_USER)] as never)
     mockCountChain(1)
     mockListAggregates([
-      { list_id: LIST_ROW.id, item_count: 2, currency: 'EUR', currency_total: '49.99' },
+      { list_id: LIST_ROW.id, item_count: 2, total_estimated_price: '36.30' },
     ])
 
     const response = await apiRequest('/v1/admin/lists', { token })
 
     const body = await response.json() as {
-      items: { itemCount: number; totalEstimatedPrice: Record<string, string> }[]
+      items: { itemCount: number; totalEstimatedPrice: string | null; displayCurrency: string }[]
     }
     expect(response.status).toBe(200)
     expect(body.items[0]?.itemCount).toBe(2)
-    expect(body.items[0]?.totalEstimatedPrice).toEqual({ EUR: '49.99' })
+    expect(body.items[0]?.totalEstimatedPrice).toBe('36.30')
+    expect(body.items[0]?.displayCurrency).toBe('USD')
   })
 
-  it('returns totalEstimatedPrice keyed by currency for a USD-only list', async () => {
+  it('echoes the requested displayCurrency and returns a single scalar total', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
 
     vi.mocked(db.query.lists.findMany).mockResolvedValueOnce([rowWithOwner(LIST_ROW, OWNER_USER)] as never)
     mockCountChain(1)
     mockListAggregates([
-      { list_id: LIST_ROW.id, item_count: 1, currency: 'USD', currency_total: '20.00' },
+      { list_id: LIST_ROW.id, item_count: 1, total_estimated_price: '13.80' },
     ])
 
-    const response = await apiRequest('/v1/admin/lists', { token })
+    const response = await apiRequest('/v1/admin/lists?currency=EUR', { token })
 
     const body = await response.json() as {
-      items: { itemCount: number; totalEstimatedPrice: Record<string, string> }[]
+      items: { totalEstimatedPrice: string | null; displayCurrency: string }[]
     }
     expect(response.status).toBe(200)
-    expect(body.items[0]?.itemCount).toBe(1)
-    expect(body.items[0]?.totalEstimatedPrice).toEqual({ USD: '20.00' })
+    expect(body.items[0]?.totalEstimatedPrice).toBe('13.80')
+    expect(body.items[0]?.displayCurrency).toBe('EUR')
   })
 
-  it('returns totalEstimatedPrice with one entry per currency for mixed-currency lists', async () => {
+  it('returns 422 when ?currency is unsupported', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
 
-    vi.mocked(db.query.lists.findMany).mockResolvedValueOnce([rowWithOwner(LIST_ROW, OWNER_USER)] as never)
-    mockCountChain(1)
-    mockListAggregates([
-      { list_id: LIST_ROW.id, item_count: 2, currency: 'EUR', currency_total: '15.00' },
-      { list_id: LIST_ROW.id, item_count: 2, currency: 'USD', currency_total: '20.00' },
-    ])
-
-    const response = await apiRequest('/v1/admin/lists', { token })
-
-    const body = await response.json() as {
-      items: { itemCount: number; totalEstimatedPrice: Record<string, string> }[]
-    }
-    expect(response.status).toBe(200)
-    expect(body.items[0]?.itemCount).toBe(2)
-    expect(body.items[0]?.totalEstimatedPrice).toEqual({ EUR: '15.00', USD: '20.00' })
-  })
-
-  it('drops currencies outside the supported set', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
-    mockAdminAuth()
-
-    vi.mocked(db.query.lists.findMany).mockResolvedValueOnce([rowWithOwner(LIST_ROW, OWNER_USER)] as never)
-    mockCountChain(1)
-    mockListAggregates([
-      { list_id: LIST_ROW.id, item_count: 1, currency: 'EUR', currency_total: '15.00' },
-      { list_id: LIST_ROW.id, item_count: 1, currency: 'XYZ', currency_total: '99.00' },
-    ])
-
-    const response = await apiRequest('/v1/admin/lists', { token })
-
-    const body = await response.json() as {
-      items: { totalEstimatedPrice: Record<string, string> }[]
-    }
-    expect(response.status).toBe(200)
-    expect(body.items[0]?.totalEstimatedPrice).toEqual({ EUR: '15.00' })
+    const response = await apiRequest('/v1/admin/lists?currency=XYZ', { token })
+    expect(response.status).toBe(422)
   })
 
   it('returns owner=null when the owner user is soft-deleted (collaborator FK set null)', async () => {
@@ -479,45 +448,45 @@ describe('GET /v1/admin/lists/:id', () => {
     expect(body.list.owner.id).toBe(OWNER_USER.id)
   })
 
-  it('returns itemCount and per-currency totalEstimatedPrice on the single list', async () => {
+  it('returns itemCount and a USD scalar totalEstimatedPrice by default', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
     mockFindListByIdWithOwner(LIST_ROW, OWNER_USER)
     mockListAggregates([
-      { list_id: LIST_ROW.id, item_count: 4, currency: 'EUR', currency_total: '129.95' },
+      { list_id: LIST_ROW.id, item_count: 4, total_estimated_price: '129.95' },
     ])
 
     const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}`, { token })
 
     const body = await response.json() as {
-      list: { itemCount: number; totalEstimatedPrice: Record<string, string> }
+      list: { itemCount: number; totalEstimatedPrice: string | null; displayCurrency: string }
     }
     expect(response.status).toBe(200)
     expect(body.list.itemCount).toBe(4)
-    expect(body.list.totalEstimatedPrice).toEqual({ EUR: '129.95' })
+    expect(body.list.totalEstimatedPrice).toBe('129.95')
+    expect(body.list.displayCurrency).toBe('USD')
   })
 
-  it('returns totalEstimatedPrice with one entry per currency on a mixed-currency list', async () => {
+  it('echoes the requested displayCurrency and returns a single scalar total', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
     mockFindListByIdWithOwner(LIST_ROW, OWNER_USER)
     mockListAggregates([
-      { list_id: LIST_ROW.id, item_count: 3, currency: 'EUR', currency_total: '15.00' },
-      { list_id: LIST_ROW.id, item_count: 3, currency: 'USD', currency_total: '20.00' },
-      { list_id: LIST_ROW.id, item_count: 3, currency: 'GBP', currency_total: '10.00' },
+      { list_id: LIST_ROW.id, item_count: 3, total_estimated_price: '45.00' },
     ])
 
-    const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}`, { token })
+    const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}?currency=EUR`, { token })
 
     const body = await response.json() as {
-      list: { itemCount: number; totalEstimatedPrice: Record<string, string> }
+      list: { itemCount: number; totalEstimatedPrice: string | null; displayCurrency: string }
     }
     expect(response.status).toBe(200)
     expect(body.list.itemCount).toBe(3)
-    expect(body.list.totalEstimatedPrice).toEqual({ EUR: '15.00', USD: '20.00', GBP: '10.00' })
+    expect(body.list.totalEstimatedPrice).toBe('45.00')
+    expect(body.list.displayCurrency).toBe('EUR')
   })
 
-  it('defaults itemCount=0 and empty totalEstimatedPrice when the list has no items', async () => {
+  it('defaults itemCount=0 and null totalEstimatedPrice when the list has no items', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
     mockFindListByIdWithOwner(LIST_ROW, OWNER_USER)
@@ -526,11 +495,20 @@ describe('GET /v1/admin/lists/:id', () => {
     const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}`, { token })
 
     const body = await response.json() as {
-      list: { itemCount: number; totalEstimatedPrice: Record<string, string> }
+      list: { itemCount: number; totalEstimatedPrice: string | null; displayCurrency: string }
     }
     expect(response.status).toBe(200)
     expect(body.list.itemCount).toBe(0)
-    expect(body.list.totalEstimatedPrice).toEqual({})
+    expect(body.list.totalEstimatedPrice).toBeNull()
+    expect(body.list.displayCurrency).toBe('USD')
+  })
+
+  it('returns 422 when ?currency is unsupported', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}?currency=XYZ`, { token })
+    expect(response.status).toBe(422)
   })
 
   it('returns 200 with deletedAt populated for soft-deleted lists (admins see everything)', async () => {

@@ -5,20 +5,23 @@ import { jsonResult } from '../../../../shared/utils/response.js'
 import { validationErrorHandler } from '../../../../shared/utils/validation.js'
 import { uuidParamSchema } from '../../../../shared/schemas/params.js'
 import { paginationQuerySchema } from '../../../../shared/schemas/pagination.js'
+import { displayCurrencyQuerySchema } from '../../../../shared/schemas/currency.js'
 import type { FeatureRouter } from '../../../../shared/types/app.js'
 import { listListItemsByListId } from '../admin-lists.service.js'
+
+const listListItemsQuerySchema = paginationQuerySchema.merge(displayCurrencyQuerySchema)
 
 export function mountListListItems(router: FeatureRouter): void {
   router.get(
     '/:id/items',
     ...adminOnly,
     zValidator('param', uuidParamSchema, validationErrorHandler),
-    zValidator('query', paginationQuerySchema, validationErrorHandler),
+    zValidator('query', listListItemsQuerySchema, validationErrorHandler),
     async (context) => {
       const { id } = context.req.valid('param')
-      const pagination = context.req.valid('query')
+      const { currency, ...pagination } = context.req.valid('query')
       const locale = getLocale(context)
-      return jsonResult(context, await listListItemsByListId(id, pagination, locale))
+      return jsonResult(context, await listListItemsByListId(id, pagination, locale, currency))
     },
   )
 }

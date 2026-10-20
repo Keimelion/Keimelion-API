@@ -5,6 +5,8 @@ import { lists } from '../../../db/entities/lists/lists.schema.js'
 import { listCollaborators } from '../../../db/entities/list-collaborators/list-collaborators.schema.js'
 import { listItems } from '../../../db/entities/list-items/list-items.schema.js'
 import { itemSources } from '../../../db/entities/item-sources/item-sources.schema.js'
+import { currencies } from '../../../db/entities/currencies/currencies.schema.js'
+import type { SupportedCurrency } from '../../../shared/enums/currency.js'
 import {
   LIST_DEFAULT_SORT,
   LIST_SORTABLE_FIELDS,
@@ -79,31 +81,35 @@ export function findAdminListByIdWithOwner(id: string): Promise<ListRowWithOwner
 export interface ListAggregateRawRow {
   listId: string
   itemCount: number
-  currency: string | null
-  currencyTotal: string | null
+  totalEstimatedPrice: string | null
 }
 
 interface RawAggregateRow extends Record<string, unknown> {
   list_id: string
   item_count: number | string
-  currency: string | null
-  currency_total: string | null
+  total_estimated_price: string | null
 }
 
 /**
- * Returns per-(list, currency) price aggregates alongside the list's itemCount.
+ * Returns `itemCount` and an FX-normalized `totalEstimatedPrice` per list.
  *
- * The CTE `item_averages_by_currency` computes AVG(item_sources.price) per
- * (list, list_item, currency). The LEFT JOIN with `price IS NOT NULL` in the
- * join predicate preserves list_items without any priced source: they appear
- * once with a NULL currency so `item_counts` still counts them.
+ * Each list_item's priced sources are first averaged (grouped by the
+ * source's own currency) in `item_averages_by_currency`; the LEFT JOIN
+ * with `price IS NOT NULL` preserves list_items without any priced
+ * source so they still contribute to `itemCount`. Each per-currency
+ * average is then converted to `displayCurrency` via the USD pivot
+ * `amount_in_D = amount * display.usd_rate / source.usd_rate`
+ * (`usd_rate` is "units of this currency per 1 USD"), summed per list,
+ * and rounded to numeric(10,2).
  *
- * The final SELECT returns one row per list with priced items (× number of
- * distinct currencies) plus one row per list with items but no priced source
- * (currency / currency_total both NULL). Lists with zero list_items are
- * absent; the service defaults them to `{ itemCount: 0, totalEstimatedPrice: {} }`.
+ * Lists with zero list_items are absent; the service defaults them to
+ * `{ itemCount: 0, totalEstimatedPrice: null }`. Lists with items but no
+ * priced source emit `total_estimated_price = NULL`.
  */
-export async function findListAggregatesByIds(listIds: string[]): Promise<ListAggregateRawRow[]> {
+export async function findListAggregatesByIds(
+  listIds: string[],
+  displayCurrency: SupportedCurrency,
+): Promise<ListAggregateRawRow[]> {
   if (listIds.length === 0) return []
   const rows = await db.execute<RawAggregateRow>(sql`
     WITH item_averages_by_currency AS (
@@ -124,25 +130,27 @@ export async function findListAggregatesByIds(listIds: string[]): Promise<ListAg
       FROM item_averages_by_currency
       GROUP BY list_id
     ),
-    currency_totals AS (
-      SELECT list_id, currency, SUM(item_avg)::numeric(10,2) AS currency_total
-      FROM item_averages_by_currency
-      WHERE currency IS NOT NULL
-      GROUP BY list_id, currency
+    list_totals AS (
+      SELECT
+        iabc.list_id,
+        SUM(iabc.item_avg * display.usd_rate / source.usd_rate)::numeric(10,2) AS total_estimated_price
+      FROM item_averages_by_currency iabc
+      JOIN ${currencies} source ON source.code = iabc.currency
+      JOIN ${currencies} display ON display.code = ${displayCurrency}
+      WHERE iabc.currency IS NOT NULL
+      GROUP BY iabc.list_id
     )
     SELECT
       ic.list_id,
       ic.item_count,
-      ct.currency,
-      ct.currency_total
+      lt.total_estimated_price
     FROM item_counts ic
-    LEFT JOIN currency_totals ct ON ct.list_id = ic.list_id
+    LEFT JOIN list_totals lt ON lt.list_id = ic.list_id
   `)
   return Array.from(rows).map((row) => ({
     listId: row.list_id,
     itemCount: Number(row.item_count),
-    currency: row.currency,
-    currencyTotal: row.currency_total,
+    totalEstimatedPrice: row.total_estimated_price,
   }))
 }
 

@@ -4,16 +4,19 @@ import { adminOnly } from '../../../../shared/middlewares/admin-only.js'
 import { jsonResult, sendError } from '../../../../shared/utils/response.js'
 import { ErrorCode } from '../../../../shared/enums/error-code.js'
 import { paginationQuerySchema } from '../../../../shared/schemas/pagination.js'
+import { displayCurrencyQuerySchema } from '../../../../shared/schemas/currency.js'
 import { validationErrorHandler } from '../../../../shared/utils/validation.js'
 import type { FeatureRouter } from '../../../../shared/types/app.js'
 import type { FilterInput } from '../../../../shared/db/filter-parser.js'
 import { listLists } from '../admin-lists.service.js'
 import { listsEntity } from '../admin-lists.repository.js'
 
-const listListsQuerySchema = paginationQuerySchema.extend({
-  sort: listsEntity.buildListQuerySchema(),
-  ownerUserId: z.string().uuid().optional(),
-})
+const listListsQuerySchema = paginationQuerySchema
+  .merge(displayCurrencyQuerySchema)
+  .extend({
+    sort: listsEntity.buildListQuerySchema(),
+    ownerUserId: z.string().uuid().optional(),
+  })
 
 export type ListListsQueryInput = z.infer<typeof listListsQuerySchema>
 

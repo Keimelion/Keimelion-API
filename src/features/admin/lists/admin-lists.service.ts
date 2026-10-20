@@ -25,25 +25,22 @@ import {
 } from './admin-lists.repository.js'
 import {
   countListItemsByListId,
-  findListItemAveragesByCurrency,
+  findListItemAverages,
   findListItemsByListIdPaged,
 } from './admin-list-items.repository.js'
 import { toAdminListDetail } from './admin-lists.mapper.js'
 import { toAdminListItemResponse } from './admin-list-items.mapper.js'
 import { AdminAction } from '../admin.enums.js'
-import { isSupportedCurrency } from '../../../shared/enums/currency.js'
+import { DEFAULT_DISPLAY_CURRENCY } from '../../../shared/schemas/currency.js'
 import type { List } from '../../../db/entities/lists/lists.schema.js'
 import type { UpdateListFields } from '../../../db/entities/lists/lists.repository.js'
-import type {
-  AdminListAggregate,
-  AdminListDetail,
-  CurrencyTotals,
-} from './admin-lists.mapper.js'
+import type { AdminListAggregate, AdminListDetail } from './admin-lists.mapper.js'
 import type { AdminListItemResponse } from './admin-list-items.mapper.js'
 import type { ServiceResult } from '../../../shared/types/service.js'
 import type { PaginatedResponse } from '../../../shared/types/api.js'
 import type { PaginationInput } from '../../../shared/schemas/pagination.js'
 import type { Locale } from '../../../shared/enums/locale.js'
+import type { SupportedCurrency } from '../../../shared/enums/currency.js'
 import type { ListListsInput } from './endpoints/list.js'
 import type { UpdateListInput } from './endpoints/update.js'
 
@@ -60,11 +57,14 @@ export async function listLists(
   const filters = { sort: input.sort, genericFilters: input.genericFilters, ownerListIds }
   const [rows, total] = await Promise.all([findAllListsWithOwner(input, filters), countLists(filters)])
 
-  const aggregates = await buildAggregateMap(rows.map((row) => row.id))
+  const aggregates = await buildAggregateMap(
+    rows.map((row) => row.id),
+    input.currency,
+  )
 
   return {
     data: buildPaginatedResponse(
-      rows.map((row) => toAdminListDetail(row, aggregates.get(row.id))),
+      rows.map((row) => toAdminListDetail(row, input.currency, aggregates.get(row.id))),
       input,
       total,
     ),
@@ -72,14 +72,17 @@ export async function listLists(
   }
 }
 
-export async function getListById(id: string): Promise<ServiceResult<{ list: AdminListDetail }>> {
+export async function getListById(
+  id: string,
+  displayCurrency: SupportedCurrency,
+): Promise<ServiceResult<{ list: AdminListDetail }>> {
   const row = await findAdminListByIdWithOwner(id)
   if (!row) return serviceError(ErrorCode.NOT_FOUND)
 
-  const aggregates = await buildAggregateMap([row.id])
+  const aggregates = await buildAggregateMap([row.id], displayCurrency)
 
   return {
-    data: { list: toAdminListDetail(row, aggregates.get(row.id)) },
+    data: { list: toAdminListDetail(row, displayCurrency, aggregates.get(row.id)) },
     httpStatus: HttpStatus.OK,
   }
 }
@@ -88,6 +91,7 @@ export async function listListItemsByListId(
   id: string,
   pagination: PaginationInput,
   locale: Locale,
+  displayCurrency: SupportedCurrency,
 ): Promise<ServiceResult<PaginatedResponse<AdminListItemResponse>>> {
   const list = await findAdminListById(id)
   if (!list || list.deletedAt) return serviceError(ErrorCode.NOT_FOUND)
@@ -97,11 +101,14 @@ export async function listListItemsByListId(
     countListItemsByListId(id),
   ])
 
-  const averages = await buildListItemAverageMap(rows.map((row) => row.id))
+  const averages = await buildListItemAverageMap(
+    rows.map((row) => row.id),
+    displayCurrency,
+  )
 
   return {
     data: buildPaginatedResponse(
-      rows.map((row) => toAdminListItemResponse(row, locale, averages.get(row.id) ?? {})),
+      rows.map((row) => toAdminListItemResponse(row, locale, displayCurrency, averages.get(row.id) ?? null)),
       pagination,
       total,
     ),
@@ -149,7 +156,7 @@ export async function updateListById(
 
   logChanges(adminId, id, existingRow, fieldPatch)
 
-  const aggregates = await buildAggregateMap([id])
+  const aggregates = await buildAggregateMap([id], DEFAULT_DISPLAY_CURRENCY)
 
   if (tagSlugs === null) {
     const updatedRow = {
@@ -158,7 +165,7 @@ export async function updateListById(
       listTags: existingRow.listTags,
     }
     return {
-      data: { list: toAdminListDetail(updatedRow, aggregates.get(id)) },
+      data: { list: toAdminListDetail(updatedRow, DEFAULT_DISPLAY_CURRENCY, aggregates.get(id)) },
       httpStatus: HttpStatus.OK,
     }
   }
@@ -166,7 +173,7 @@ export async function updateListById(
   const refreshed = await findListWithOwner(id)
   if (!refreshed) return serviceError(ErrorCode.INTERNAL_ERROR)
   return {
-    data: { list: toAdminListDetail(refreshed, aggregates.get(id)) },
+    data: { list: toAdminListDetail(refreshed, DEFAULT_DISPLAY_CURRENCY, aggregates.get(id)) },
     httpStatus: HttpStatus.OK,
   }
 }
@@ -193,7 +200,7 @@ export async function restoreListById(
 
   logger.info({ adminId, action: AdminAction.RESTORE_LIST, listId: id })
 
-  const aggregates = await buildAggregateMap([id])
+  const aggregates = await buildAggregateMap([id], DEFAULT_DISPLAY_CURRENCY)
 
   const restoredRow = {
     ...restored,
@@ -201,33 +208,31 @@ export async function restoreListById(
     listTags: existingRow.listTags,
   }
   return {
-    data: { list: toAdminListDetail(restoredRow, aggregates.get(id)) },
+    data: { list: toAdminListDetail(restoredRow, DEFAULT_DISPLAY_CURRENCY, aggregates.get(id)) },
     httpStatus: HttpStatus.OK,
   }
 }
 
-async function buildAggregateMap(listIds: string[]): Promise<Map<string, AdminListAggregate>> {
-  const rows = await findListAggregatesByIds(listIds)
+async function buildAggregateMap(
+  listIds: string[],
+  displayCurrency: SupportedCurrency,
+): Promise<Map<string, AdminListAggregate>> {
+  const rows = await findListAggregatesByIds(listIds, displayCurrency)
   const map = new Map<string, AdminListAggregate>()
   for (const row of rows) {
-    const existing = map.get(row.listId)
-    const totals: CurrencyTotals = existing?.totalEstimatedPrice ?? {}
-    if (row.currency !== null && row.currencyTotal !== null && isSupportedCurrency(row.currency)) {
-      totals[row.currency] = row.currencyTotal
-    }
-    map.set(row.listId, { itemCount: row.itemCount, totalEstimatedPrice: totals })
+    map.set(row.listId, { itemCount: row.itemCount, totalEstimatedPrice: row.totalEstimatedPrice })
   }
   return map
 }
 
-async function buildListItemAverageMap(listItemIds: string[]): Promise<Map<string, CurrencyTotals>> {
-  const rows = await findListItemAveragesByCurrency(listItemIds)
-  const map = new Map<string, CurrencyTotals>()
+async function buildListItemAverageMap(
+  listItemIds: string[],
+  displayCurrency: SupportedCurrency,
+): Promise<Map<string, string>> {
+  const rows = await findListItemAverages(listItemIds, displayCurrency)
+  const map = new Map<string, string>()
   for (const row of rows) {
-    if (!isSupportedCurrency(row.currency)) continue
-    const totals: CurrencyTotals = map.get(row.listItemId) ?? {}
-    totals[row.currency] = row.averagePrice
-    map.set(row.listItemId, totals)
+    map.set(row.listItemId, row.averagePrice)
   }
   return map
 }
