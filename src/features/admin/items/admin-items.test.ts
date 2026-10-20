@@ -1551,7 +1551,7 @@ describe('POST /v1/admin/items/:id/sources', () => {
     expect(response.status).toBe(422)
   })
 
-  it('returns 422 when currency is not 3 uppercase letters', async () => {
+  it('returns 422 when currency is not a supported ISO code (lowercase)', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
 
@@ -1559,6 +1559,19 @@ describe('POST /v1/admin/items/:id/sources', () => {
       method: 'POST',
       token,
       body: { currency: 'eur' },
+    })
+
+    expect(response.status).toBe(422)
+  })
+
+  it('returns 422 when currency is a valid-format but unsupported ISO code', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}/sources`, {
+      method: 'POST',
+      token,
+      body: { currency: 'XYZ' },
     })
 
     expect(response.status).toBe(422)

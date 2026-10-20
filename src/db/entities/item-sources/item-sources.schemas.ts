@@ -1,11 +1,10 @@
 import { z } from 'zod'
 import { httpsUrlSchema } from '../../../shared/schemas/url.js'
 import { DUPLICATE_SHOP_IN_SOURCES_MESSAGE } from '../../../shared/utils/response.js'
+import { SUPPORTED_CURRENCY_VALUES } from '../../../shared/enums/currency.js'
 
 const MAX_SOURCE_URL_LENGTH = 2048
 const PRICE_REGEX = /^\d{1,8}(\.\d{1,2})?$/
-const CURRENCY_REGEX = /^[A-Z]{3}$/
-const CURRENCY_LENGTH = 3
 
 export const httpsSourceUrlSchema = httpsUrlSchema('sourceUrl', MAX_SOURCE_URL_LENGTH).nullable()
 
@@ -17,10 +16,11 @@ export const priceSchema = z
   )
   .nullable()
 
-export const currencySchema = z
-  .string()
-  .length(CURRENCY_LENGTH, `currency must be exactly ${String(CURRENCY_LENGTH)} characters`)
-  .regex(CURRENCY_REGEX, 'currency must be a 3-letter uppercase ISO code (e.g. EUR)')
+export const currencySchema = z.enum(SUPPORTED_CURRENCY_VALUES, {
+  errorMap: () => ({
+    message: `currency must be one of: ${SUPPORTED_CURRENCY_VALUES.join(', ')}`,
+  }),
+})
 
 export const shopIdSchema = z.string().uuid().nullable()
 

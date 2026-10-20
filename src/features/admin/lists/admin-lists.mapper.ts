@@ -1,18 +1,21 @@
 import { extractOwnerDetail, toListDetail } from '../../../shared/types/list.js'
 import type { ListDetail, ListRowWithOwner } from '../../../shared/types/list.js'
+import type { SupportedCurrency } from '../../../shared/enums/currency.js'
+
+export type CurrencyTotals = Partial<Record<SupportedCurrency, string>>
 
 export interface AdminListAggregate {
   itemCount: number
-  totalEstimatedPrice: string | null
+  totalEstimatedPrice: CurrencyTotals
 }
 
 export interface AdminListDetail extends ListDetail {
   deletedAt: Date | null
   itemCount: number
-  totalEstimatedPrice: string | null
+  totalEstimatedPrice: CurrencyTotals
 }
 
-const DEFAULT_AGGREGATE: AdminListAggregate = { itemCount: 0, totalEstimatedPrice: null }
+const DEFAULT_AGGREGATE: AdminListAggregate = { itemCount: 0, totalEstimatedPrice: {} }
 
 export function toAdminListDetail(
   row: ListRowWithOwner,

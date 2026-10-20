@@ -76,54 +76,73 @@ export function findAdminListByIdWithOwner(id: string): Promise<ListRowWithOwner
   return findListWithOwner(id)
 }
 
-export interface ListAggregateRow {
+export interface ListAggregateRawRow {
   listId: string
   itemCount: number
-  totalEstimatedPrice: string | null
+  currency: string | null
+  currencyTotal: string | null
 }
 
 interface RawAggregateRow extends Record<string, unknown> {
   list_id: string
   item_count: number | string
-  total_estimated_price: string | null
+  currency: string | null
+  currency_total: string | null
 }
 
 /**
- * Returns per-list aggregates for the given list IDs.
+ * Returns per-(list, currency) price aggregates alongside the list's itemCount.
  *
- * `itemCount`  = COUNT(list_items.id) regardless of `item_status`.
- * `totalEstimatedPrice` = SUM over each list_item of AVG(item_sources.price) where price IS NOT NULL.
- *   AVG() already ignores NULL prices, so a LEFT JOIN preserves list_items without any priced source
- *   (their item_avg is NULL and does not contribute to the SUM). The final SUM is NULL when every
- *   item lacks any priced source, matching the spec.
+ * The CTE `item_averages_by_currency` computes AVG(item_sources.price) per
+ * (list, list_item, currency). The LEFT JOIN with `price IS NOT NULL` in the
+ * join predicate preserves list_items without any priced source: they appear
+ * once with a NULL currency so `item_counts` still counts them.
  *
- * Lists with zero list_items are absent from the result; the service defaults them to `{ 0, null }`.
+ * The final SELECT returns one row per list with priced items (× number of
+ * distinct currencies) plus one row per list with items but no priced source
+ * (currency / currency_total both NULL). Lists with zero list_items are
+ * absent; the service defaults them to `{ itemCount: 0, totalEstimatedPrice: {} }`.
  */
-export async function findListAggregatesByIds(listIds: string[]): Promise<ListAggregateRow[]> {
+export async function findListAggregatesByIds(listIds: string[]): Promise<ListAggregateRawRow[]> {
   if (listIds.length === 0) return []
   const rows = await db.execute<RawAggregateRow>(sql`
-    WITH item_averages AS (
+    WITH item_averages_by_currency AS (
       SELECT
         ${listItems.listId} AS list_id,
         ${listItems.id} AS list_item_id,
+        ${itemSources.currency} AS currency,
         AVG(${itemSources.price}) AS item_avg
       FROM ${listItems}
       LEFT JOIN ${itemSources}
         ON ${itemSources.itemId} = ${listItems.itemId}
+       AND ${itemSources.price} IS NOT NULL
       WHERE ${inArray(listItems.listId, listIds)}
-      GROUP BY ${listItems.listId}, ${listItems.id}
+      GROUP BY ${listItems.listId}, ${listItems.id}, ${itemSources.currency}
+    ),
+    item_counts AS (
+      SELECT list_id, COUNT(DISTINCT list_item_id)::int AS item_count
+      FROM item_averages_by_currency
+      GROUP BY list_id
+    ),
+    currency_totals AS (
+      SELECT list_id, currency, SUM(item_avg)::numeric(10,2) AS currency_total
+      FROM item_averages_by_currency
+      WHERE currency IS NOT NULL
+      GROUP BY list_id, currency
     )
     SELECT
-      list_id,
-      COUNT(list_item_id)::int AS item_count,
-      SUM(item_avg)::numeric(10,2) AS total_estimated_price
-    FROM item_averages
-    GROUP BY list_id
+      ic.list_id,
+      ic.item_count,
+      ct.currency,
+      ct.currency_total
+    FROM item_counts ic
+    LEFT JOIN currency_totals ct ON ct.list_id = ic.list_id
   `)
   return Array.from(rows).map((row) => ({
     listId: row.list_id,
     itemCount: Number(row.item_count),
-    totalEstimatedPrice: row.total_estimated_price,
+    currency: row.currency,
+    currencyTotal: row.currency_total,
   }))
 }
 
