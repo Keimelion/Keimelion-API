@@ -14,6 +14,7 @@ export * from './item-categories/item-categories.schema.js'
 export * from './tags/tags.schema.js'
 export * from './item-tags/item-tags.schema.js'
 export * from './list-tags/list-tags.schema.js'
+export * from './currencies/currencies.schema.js'
 
 export * from './items/items.relations.js'
 export * from './item-sources/item-sources.relations.js'

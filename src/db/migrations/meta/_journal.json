@@ -92,6 +92,13 @@
       "when": 1791908727022,
       "tag": "0012_add-category-translations",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1792501032705,
+      "tag": "0013_add-currencies",
+      "breakpoints": true
     }
   ]
 }
