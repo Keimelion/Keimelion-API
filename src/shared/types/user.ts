@@ -1,4 +1,5 @@
 import type { User } from '../../db/entities/users/users.schema.js'
+import type { SupportedCurrency } from '../enums/currency.js'
 
 export interface UserDetail {
   id: string
@@ -10,6 +11,7 @@ export interface UserDetail {
   isCgvAccepted: boolean
   cgvAcceptedAt: Date | null
   isMarketingOptedIn: boolean
+  defaultCurrency: SupportedCurrency
   emailVerifiedAt: Date | null
   lastActiveAt: Date | null
   createdAt: Date
@@ -20,6 +22,7 @@ export interface UserWrite {
   username: string | null
   avatarUrl: string | null
   isMarketingOptedIn: boolean
+  defaultCurrencyCode: SupportedCurrency
 }
 
 export function toUserDetail(user: User): UserDetail {
@@ -33,6 +36,7 @@ export function toUserDetail(user: User): UserDetail {
     isCgvAccepted: user.isCgvAccepted,
     cgvAcceptedAt: user.cgvAcceptedAt ?? null,
     isMarketingOptedIn: user.isMarketingOptedIn,
+    defaultCurrency: user.defaultCurrencyCode as SupportedCurrency,
     emailVerifiedAt: user.emailVerifiedAt ?? null,
     lastActiveAt: user.lastActiveAt ?? null,
     createdAt: user.createdAt,

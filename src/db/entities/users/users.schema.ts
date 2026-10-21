@@ -1,7 +1,9 @@
-import { boolean, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid, varchar } from 'drizzle-orm/pg-core'
+import { boolean, char, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid, varchar } from 'drizzle-orm/pg-core'
 import { USER_ROLE_VALUES } from '../../../shared/enums/user-role.js'
 import { AUTH_PROVIDER_VALUES } from '../../../shared/enums/auth-provider.js'
 import { timestamps, uuidPrimaryKey } from '../../../shared/db/columns.js'
+import { currencies } from '../currencies/currencies.schema.js'
+import { SupportedCurrencies } from '../../../shared/enums/currency.js'
 
 export const userRoleEnum = pgEnum('user_role', USER_ROLE_VALUES)
 export const authProviderEnum = pgEnum('auth_provider', AUTH_PROVIDER_VALUES)
@@ -17,6 +19,10 @@ export const users = pgTable('users', {
   isCgvAccepted: boolean('is_cgv_accepted').notNull().default(false),
   cgvAcceptedAt: timestamp('cgv_accepted_at', { withTimezone: true }),
   isMarketingOptedIn: boolean('is_marketing_opted_in').notNull().default(false),
+  defaultCurrencyCode: char('default_currency_code', { length: 3 })
+    .notNull()
+    .default(SupportedCurrencies.USD)
+    .references(() => currencies.code, { onDelete: 'restrict', onUpdate: 'cascade' }),
   emailVerifyToken: uuid('email_verify_token').unique(),
   emailVerifyTokenExpiresAt: timestamp('email_verify_token_expires_at', { withTimezone: true }),
   emailVerifiedAt: timestamp('email_verified_at', { withTimezone: true }),

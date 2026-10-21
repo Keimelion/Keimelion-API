@@ -14,6 +14,7 @@ const ADMIN_USER = {
   isCgvAccepted: true,
   cgvAcceptedAt: new Date('2024-01-01'),
   isMarketingOptedIn: false,
+  defaultCurrencyCode: 'USD' as string,
   emailVerifyToken: null,
   emailVerifyTokenExpiresAt: null,
   emailVerifiedAt: new Date('2024-01-02'),
@@ -214,9 +215,9 @@ const LIST_ITEM_WITHOUT_SOURCES = buildListItemRow(
 
 const ACCESS_TOKEN_ENTRY = makeAccessTokenEntry(ADMIN_USER.id)
 
-function mockAdminAuth(): void {
+function mockAdminAuth(user: typeof ADMIN_USER = ADMIN_USER): void {
   vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
-  vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER as never)
+  vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(user as never)
 }
 
 function mockNonAdminAuth(): void {
@@ -322,6 +323,25 @@ describe('GET /v1/admin/lists/:id/items', () => {
     }
     expect(response.status).toBe(200)
     expect(body.items[0]?.averagePrice).toBe('19.99')
+    expect(body.items[0]?.displayCurrency).toBe('EUR')
+  })
+
+  it('falls back to the caller default_currency_code when ?currency is omitted', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth({ ...ADMIN_USER, defaultCurrencyCode: 'EUR' })
+    mockFindListById(LIST_ROW)
+    mockFindListItems([LIST_ITEM_WITH_PRICED])
+    mockCountChain(1)
+    mockListItemAverages([
+      { list_item_id: LIST_ITEM_WITH_PRICED.id, average_price: '18.50' },
+    ])
+
+    const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}/items`, { token })
+
+    const body = await response.json() as {
+      items: { averagePrice: string | null; displayCurrency: string }[]
+    }
+    expect(response.status).toBe(200)
     expect(body.items[0]?.displayCurrency).toBe('EUR')
   })
 

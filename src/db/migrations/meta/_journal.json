@@ -99,6 +99,13 @@
       "when": 1792579761255,
       "tag": "0013_add-currencies-and-fk",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1792588499707,
+      "tag": "0014_add-user-default-currency",
+      "breakpoints": true
     }
   ]
 }

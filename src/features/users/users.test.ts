@@ -15,6 +15,7 @@ const SAFE_USER = {
   isCgvAccepted: true,
   cgvAcceptedAt: new Date('2024-01-01'),
   isMarketingOptedIn: false,
+  defaultCurrencyCode: 'USD',
   emailVerifyToken: null,
   emailVerifyTokenExpiresAt: null,
   emailVerifiedAt: new Date('2024-01-02'),
@@ -77,6 +78,19 @@ describe('GET /v1/users/me', () => {
 
     expect(response.status).toBe(403)
   })
+
+  it('exposes defaultCurrency from the user profile', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    const eurUser = { ...SAFE_USER, defaultCurrencyCode: 'EUR' as const }
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(eurUser)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(eurUser)
+
+    const response = await apiRequest('/v1/users/me', { token })
+
+    const body = await response.json() as { user: { defaultCurrency: string } }
+    expect(response.status).toBe(200)
+    expect(body.user.defaultCurrency).toBe('EUR')
+  })
 })
 
 describe('PATCH /v1/users/me', () => {
@@ -130,6 +144,46 @@ describe('PATCH /v1/users/me', () => {
       method: 'PATCH',
       token,
       body: { username: 'invalid username@' },
+    })
+
+    expect(response.status).toBe(422)
+  })
+
+  it('returns 200 and persists defaultCurrencyCode when defaultCurrency is provided', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    const updatedUser = { ...SAFE_USER, defaultCurrencyCode: 'EUR' as const }
+    const setMock = vi.fn().mockReturnValueOnce({
+      where: vi.fn().mockReturnValueOnce({
+        returning: vi.fn().mockResolvedValueOnce([updatedUser]),
+      }),
+    })
+
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    vi.mocked(db.update).mockReturnValueOnce({ set: setMock } as never)
+
+    const response = await apiRequest('/v1/users/me', {
+      method: 'PATCH',
+      token,
+      body: { defaultCurrency: 'EUR' },
+    })
+
+    const body = await response.json() as { user: { defaultCurrency: string } }
+    expect(response.status).toBe(200)
+    expect(body.user.defaultCurrency).toBe('EUR')
+    expect(setMock).toHaveBeenCalledOnce()
+    const setArgs = setMock.mock.calls[0]?.[0] as Record<string, unknown>
+    expect(setArgs.defaultCurrencyCode).toBe('EUR')
+    expect(setArgs).not.toHaveProperty('defaultCurrency')
+  })
+
+  it('returns 422 when defaultCurrency is not a supported ISO code', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+
+    const response = await apiRequest('/v1/users/me', {
+      method: 'PATCH',
+      token,
+      body: { defaultCurrency: 'XYZ' },
     })
 
     expect(response.status).toBe(422)
@@ -719,6 +773,27 @@ describe('GET /v1/users/me/export', () => {
     expect(rows).toHaveLength(1)
     expect(rows[0]).toMatchObject({ listId: ownedListId, tagId: ownedListTag.tagId })
     expect(rows[0]).toHaveProperty('assignedAt')
+  })
+
+  it('includes defaultCurrency in the JSON export profile section', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    const eurUser = { ...SAFE_USER, defaultCurrencyCode: 'EUR' as const }
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(eurUser)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(eurUser)
+
+    const response = await apiRequest('/v1/users/me/export?format=json', { token })
+
+    expect(response.status).toBe(200)
+    const body = await response.json() as { profile: { defaultCurrency: string } }
+    expect(body.profile.defaultCurrency).toBe('EUR')
+  })
+
+  it('registers profile.csv with defaultCurrency in the allow-list', () => {
+    const profileDescriptor = EXPORT_ENTITY_REGISTRY.find(
+      (descriptor) => descriptor.filename === 'profile.csv',
+    )
+    expect(profileDescriptor).toBeDefined()
+    expect(profileDescriptor?.columns).toContain('defaultCurrency')
   })
 
   it('includes a listTags key in the JSON export payload', async () => {

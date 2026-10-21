@@ -23,6 +23,7 @@ const ADMIN_USER = {
   isCgvAccepted: true,
   cgvAcceptedAt: new Date('2024-01-01'),
   isMarketingOptedIn: false,
+  defaultCurrencyCode: 'USD' as string,
   emailVerifyToken: null,
   emailVerifyTokenExpiresAt: null,
   emailVerifiedAt: new Date('2024-01-02'),
@@ -77,9 +78,9 @@ const DELETED_LIST_ROW = {
 
 const ACCESS_TOKEN_ENTRY = makeAccessTokenEntry(ADMIN_USER.id)
 
-function mockAdminAuth(): void {
+function mockAdminAuth(user: typeof ADMIN_USER = ADMIN_USER): void {
   vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
-  vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER as never)
+  vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(user as never)
 }
 
 function mockNonAdminAuth(): void {
@@ -262,6 +263,45 @@ describe('GET /v1/admin/lists', () => {
     expect(response.status).toBe(200)
     expect(body.items[0]?.totalEstimatedPrice).toBe('13.80')
     expect(body.items[0]?.displayCurrency).toBe('EUR')
+  })
+
+  it('falls back to the caller default_currency_code when ?currency is omitted', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth({ ...ADMIN_USER, defaultCurrencyCode: 'EUR' })
+
+    vi.mocked(db.query.lists.findMany).mockResolvedValueOnce([rowWithOwner(LIST_ROW, OWNER_USER)] as never)
+    mockCountChain(1)
+    mockListAggregates([
+      { list_id: LIST_ROW.id, item_count: 1, total_estimated_price: '13.80' },
+    ])
+
+    const response = await apiRequest('/v1/admin/lists', { token })
+
+    const body = await response.json() as {
+      items: { totalEstimatedPrice: string | null; displayCurrency: string }[]
+    }
+    expect(response.status).toBe(200)
+    expect(body.items[0]?.totalEstimatedPrice).toBe('13.80')
+    expect(body.items[0]?.displayCurrency).toBe('EUR')
+  })
+
+  it('honours an explicit ?currency override even when the caller has a different default', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth({ ...ADMIN_USER, defaultCurrencyCode: 'EUR' })
+
+    vi.mocked(db.query.lists.findMany).mockResolvedValueOnce([rowWithOwner(LIST_ROW, OWNER_USER)] as never)
+    mockCountChain(1)
+    mockListAggregates([
+      { list_id: LIST_ROW.id, item_count: 1, total_estimated_price: '20.00' },
+    ])
+
+    const response = await apiRequest('/v1/admin/lists?currency=GBP', { token })
+
+    const body = await response.json() as {
+      items: { displayCurrency: string }[]
+    }
+    expect(response.status).toBe(200)
+    expect(body.items[0]?.displayCurrency).toBe('GBP')
   })
 
   it('returns 422 when ?currency is unsupported', async () => {
