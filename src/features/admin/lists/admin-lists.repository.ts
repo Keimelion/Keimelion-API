@@ -78,7 +78,7 @@ export function findAdminListByIdWithOwner(id: string): Promise<ListRowWithOwner
   return findListWithOwner(id)
 }
 
-export interface ListAggregateRawRow {
+interface ListAggregateRawRow {
   listId: string
   itemCount: number
   totalEstimatedPrice: string | null

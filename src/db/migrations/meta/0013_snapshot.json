@@ -1,5 +1,5 @@
 {
-  "id": "6a128d45-0856-49be-ad3b-1282bfc3c2d1",
+  "id": "f1bac950-f2c5-48fa-b6d9-78727a1b8876",
   "prevId": "02fa99a0-6169-40de-a47a-333969ae59b5",
   "version": "7",
   "dialect": "postgresql",
@@ -450,6 +450,19 @@
           ],
           "onDelete": "set null",
           "onUpdate": "no action"
+        },
+        "item_sources_currency_currencies_code_fk": {
+          "name": "item_sources_currency_currencies_code_fk",
+          "tableFrom": "item_sources",
+          "tableTo": "currencies",
+          "columnsFrom": [
+            "currency"
+          ],
+          "columnsTo": [
+            "code"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "cascade"
         }
       },
       "compositePrimaryKeys": {},

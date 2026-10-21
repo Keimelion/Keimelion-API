@@ -13,7 +13,7 @@ export interface AdminListItemRow extends ListItem {
   item: ItemRowWithSources
 }
 
-export interface ListItemAverageRow {
+interface ListItemAverageRow {
   listItemId: string
   averagePrice: string
 }

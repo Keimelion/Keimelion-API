@@ -8,7 +8,7 @@
  *
  * Keep in sync with the `currencies` table (see
  * `src/db/entities/currencies/currencies.schema.ts` and the seed in migration
- * `0013_add-currencies.sql`).
+ * `0013_add-currencies-and-fk.sql`).
  */
 export const SupportedCurrencies = {
   EUR: 'EUR',
