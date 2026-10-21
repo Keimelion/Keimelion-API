@@ -24,8 +24,13 @@ export const supportedCurrencyEnum = z.enum(SUPPORTED_CURRENCY_VALUES, {
 
 /**
  * Query parameter schema accepted by endpoints that return FX-normalized
- * amounts (e.g. `GET /v1/admin/lists?currency=EUR`). Defaults to USD.
+ * amounts (e.g. `GET /v1/admin/lists?currency=EUR`).
+ *
+ * The field is optional. Resolution order at the endpoint boundary:
+ *   1. `?currency=` when explicitly provided (always wins)
+ *   2. The authenticated user's `default_currency_code`
+ *   3. `DEFAULT_DISPLAY_CURRENCY` as a last-resort fallback
  */
 export const displayCurrencyQuerySchema = z.object({
-  currency: supportedCurrencyEnum.default(DEFAULT_DISPLAY_CURRENCY),
+  currency: supportedCurrencyEnum.optional(),
 })

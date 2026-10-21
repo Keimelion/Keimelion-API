@@ -8,8 +8,7 @@ import { sql } from 'drizzle-orm'
  *
  * Rows are seeded by the migration and must stay in sync with
  * `src/shared/enums/currency.ts` (`SupportedCurrencies`). A follow-up
- * ticket will refresh `usd_rate` + `usd_rate_as_of` daily from a
- * provider; another will add `users.default_currency_code` FK.
+ * ticket will refresh `usd_rate` + `usd_rate_as_of` daily from a provider.
  */
 export const currencies = pgTable('currencies', {
   code: char('code', { length: 3 }).primaryKey(),

@@ -35,6 +35,7 @@ function makeUser(overrides: Partial<User> = {}): User {
     isCgvAccepted: false,
     cgvAcceptedAt: null,
     isMarketingOptedIn: false,
+    defaultCurrencyCode: 'USD',
     emailVerifyToken: null,
     emailVerifyTokenExpiresAt: null,
     emailVerifiedAt: null,

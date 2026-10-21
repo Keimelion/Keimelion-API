@@ -9,7 +9,9 @@ import type { RegisterInput } from '../auth/endpoints/register.js'
 type SetPasswordResetTokenFields = Partial<Pick<typeof users.$inferInsert, 'passwordResetToken' | 'passwordResetTokenExpiresAt'>>
 type ResetPasswordFields = Pick<typeof users.$inferInsert, 'passwordHash' | 'passwordResetToken' | 'passwordResetTokenExpiresAt'>
 
-type UpdateUserProfileFields = Partial<Pick<typeof users.$inferInsert, 'username' | 'avatarUrl' | 'isMarketingOptedIn'>>
+type UpdateUserProfileFields = Partial<
+  Pick<typeof users.$inferInsert, 'username' | 'avatarUrl' | 'isMarketingOptedIn' | 'defaultCurrencyCode'>
+>
 
 export function findUserByEmail(email: string): Promise<User | undefined> {
   return db.query.users.findFirst({ where: eq(users.email, email) })
@@ -33,6 +35,7 @@ export async function insertUser(input: RegisterInput, emailVerifyToken: string)
       isCgvAccepted: true,
       cgvAcceptedAt: new Date(),
       isMarketingOptedIn: input.isMarketingOptedIn,
+      ...(input.defaultCurrency !== undefined && { defaultCurrencyCode: input.defaultCurrency }),
       emailVerifyToken,
       emailVerifyTokenExpiresAt,
     })

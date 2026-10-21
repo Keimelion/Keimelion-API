@@ -75,6 +75,7 @@ const profileEntityDescriptor: ExportEntityDescriptor = {
     'isCgvAccepted',
     'cgvAcceptedAt',
     'isMarketingOptedIn',
+    'defaultCurrency',
     'emailVerifiedAt',
     'lastActiveAt',
     'createdAt',

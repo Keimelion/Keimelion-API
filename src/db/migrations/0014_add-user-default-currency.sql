@@ -1,0 +1,2 @@
+ALTER TABLE "users" ADD COLUMN "default_currency_code" char(3) DEFAULT 'USD' NOT NULL;--> statement-breakpoint
+ALTER TABLE "users" ADD CONSTRAINT "users_default_currency_code_currencies_code_fk" FOREIGN KEY ("default_currency_code") REFERENCES "public"."currencies"("code") ON DELETE restrict ON UPDATE cascade;

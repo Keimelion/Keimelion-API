@@ -18,6 +18,7 @@ const VALID_USER = {
   isCgvAccepted: true,
   cgvAcceptedAt: new Date('2024-01-01'),
   isMarketingOptedIn: false,
+  defaultCurrencyCode: 'USD',
   emailVerifyToken: null,
   emailVerifyTokenExpiresAt: null,
   emailVerifiedAt: new Date('2024-01-02'),
@@ -80,6 +81,64 @@ describe('POST /v1/auth/register', () => {
     expect(body.user.email).toBe('user@example.com')
     expect(typeof body.refreshToken).toBe('string')
     expect(body.refreshToken.length).toBeGreaterThan(0)
+  })
+
+  it('persists defaultCurrencyCode when defaultCurrency is provided', async () => {
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(undefined)
+    const valuesSpy = vi.fn().mockReturnValueOnce({
+      returning: vi.fn().mockResolvedValueOnce([{ ...VALID_USER, defaultCurrencyCode: 'EUR' }]),
+    })
+    vi.mocked(db.insert).mockReturnValueOnce({ values: valuesSpy } as never)
+    mockInsertNoReturning()
+
+    const response = await apiRequest('/v1/auth/register', {
+      method: 'POST',
+      body: {
+        email: 'user@example.com',
+        password: 'securepassword123',
+        defaultCurrency: 'EUR',
+      },
+    })
+
+    const body = await response.json() as { user: { defaultCurrency: string } }
+    expect(response.status).toBe(201)
+    expect(body.user.defaultCurrency).toBe('EUR')
+    const insertedRow = valuesSpy.mock.calls[0]?.[0] as { defaultCurrencyCode?: string }
+    expect(insertedRow.defaultCurrencyCode).toBe('EUR')
+  })
+
+  it('falls back to the DB default when defaultCurrency is omitted', async () => {
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(undefined)
+    const valuesSpy = vi.fn().mockReturnValueOnce({
+      returning: vi.fn().mockResolvedValueOnce([VALID_USER]),
+    })
+    vi.mocked(db.insert).mockReturnValueOnce({ values: valuesSpy } as never)
+    mockInsertNoReturning()
+
+    const response = await apiRequest('/v1/auth/register', {
+      method: 'POST',
+      body: {
+        email: 'user@example.com',
+        password: 'securepassword123',
+      },
+    })
+
+    expect(response.status).toBe(201)
+    const insertedRow = valuesSpy.mock.calls[0]?.[0] as { defaultCurrencyCode?: string }
+    expect(insertedRow).not.toHaveProperty('defaultCurrencyCode')
+  })
+
+  it('returns 422 when defaultCurrency is not a supported ISO code', async () => {
+    const response = await apiRequest('/v1/auth/register', {
+      method: 'POST',
+      body: {
+        email: 'user@example.com',
+        password: 'securepassword123',
+        defaultCurrency: 'XYZ',
+      },
+    })
+
+    expect(response.status).toBe(422)
   })
 
   it('returns 409 when email already exists', async () => {
