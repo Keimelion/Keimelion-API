@@ -35,6 +35,7 @@ export async function insertUser(input: RegisterInput, emailVerifyToken: string)
       isCgvAccepted: true,
       cgvAcceptedAt: new Date(),
       isMarketingOptedIn: input.isMarketingOptedIn,
+      ...(input.defaultCurrency !== undefined && { defaultCurrencyCode: input.defaultCurrency }),
       emailVerifyToken,
       emailVerifyTokenExpiresAt,
     })

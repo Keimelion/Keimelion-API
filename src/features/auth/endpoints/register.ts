@@ -6,6 +6,7 @@ import { jsonResult } from '../../../shared/utils/response.js'
 import { registerUser } from '../auth.service.js'
 import { usernameSchema } from '../../../shared/schemas/username.js'
 import { passwordSchema } from '../../../shared/schemas/password.js'
+import { supportedCurrencyEnum } from '../../../shared/schemas/currency.js'
 import type { FeatureRouter } from '../../../shared/types/app.js'
 
 const registerSchema = z.object({
@@ -16,6 +17,7 @@ const registerSchema = z.object({
     .optional()
     .transform((value) => value ?? null),
   isMarketingOptedIn: z.boolean().default(false),
+  defaultCurrency: supportedCurrencyEnum.optional(),
 })
 
 export type RegisterInput = z.infer<typeof registerSchema>
