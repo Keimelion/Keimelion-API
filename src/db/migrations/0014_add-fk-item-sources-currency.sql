@@ -1,0 +1,1 @@
+ALTER TABLE "item_sources" ADD CONSTRAINT "item_sources_currency_currencies_code_fk" FOREIGN KEY ("currency") REFERENCES "public"."currencies"("code") ON DELETE restrict ON UPDATE cascade;

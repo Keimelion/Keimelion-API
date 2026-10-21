@@ -99,6 +99,13 @@
       "when": 1792501032705,
       "tag": "0013_add-currencies",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1792502558299,
+      "tag": "0014_add-fk-item-sources-currency",
+      "breakpoints": true
     }
   ]
 }
