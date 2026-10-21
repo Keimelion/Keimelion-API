@@ -1,6 +1,7 @@
 import { char, index, numeric, pgTable, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
 import { isNotNull } from 'drizzle-orm'
 import { timestamps, uuidPrimaryKey } from '../../../shared/db/columns.js'
+import { currencies } from '../currencies/currencies.schema.js'
 import { items } from '../items/items.schema.js'
 import { shops } from '../shops/shops.schema.js'
 
@@ -12,7 +13,10 @@ export const itemSources = pgTable(
     shopId: uuid('shop_id').references(() => shops.id, { onDelete: 'set null' }),
     sourceUrl: text('source_url'),
     price: numeric('price', { precision: 10, scale: 2 }),
-    currency: char('currency', { length: 3 }).notNull().default('EUR'),
+    currency: char('currency', { length: 3 })
+      .notNull()
+      .default('EUR')
+      .references(() => currencies.code, { onUpdate: 'cascade', onDelete: 'restrict' }),
     ...timestamps(),
   },
   (table) => [

@@ -242,10 +242,20 @@ function mockCountChain(total: number): void {
   vi.mocked(db.select).mockReturnValueOnce(chain as never)
 }
 
+interface ListItemAverageRawRow {
+  list_item_id: string
+  average_price: string
+}
+
+function mockListItemAverages(rows: ListItemAverageRawRow[]): void {
+  vi.mocked(db.execute).mockResolvedValueOnce(rows as never)
+}
+
 describe('GET /v1/admin/lists/:id/items', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.execute).mockResolvedValue([] as never)
   })
 
   it('returns 200 with paginated list items including item + full sources[]', async () => {
@@ -273,6 +283,72 @@ describe('GET /v1/admin/lists/:id/items', () => {
     expect(body.items[0]?.sources[0]?.price).toBe('19.99')
     expect(body.items[1]?.sources).toHaveLength(2)
     expect(body.items[1]?.sources.map((source) => source.price)).toEqual(['19.99', null])
+  })
+
+  it('returns averagePrice as a USD scalar by default', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindListById(LIST_ROW)
+    mockFindListItems([LIST_ITEM_WITH_PRICED])
+    mockCountChain(1)
+    mockListItemAverages([
+      { list_item_id: LIST_ITEM_WITH_PRICED.id, average_price: '21.73' },
+    ])
+
+    const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}/items`, { token })
+
+    const body = await response.json() as {
+      items: { averagePrice: string | null; displayCurrency: string }[]
+    }
+    expect(response.status).toBe(200)
+    expect(body.items[0]?.averagePrice).toBe('21.73')
+    expect(body.items[0]?.displayCurrency).toBe('USD')
+  })
+
+  it('echoes the requested displayCurrency on each item', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindListById(LIST_ROW)
+    mockFindListItems([LIST_ITEM_WITH_PRICED])
+    mockCountChain(1)
+    mockListItemAverages([
+      { list_item_id: LIST_ITEM_WITH_PRICED.id, average_price: '19.99' },
+    ])
+
+    const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}/items?currency=EUR`, { token })
+
+    const body = await response.json() as {
+      items: { averagePrice: string | null; displayCurrency: string }[]
+    }
+    expect(response.status).toBe(200)
+    expect(body.items[0]?.averagePrice).toBe('19.99')
+    expect(body.items[0]?.displayCurrency).toBe('EUR')
+  })
+
+  it('returns averagePrice=null and echoes displayCurrency when the item has no priced sources', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindListById(LIST_ROW)
+    mockFindListItems([LIST_ITEM_WITHOUT_SOURCES])
+    mockCountChain(1)
+    mockListItemAverages([])
+
+    const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}/items?currency=GBP`, { token })
+
+    const body = await response.json() as {
+      items: { averagePrice: string | null; displayCurrency: string }[]
+    }
+    expect(response.status).toBe(200)
+    expect(body.items[0]?.averagePrice).toBeNull()
+    expect(body.items[0]?.displayCurrency).toBe('GBP')
+  })
+
+  it('returns 422 when ?currency is unsupported', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}/items?currency=XYZ`, { token })
+    expect(response.status).toBe(422)
   })
 
   it('returns 200 with item.tags and item.categories hydrated (locale picks the right translation)', async () => {
