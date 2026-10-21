@@ -23,6 +23,15 @@ const envSchema = z.object({
   USER_HARD_DELETE_INTERVAL_MS: z.coerce.number().int().min(60_000).default(3_600_000),
   USER_HARD_DELETE_GRACE_DAYS: z.coerce.number().int().min(1).default(30),
   REFRESH_TOKEN_EXPIRES_IN: z.coerce.number().int().positive().min(3600).default(2592000),
+  FX_REFRESH_ENABLED: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((value) => value === 'true'),
+  FX_REFRESH_INTERVAL_MS: z.coerce.number().int().min(60_000).default(86_400_000),
+  FX_PROVIDER_URL: z
+    .string()
+    .url()
+    .default('https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml'),
 })
 
 const parsed = envSchema.safeParse(process.env)

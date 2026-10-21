@@ -21,6 +21,9 @@ vi.mock('../../config/env.js', () => ({
     USER_HARD_DELETE_INTERVAL_MS: 3_600_000,
     USER_HARD_DELETE_GRACE_DAYS: 30,
     REFRESH_TOKEN_EXPIRES_IN: 2592000,
+    FX_REFRESH_ENABLED: false,
+    FX_REFRESH_INTERVAL_MS: 86_400_000,
+    FX_PROVIDER_URL: 'https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml',
   },
 }))
 
