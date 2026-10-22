@@ -32,6 +32,8 @@ const envSchema = z.object({
     .string()
     .url()
     .default('https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml'),
+  FEEDBACK_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(5),
+  FEEDBACK_RATE_LIMIT_PER_HOUR: z.coerce.number().int().positive().default(20),
 })
 
 const parsed = envSchema.safeParse(process.env)

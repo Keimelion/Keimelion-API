@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { db } from '../../db/client.js'
 import { apiRequest } from '../../shared/test/api-request.js'
 import { generateTestToken, makeAccessTokenEntry } from '../../shared/test/auth.js'
+import { MAX_FEEDBACK_CONTEXT_BYTES } from './endpoints/create.js'
 
 const AUTH_USER = {
   id: '00000000-0000-0000-0000-000000000100',
@@ -244,6 +245,52 @@ describe('POST /v1/feedback', () => {
     })
 
     expect(response.status).toBe(422)
+  })
+
+  it('returns 422 when context exceeds the serialized byte cap', async () => {
+    const oversizedValue = 'x'.repeat(MAX_FEEDBACK_CONTEXT_BYTES + 1)
+
+    const response = await apiRequest('/v1/feedback', {
+      method: 'POST',
+      body: {
+        title: 'Short title',
+        description: 'Short desc',
+        context: { blob: oversizedValue },
+      },
+    })
+
+    const body = await response.json() as {
+      metadata: { issues: { path: string; message: string }[] }
+    }
+    expect(response.status).toBe(422)
+    expect(body.metadata.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: 'context',
+          message: expect.stringContaining(String(MAX_FEEDBACK_CONTEXT_BYTES)) as unknown,
+        }),
+      ]),
+    )
+  })
+
+  it('accepts a context payload at the serialized byte cap', async () => {
+    // Build a context whose JSON.stringify length equals exactly the cap:
+    // {"blob":"<pad>"} overhead is 11 bytes, so pad length = cap - 11.
+    const padLength = MAX_FEEDBACK_CONTEXT_BYTES - 11
+    const context = { blob: 'x'.repeat(padLength) }
+    expect(Buffer.byteLength(JSON.stringify(context), 'utf8')).toBe(MAX_FEEDBACK_CONTEXT_BYTES)
+    mockInsertReturning(buildFeedbackRow({ context }))
+
+    const response = await apiRequest('/v1/feedback', {
+      method: 'POST',
+      body: {
+        title: 'Short title',
+        description: 'Short desc',
+        context,
+      },
+    })
+
+    expect(response.status).toBe(201)
   })
 
   it('returns 500 FEEDBACK_CREATION_FAILED when the insert returns no row', async () => {
