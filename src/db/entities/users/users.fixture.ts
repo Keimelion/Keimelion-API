@@ -95,7 +95,10 @@ export async function seedUsers(db: typeof Db): Promise<void> {
     },
   ]
 
-  await db.delete(users)
-  const inserted = await db.insert(users).values(fixtures).returning({ id: users.id, email: users.email })
+  const inserted = await db
+    .insert(users)
+    .values(fixtures)
+    .onConflictDoNothing({ target: users.email })
+    .returning({ id: users.id, email: users.email })
   console.log(`  users        ${String(inserted.length)} rows`)
 }
