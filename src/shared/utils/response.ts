@@ -26,6 +26,8 @@ export const TAG_NOT_FOUND_MESSAGE = 'Tag not found'
 export const TAG_INVALID_NAME_MESSAGE =
   'Tag name must contain at least one letter or digit after normalization'
 
+export const FEEDBACK_NOT_FOUND_MESSAGE = 'Feedback not found'
+
 export const errorMap: Record<ErrorCode, { status: ContentfulStatusCode; message: string }> = {
   BAD_REQUEST:             { status: HttpStatus.BAD_REQUEST,           message: 'Bad request' },
   UNAUTHORIZED:            { status: HttpStatus.UNAUTHORIZED,          message: 'Unauthorized' },
@@ -53,6 +55,7 @@ export const errorMap: Record<ErrorCode, { status: ContentfulStatusCode; message
   INVALID_CREDENTIALS:     { status: HttpStatus.BAD_REQUEST,           message: 'Current password is incorrect' },
   INVALID_OPERATION:       { status: HttpStatus.BAD_REQUEST,           message: 'Operation not allowed for this account type' },
   FEEDBACK_CREATION_FAILED: { status: HttpStatus.INTERNAL_SERVER_ERROR, message: 'Feedback could not be submitted' },
+  FEEDBACK_NOT_FOUND:      { status: HttpStatus.NOT_FOUND,             message: FEEDBACK_NOT_FOUND_MESSAGE },
   INTERNAL_ERROR:          { status: HttpStatus.INTERNAL_SERVER_ERROR, message: 'An unexpected error occurred' },
 }
 
