@@ -825,4 +825,79 @@ describe('GET /v1/users/me/export', () => {
     expect(body.listTags[0]?.listId).toBe('00000000-0000-0000-0000-00000000c010')
   })
 
+  it('includes a feedback key in the JSON export payload with only entries submitted by the user', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+
+    const feedbackRow = {
+      id: '00000000-0000-0000-0000-00000000d001',
+      userId: SAFE_USER.id,
+      title: 'Dark mode please',
+      description: 'Would love a dark mode on the dashboard.',
+      context: { url: 'https://app.keimelion.fr/dashboard' },
+      status: 'open' as const,
+      createdAt: new Date('2024-03-01'),
+      updatedAt: new Date('2024-03-01'),
+    }
+
+    vi.mocked(db.query.feedback.findMany).mockResolvedValueOnce([feedbackRow] as never)
+
+    const response = await apiRequest('/v1/users/me/export?format=json', { token })
+
+    expect(response.status).toBe(200)
+    const body = await response.json() as {
+      feedback: { id: string; title: string; context: Record<string, unknown> | null; status: string }[]
+    }
+    expect(body).toHaveProperty('feedback')
+    expect(body.feedback).toHaveLength(1)
+    expect(body.feedback[0]?.title).toBe('Dark mode please')
+    expect(body.feedback[0]?.status).toBe('open')
+    expect(body.feedback[0]?.context).toEqual({ url: 'https://app.keimelion.fr/dashboard' })
+  })
+
+  it('registers feedback.csv with the exact allow-list required by RGPD', () => {
+    const feedbackDescriptor = EXPORT_ENTITY_REGISTRY.find(
+      (descriptor) => descriptor.filename === 'feedback.csv',
+    )
+    expect(feedbackDescriptor).toBeDefined()
+    expect(feedbackDescriptor?.columns).toEqual([
+      'id',
+      'title',
+      'description',
+      'context',
+      'status',
+      'createdAt',
+      'updatedAt',
+    ])
+  })
+
+  it('fetches user-scoped feedback for RGPD and surfaces context verbatim', async () => {
+    const feedbackDescriptor = EXPORT_ENTITY_REGISTRY.find(
+      (descriptor) => descriptor.filename === 'feedback.csv',
+    )
+    const row = {
+      id: '00000000-0000-0000-0000-00000000d002',
+      userId: SAFE_USER.id,
+      title: 'Bug on mobile',
+      description: 'The reservation badge is misaligned.',
+      context: { viewport: { width: 375 } },
+      status: 'reviewed' as const,
+      createdAt: new Date('2024-03-02'),
+      updatedAt: new Date('2024-03-02'),
+    }
+
+    vi.mocked(db.query.feedback.findMany).mockResolvedValueOnce([row] as never)
+
+    expect(feedbackDescriptor).toBeDefined()
+    const rows = await (feedbackDescriptor as { fetchRows: (userId: string) => Promise<object[]> }).fetchRows(SAFE_USER.id)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({
+      id: row.id,
+      title: 'Bug on mobile',
+      status: 'reviewed',
+    })
+    expect(rows[0]).toHaveProperty('context')
+  })
+
 })

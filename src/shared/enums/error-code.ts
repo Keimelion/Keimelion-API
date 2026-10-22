@@ -24,6 +24,7 @@ export const ErrorCode = {
   INVALID_REFRESH_TOKEN:   'INVALID_REFRESH_TOKEN',
   INVALID_CREDENTIALS:     'INVALID_CREDENTIALS',
   INVALID_OPERATION:       'INVALID_OPERATION',
+  FEEDBACK_CREATION_FAILED: 'FEEDBACK_CREATION_FAILED',
   INTERNAL_ERROR:          'INTERNAL_ERROR',
 } as const
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode]

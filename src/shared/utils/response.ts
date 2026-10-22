@@ -52,6 +52,7 @@ export const errorMap: Record<ErrorCode, { status: ContentfulStatusCode; message
   INVALID_REFRESH_TOKEN:   { status: HttpStatus.UNAUTHORIZED,          message: 'Invalid or expired refresh token' },
   INVALID_CREDENTIALS:     { status: HttpStatus.BAD_REQUEST,           message: 'Current password is incorrect' },
   INVALID_OPERATION:       { status: HttpStatus.BAD_REQUEST,           message: 'Operation not allowed for this account type' },
+  FEEDBACK_CREATION_FAILED: { status: HttpStatus.INTERNAL_SERVER_ERROR, message: 'Feedback could not be submitted' },
   INTERNAL_ERROR:          { status: HttpStatus.INTERNAL_SERVER_ERROR, message: 'An unexpected error occurred' },
 }
 
