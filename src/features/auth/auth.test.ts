@@ -18,7 +18,7 @@ const VALID_USER = {
   isCgvAccepted: true,
   cgvAcceptedAt: new Date('2024-01-01'),
   isMarketingOptedIn: false,
-  defaultCurrencyCode: 'USD',
+  defaultCurrencyCode: 'EUR',
   emailVerifyToken: null,
   emailVerifyTokenExpiresAt: null,
   emailVerifiedAt: new Date('2024-01-02'),
@@ -107,7 +107,7 @@ describe('POST /v1/auth/register', () => {
     expect(insertedRow.defaultCurrencyCode).toBe('EUR')
   })
 
-  it('falls back to the DB default when defaultCurrency is omitted', async () => {
+  it('falls back to the DB default (EUR) when defaultCurrency is omitted', async () => {
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(undefined)
     const valuesSpy = vi.fn().mockReturnValueOnce({
       returning: vi.fn().mockResolvedValueOnce([VALID_USER]),
@@ -126,6 +126,8 @@ describe('POST /v1/auth/register', () => {
     expect(response.status).toBe(201)
     const insertedRow = valuesSpy.mock.calls[0]?.[0] as { defaultCurrencyCode?: string }
     expect(insertedRow).not.toHaveProperty('defaultCurrencyCode')
+    const body = await response.json() as { user: { defaultCurrency: string } }
+    expect(body.user.defaultCurrency).toBe('EUR')
   })
 
   it('returns 422 when defaultCurrency is not a supported ISO code', async () => {

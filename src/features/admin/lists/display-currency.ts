@@ -7,7 +7,7 @@ import type { User } from '../../../db/entities/users/users.schema.js'
  * Resolution order (first match wins):
  *   1. Explicit `?currency=` query parameter (user override)
  *   2. The authenticated caller's `default_currency_code` preference
- *      (DB-level default is `'USD'`, so this is always a supported code)
+ *      (DB-level default is `'EUR'`, so this is always a supported code)
  */
 export function resolveDisplayCurrency(
   queryCurrency: SupportedCurrency | undefined,

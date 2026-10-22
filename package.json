@@ -17,6 +17,7 @@
     "db:studio": "tsx node_modules/drizzle-kit/bin.cjs studio",
     "db:seed": "tsx src/db/seed/index.ts",
     "db:reset": "tsx src/db/seed/reset.ts",
+    "fx:refresh": "tsx src/cron/jobs/fx-rates-refresh.cli.ts",
     "prepare": "husky"
   },
   "dependencies": {

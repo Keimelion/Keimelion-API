@@ -99,6 +99,44 @@ npm test              # Run Vitest tests
 
 ---
 
+## Background jobs
+
+The API bootstraps a small in-process scheduler (`src/cron/`) that runs lightweight maintenance jobs via `setInterval` from the main server process. Each job's cadence is driven by its own env var so operators can tune it per environment.
+
+| Job | Env flag(s) | Default cadence | Purpose |
+|---|---|---|---|
+| Expired JWT cleanup | `JWT_CLEANUP_INTERVAL_MS` | 1 h | Deletes expired access-token rows |
+| Expired refresh token cleanup | `REFRESH_TOKEN_CLEANUP_INTERVAL_MS` | 1 h | Deletes expired refresh-token rows |
+| Hard-delete inactive users | `USER_HARD_DELETE_INTERVAL_MS`, `USER_HARD_DELETE_GRACE_DAYS` | 1 h / 30 d | Purges soft-deleted and 24-month-inactive users |
+| **FX rates refresh** | `FX_REFRESH_ENABLED`, `FX_REFRESH_INTERVAL_MS`, `FX_PROVIDER_URL` | 24 h | Refreshes `currencies.usd_rate` from an FX provider |
+
+### FX rates refresh
+
+The job keeps `currencies.usd_rate` + `currencies.usd_rate_as_of` current for every supported ISO 4217 code except USD (anchor row, always 1.0).
+
+**Provider.** [ECB daily reference rates](https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml) — free, no API key, published every working day shortly after 16:00 CET. The feed is base-EUR, so each incoming rate is pivoted to base USD: `usd_rate_X = ecb_rate_X / ecb_rate_USD` (and `usd_rate_EUR = 1 / ecb_rate_USD`). Override via `FX_PROVIDER_URL` only if you need a mirror.
+
+**Trigger.** Two mutually-exclusive modes:
+
+- **In-process scheduler.** Set `FX_REFRESH_ENABLED=true` and the server starts an interval-based scheduler (`FX_REFRESH_INTERVAL_MS`, default 24 h). Convenient for single-instance deployments. Not recommended with more than one API replica — every replica would hit the provider.
+- **External scheduler (recommended for production).** Keep `FX_REFRESH_ENABLED=false` and drive a one-shot run from your platform scheduler (host `cron`, Docker Compose profile, Kubernetes CronJob, GitHub Actions, etc.):
+
+  ```bash
+  npm run fx:refresh
+  ```
+
+  The CLI exits `0` on success and `1` on failure.
+
+**Guarantees.**
+
+- **Graceful failure.** On provider HTTP error, network error, unparseable payload, or a missing USD rate, the job logs an error and skips the update — previous `usd_rate` / `usd_rate_as_of` values stay in place. No partial write.
+- **Transactional update.** Every per-row `UPDATE` runs inside a single `db.transaction`; the transaction only opens after the full payload has been fetched and parsed, so a mid-batch failure rolls back the whole run.
+- **Idempotent.** Re-running the job within the same day overwrites each row with the same values (modulo intraday provider revisions). Safe to re-trigger from cron, from the CLI, or from a manual invocation.
+
+**Observability.** On success the job logs `FX refresh: rates updated` with `{ updatedCount, asOf, provider }`. On failure it logs an error with the HTTP status / parsed payload hint. The shared cron wrapper additionally emits a generic completion line per tick.
+
+---
+
 ## Commit convention
 
 This project follows [Conventional Commits](https://www.conventionalcommits.org/) enforced via `commitlint` + `husky`.
