@@ -24,6 +24,8 @@ vi.mock('../../config/env.js', () => ({
     FX_REFRESH_ENABLED: false,
     FX_REFRESH_INTERVAL_MS: 86_400_000,
     FX_PROVIDER_URL: 'https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml',
+    FEEDBACK_RATE_LIMIT_PER_MINUTE: 5,
+    FEEDBACK_RATE_LIMIT_PER_HOUR: 20,
   },
 }))
 
@@ -103,6 +105,10 @@ vi.mock('../../db/client.js', () => {
         findMany: vi.fn().mockResolvedValue([]),
       },
       listTags: {
+        findFirst: vi.fn(),
+        findMany: vi.fn().mockResolvedValue([]),
+      },
+      feedback: {
         findFirst: vi.fn(),
         findMany: vi.fn().mockResolvedValue([]),
       },

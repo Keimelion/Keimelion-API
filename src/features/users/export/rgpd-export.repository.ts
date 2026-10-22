@@ -1,5 +1,6 @@
 import { and, eq, inArray } from 'drizzle-orm'
 import { db } from '../../../db/client.js'
+import { feedback } from '../../../db/entities/feedback/feedback.schema.js'
 import { items } from '../../../db/entities/items/items.schema.js'
 import { itemSources } from '../../../db/entities/item-sources/item-sources.schema.js'
 import { listCollaborators } from '../../../db/entities/list-collaborators/list-collaborators.schema.js'
@@ -8,6 +9,7 @@ import { listTags } from '../../../db/entities/list-tags/list-tags.schema.js'
 import { lists } from '../../../db/entities/lists/lists.schema.js'
 import { tags } from '../../../db/entities/tags/tags.schema.js'
 import { CollabRoles, CONTRIBUTOR_ROLE_VALUES } from '../../../shared/enums/collab-role.js'
+import type { Feedback } from '../../../db/entities/feedback/feedback.schema.js'
 import type { Item } from '../../../db/entities/items/items.schema.js'
 import type { ItemSource } from '../../../db/entities/item-sources/item-sources.schema.js'
 import type { ListItem } from '../../../db/entities/list-items/list-items.schema.js'
@@ -57,6 +59,12 @@ export async function findListsOwnedByForExport(userId: string): Promise<List[]>
 export async function findTagsCreatedByUser(userId: string): Promise<Tag[]> {
   return db.query.tags.findMany({
     where: eq(tags.createdByUserId, userId),
+  })
+}
+
+export async function findFeedbackByUser(userId: string): Promise<Feedback[]> {
+  return db.query.feedback.findMany({
+    where: eq(feedback.userId, userId),
   })
 }
 

@@ -1,5 +1,6 @@
 import { findUserById } from '../../../db/entities/users/users.repository.js'
 import {
+  findFeedbackByUser,
   findItemsByCreator,
   findItemSourcesByCreator,
   findListItemsForContributor,
@@ -8,6 +9,7 @@ import {
   findTagsCreatedByUser,
 } from './rgpd-export.repository.js'
 import { toUserDetail } from '../../../shared/types/user.js'
+import { toFeedbackDetail } from '../../../shared/types/feedback.js'
 import { toItemDetail, toItemSourceDetailWithoutShop, toListItemDetail } from '../../../shared/types/item.js'
 import { toListDetail } from '../../../shared/types/list.js'
 import { toTagDetail } from '../../../shared/types/tag.js'
@@ -184,6 +186,23 @@ const listTagsEntityDescriptor: ExportEntityDescriptor = {
   },
 }
 
+const feedbackEntityDescriptor: ExportEntityDescriptor = {
+  filename: 'feedback.csv',
+  columns: [
+    'id',
+    'title',
+    'description',
+    'context',
+    'status',
+    'createdAt',
+    'updatedAt',
+  ],
+  fetchRows: async (userId: string) => {
+    const rows = await findFeedbackByUser(userId)
+    return rows.map(toFeedbackDetail)
+  },
+}
+
 export const EXPORT_ENTITY_REGISTRY: ExportEntityDescriptor[] = [
   profileEntityDescriptor,
   itemsEntityDescriptor,
@@ -192,4 +211,5 @@ export const EXPORT_ENTITY_REGISTRY: ExportEntityDescriptor[] = [
   listsEntityDescriptor,
   tagsEntityDescriptor,
   listTagsEntityDescriptor,
+  feedbackEntityDescriptor,
 ]

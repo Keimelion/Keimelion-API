@@ -23,4 +23,5 @@ export const AdminAction = {
   CREATE_TAG: 'admin_create_tag',
   UPDATE_TAG: 'admin_update_tag',
   DELETE_TAG: 'admin_delete_tag',
+  UPDATE_FEEDBACK: 'admin_update_feedback',
 } as const

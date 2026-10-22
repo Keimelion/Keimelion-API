@@ -8,6 +8,7 @@ import { findUserById, anonymizeUser, updatePasswordHash, insertDeletionAudit } 
 import { deleteAllUserTokens } from '../../db/entities/access-tokens/access-tokens.repository.js'
 import { revokeAllUserSessions } from '../../shared/db/user-sessions.js'
 import {
+  findFeedbackByUser,
   findItemsByCreator,
   findItemSourcesByCreator,
   findListItemsForContributor,
@@ -17,6 +18,7 @@ import {
 } from './export/rgpd-export.repository.js'
 import { updateUserProfile } from './users.repository.js'
 import { toUserDetail } from '../../shared/types/user.js'
+import { toFeedbackDetail } from '../../shared/types/feedback.js'
 import { toItemDetail, toItemSourceDetailWithoutShop, toListItemDetail } from '../../shared/types/item.js'
 import { toTagDetail } from '../../shared/types/tag.js'
 import { buildExportZipStream } from './export/csv-archive-writer.js'
@@ -125,13 +127,14 @@ export async function exportUserData(userId: string, format: ExportFormat): Prom
   const user = await findUserById(userId)
   const profile = user ? toUserDetail(user) : null
 
-  const [rawItems, rawItemSources, rawListItems, rawLists, rawTags, rawListTags] = await Promise.all([
+  const [rawItems, rawItemSources, rawListItems, rawLists, rawTags, rawListTags, rawFeedback] = await Promise.all([
     findItemsByCreator(userId),
     findItemSourcesByCreator(userId),
     findListItemsForContributor(userId),
     findListsOwnedByForExport(userId),
     findTagsCreatedByUser(userId),
     findListTagsForOwner(userId),
+    findFeedbackByUser(userId),
   ])
 
   return {
@@ -144,6 +147,7 @@ export async function exportUserData(userId: string, format: ExportFormat): Prom
       lists: rawLists.map(toExportListRow),
       tags: rawTags.map(toTagDetail),
       listTags: rawListTags.map(toExportListTagRow),
+      feedback: rawFeedback.map(toFeedbackDetail),
     },
     contentType: EXPORT_JSON_CONTENT_TYPE,
     filename: EXPORT_JSON_FILENAME,

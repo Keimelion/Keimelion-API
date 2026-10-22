@@ -113,6 +113,13 @@
       "when": 1792663364646,
       "tag": "0015_switch-user-default-currency-to-eur",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1792664265481,
+      "tag": "0016_add-feedback-table",
+      "breakpoints": true
     }
   ]
 }
