@@ -1,0 +1,1 @@
+ALTER TABLE "users" ALTER COLUMN "default_currency_code" SET DEFAULT 'EUR';

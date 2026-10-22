@@ -21,7 +21,7 @@ export const users = pgTable('users', {
   isMarketingOptedIn: boolean('is_marketing_opted_in').notNull().default(false),
   defaultCurrencyCode: char('default_currency_code', { length: 3 })
     .notNull()
-    .default(SupportedCurrencies.USD)
+    .default(SupportedCurrencies.EUR)
     .references(() => currencies.code, { onDelete: 'restrict', onUpdate: 'cascade' }),
   emailVerifyToken: uuid('email_verify_token').unique(),
   emailVerifyTokenExpiresAt: timestamp('email_verify_token_expires_at', { withTimezone: true }),
