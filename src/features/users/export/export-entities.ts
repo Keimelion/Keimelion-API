@@ -216,13 +216,15 @@ const imagesEntityDescriptor: ExportEntityDescriptor = {
     'width',
     'height',
     'createdAt',
-    'urls',
+    'urlSm',
+    'urlMd',
+    'urlLg',
   ],
   fetchRows: async (userId: string) => {
     const rows = await findImagesByUploaderForExport(userId)
     return rows.map((image) => {
-      const detail = toImageDetail(image)
-      return { ...detail, urls: JSON.stringify(detail.urls) }
+      const { urls, ...rest } = toImageDetail(image)
+      return { ...rest, urlSm: urls.sm, urlMd: urls.md, urlLg: urls.lg }
     })
   },
 }

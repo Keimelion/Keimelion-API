@@ -965,10 +965,13 @@ describe('GET /v1/users/me/export', () => {
       'width',
       'height',
       'createdAt',
-      'urls',
+      'urlSm',
+      'urlMd',
+      'urlLg',
     ])
     expect(imagesDescriptor?.columns).not.toContain('fileKey')
     expect(imagesDescriptor?.columns).not.toContain('uploadedBy')
+    expect(imagesDescriptor?.columns).not.toContain('urls')
   })
 
   it('fetches uploader-scoped images for RGPD', async () => {
@@ -994,6 +997,10 @@ describe('GET /v1/users/me/export', () => {
     const rows = await (imagesDescriptor as { fetchRows: (userId: string) => Promise<object[]> }).fetchRows(SAFE_USER.id)
     expect(rows).toHaveLength(1)
     expect(rows[0]).toMatchObject({ id: row.id, hash: row.hash, mime: 'image/jpeg', sizeBytes: 2048 })
+    expect(rows[0]).toHaveProperty('urlSm')
+    expect(rows[0]).toHaveProperty('urlMd')
+    expect(rows[0]).toHaveProperty('urlLg')
+    expect(rows[0]).not.toHaveProperty('urls')
     expect(rows[0]).not.toHaveProperty('fileKey')
     expect(rows[0]).not.toHaveProperty('uploadedBy')
   })

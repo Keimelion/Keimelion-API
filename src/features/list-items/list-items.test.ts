@@ -277,6 +277,22 @@ describe('PATCH /v1/list-items/:id', () => {
     mockProcessOptionalImage.mockResolvedValue({ image: null })
   })
 
+  it('rejects a multipart body combining clearImage=true with an image part (422)', async () => {
+    const token = await generateTestToken(AUTH_USER.id)
+    mockAuthChain()
+    mockListItemOwnershipChain()
+
+    const response = await apiMultipartRequest(`/v1/list-items/${LIST_ITEM_ID}`, {
+      method: 'PATCH',
+      token,
+      fields: { clearImage: 'true' },
+      image: { buffer: Buffer.from([1, 2, 3, 4]) },
+    })
+
+    expect(response.status).toBe(422)
+    expect(mockProcessOptionalImage).not.toHaveBeenCalled()
+  })
+
   it('returns 200 with updated list item', async () => {
     const token = await generateTestToken(AUTH_USER.id)
     mockAuthChain()

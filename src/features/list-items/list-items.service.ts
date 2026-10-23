@@ -14,6 +14,7 @@ import { processOptionalImage, rollbackImage } from '../uploads/images.service.j
 import { toListItemDetail } from '../../shared/types/item.js'
 import type { ListItemDetail, ListItemRowWithImage, ListItemWrite } from '../../shared/types/item.js'
 import type { ListItem } from '../../db/entities/list-items/list-items.schema.js'
+import type { Image } from '../../db/entities/images/images.schema.js'
 import type { ServiceResult } from '../../shared/types/service.js'
 import type { PartialWrite } from '../../shared/types/api.js'
 
@@ -41,7 +42,6 @@ export async function createListItem(
 
   const imageOutcome = await processOptionalImage(input.imageBuffer, uploadedBy)
   if ('errorCode' in imageOutcome) return serviceError(imageOutcome.errorCode)
-  const newImageId = imageOutcome.image?.id ?? null
 
   const inserted = await insertListItem({
     listId: input.listId,
@@ -49,14 +49,14 @@ export async function createListItem(
     quantityDesired: input.quantityDesired ?? DEFAULT_QUANTITY_DESIRED,
     creatorNote: input.creatorNote,
     itemStatus: ItemStatuses.AVAILABLE,
-    imageId: newImageId,
+    imageId: imageOutcome.image?.id ?? null,
   })
   if (!inserted) {
-    await rollbackImage(newImageId, 'list_item.create')
+    await rollbackImage(imageOutcome.image?.id ?? null, 'list_item.create')
     return serviceError(ErrorCode.INTERNAL_ERROR)
   }
 
-  const row = await hydrateImage(inserted)
+  const row = await hydrateImage(inserted, imageOutcome.image)
   return { data: { listItem: toListItemDetail(row) }, httpStatus: HttpStatus.CREATED }
 }
 
@@ -66,6 +66,9 @@ export async function updateListItemById(
   uploadedBy: string,
 ): Promise<ServiceResult<{ listItem: ListItemDetail }>> {
   const { imageBuffer, clearImage, ...fields } = input
+  if (imageBuffer && clearImage) {
+    return serviceError(ErrorCode.UNPROCESSABLE_ENTITY)
+  }
   const fieldPatch = pickDefined(fields)
   const hasFieldPatch = Object.keys(fieldPatch).length > 0
   if (!hasFieldPatch && !imageBuffer && !clearImage) {
@@ -74,21 +77,26 @@ export async function updateListItemById(
 
   const imageOutcome = await processOptionalImage(imageBuffer, uploadedBy)
   if ('errorCode' in imageOutcome) return serviceError(imageOutcome.errorCode)
-  const newImageId = imageOutcome.image?.id ?? null
 
-  const patch = buildPatchWithImage(fieldPatch, newImageId, clearImage)
+  const patch = buildPatchWithImage(fieldPatch, imageOutcome.image?.id ?? null, clearImage)
   const updated = await updateListItem(listItemId, patch)
   if (!updated) {
-    await rollbackImage(newImageId, 'list_item.update')
+    await rollbackImage(imageOutcome.image?.id ?? null, 'list_item.update')
     return serviceError(ErrorCode.INTERNAL_ERROR)
   }
 
-  const row = await hydrateImage(updated)
+  const row = await hydrateImage(updated, imageOutcome.image)
   return { data: { listItem: toListItemDetail(row) }, httpStatus: HttpStatus.OK }
 }
 
-async function hydrateImage(listItem: ListItem): Promise<ListItemRowWithImage> {
+async function hydrateImage(
+  listItem: ListItem,
+  knownImage: Image | null,
+): Promise<ListItemRowWithImage> {
   if (!listItem.imageId) return { ...listItem, image: null }
+  if (knownImage?.id === listItem.imageId) {
+    return { ...listItem, image: knownImage }
+  }
   const hydrated = await findListItemByIdWithImage(listItem.id)
   return hydrated ?? { ...listItem, image: null }
 }
