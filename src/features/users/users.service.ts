@@ -3,13 +3,11 @@ import { HttpStatus } from '../../shared/enums/http.js'
 import { ErrorCode } from '../../shared/enums/error-code.js'
 import { serviceError } from '../../shared/utils/response.js'
 import { pickDefined } from '../../shared/utils/partial-update.js'
-import { logger } from '../../shared/utils/logger.js'
 import { hashPassword, verifyPassword } from '../../shared/utils/hash.js'
 import { findUserById, findUserByIdWithAvatar, anonymizeUser, updatePasswordHash, insertDeletionAudit } from '../../db/entities/users/users.repository.js'
 import { deleteAllUserTokens } from '../../db/entities/access-tokens/access-tokens.repository.js'
 import { revokeAllUserSessions } from '../../shared/db/user-sessions.js'
-import { deleteImageById } from '../../db/entities/images/images.repository.js'
-import { processImage } from '../uploads/image.pipeline.js'
+import { processOptionalImage, rollbackImage } from '../uploads/images.service.js'
 import {
   findFeedbackByUser,
   findImagesByUploaderForExport,
@@ -33,7 +31,6 @@ import {
   toExportListTagRow,
 } from './export/export-entities.js'
 import type { UserDetail, UserWrite } from '../../shared/types/user.js'
-import type { Image } from '../../db/entities/images/images.schema.js'
 import type { ServiceResult } from '../../shared/types/service.js'
 import type { PartialWrite } from '../../shared/types/api.js'
 import type { ChangePasswordInput } from './endpoints/change-password.js'
@@ -82,17 +79,18 @@ export async function updateProfile(
   const { avatarBuffer, clearAvatar, ...rest } = input
   const fieldPatch = pickDefined(rest)
 
-  const imageOutcome = await maybeProcessAvatar(avatarBuffer, userId)
+  const imageOutcome = await processOptionalImage(avatarBuffer, userId)
   if ('errorCode' in imageOutcome) return serviceError(imageOutcome.errorCode)
+  const newImageId = imageOutcome.image?.id ?? null
 
-  const patch = buildAvatarPatch(fieldPatch, imageOutcome.image?.id ?? null, clearAvatar)
+  const patch = buildAvatarPatch(fieldPatch, newImageId, clearAvatar)
   if (Object.keys(patch).length === 0) {
     return serviceError(ErrorCode.NO_FIELDS_TO_UPDATE)
   }
 
   const updatedUser = await updateUserProfile(userId, patch)
   if (!updatedUser) {
-    await rollbackAvatarImage(imageOutcome.image?.id ?? null)
+    await rollbackImage(newImageId, 'user.update_profile')
     return serviceError(ErrorCode.USER_UPDATE_FAILED)
   }
 
@@ -100,16 +98,6 @@ export async function updateProfile(
     data: { user: toUserDetail({ ...updatedUser, avatarImage: imageOutcome.image }) },
     httpStatus: HttpStatus.OK,
   }
-}
-
-async function maybeProcessAvatar(
-  buffer: Buffer | null,
-  uploadedBy: string,
-): Promise<{ image: Image | null } | { errorCode: ErrorCode }> {
-  if (!buffer) return { image: null }
-  const result = await processImage(buffer, uploadedBy)
-  if ('errorCode' in result) return { errorCode: result.errorCode }
-  return { image: result.image }
 }
 
 function buildAvatarPatch(
@@ -124,15 +112,6 @@ function buildAvatarPatch(
     patch.avatarImageId = null
   }
   return patch
-}
-
-async function rollbackAvatarImage(imageId: string | null): Promise<void> {
-  if (!imageId) return
-  try {
-    await deleteImageById(imageId)
-  } catch (error: unknown) {
-    logger.error({ error, imageId }, 'Failed to rollback avatar image after user update failure')
-  }
 }
 
 export async function deleteAccount(userId: string, originalEmail: string): Promise<ServiceResult<{ message: string }>> {

@@ -18,7 +18,7 @@ import {
   resetUserPassword,
   updateUserProfile,
 } from '../users/users.repository.js'
-import { processImage } from '../uploads/image.pipeline.js'
+import { processOptionalImage, rollbackImage } from '../uploads/images.service.js'
 import { toUserDetail } from '../../shared/types/user.js'
 import type { User } from '../../db/entities/users/users.schema.js'
 import type { Image } from '../../db/entities/images/images.schema.js'
@@ -80,11 +80,16 @@ async function maybeAttachAvatar(
   createdUser: User,
   avatarBuffer: Buffer | null,
 ): Promise<AvatarAttachOutcome | { errorCode: ErrorCode }> {
-  if (!avatarBuffer) return { row: createdUser, avatarImage: null }
-  const imageOutcome = await processImage(avatarBuffer, createdUser.id)
+  const imageOutcome = await processOptionalImage(avatarBuffer, createdUser.id)
   if ('errorCode' in imageOutcome) return { errorCode: imageOutcome.errorCode }
+  if (!imageOutcome.image) return { row: createdUser, avatarImage: null }
+
   const updated = await updateUserProfile(createdUser.id, { avatarImageId: imageOutcome.image.id })
-  return { row: updated ?? createdUser, avatarImage: imageOutcome.image }
+  if (!updated) {
+    await rollbackImage(imageOutcome.image.id, 'auth.register_avatar')
+    return { errorCode: ErrorCode.USER_UPDATE_FAILED }
+  }
+  return { row: updated, avatarImage: imageOutcome.image }
 }
 
 export async function verifyEmail(input: VerifyEmailInput): Promise<ServiceResult<{ message: string }>> {

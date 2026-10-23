@@ -1,7 +1,27 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { db } from '../../db/client.js'
-import { apiRequest } from '../../shared/test/api-request.js'
+import { apiMultipartRequest, apiRequest } from '../../shared/test/api-request.js'
 import { generateTestToken, makeAccessTokenEntry } from '../../shared/test/auth.js'
+import type * as ImagesService from '../uploads/images.service.js'
+
+const { mockProcessOptionalImage } = vi.hoisted(() => ({ mockProcessOptionalImage: vi.fn() }))
+vi.mock('../uploads/images.service.js', async () => {
+  const actual = await vi.importActual<typeof ImagesService>('../uploads/images.service.js')
+  return { ...actual, processOptionalImage: mockProcessOptionalImage }
+})
+
+const MOCK_IMAGE_ROW = {
+  id: '00000000-0000-0000-0000-0000000000aa',
+  hash: 'a'.repeat(64),
+  fileKey: 'aa/aa/' + 'a'.repeat(64),
+  mime: 'image/png',
+  sizeBytes: 100,
+  width: 640,
+  height: 480,
+  uploadedBy: '00000000-0000-0000-0000-000000000001',
+  createdAt: new Date('2024-01-01'),
+  updatedAt: new Date('2024-01-01'),
+}
 
 const AUTH_USER = {
   id: '00000000-0000-0000-0000-000000000001',
@@ -107,6 +127,7 @@ function mockListItemOwnershipChain(): void {
 describe('POST /v1/list-items', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockProcessOptionalImage.mockResolvedValue({ image: null })
   })
 
   it('returns 201 with created list item for JSON body', async () => {
@@ -193,11 +214,67 @@ describe('POST /v1/list-items', () => {
 
     expect(response.status).toBe(422)
   })
+
+  it('creates a list item with imageId when multipart body carries an image', async () => {
+    const token = await generateTestToken(AUTH_USER.id)
+    mockAuthChain()
+    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(
+      { ...MOCK_LIST, collaborators: [{ userId: AUTH_USER.id, user: AUTH_USER }] } as never,
+    )
+    vi.mocked(db.query.listCollaborators.findFirst).mockResolvedValueOnce(MOCK_COLLABORATOR as never)
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(MOCK_ITEM as never)
+    mockProcessOptionalImage.mockResolvedValueOnce({ image: MOCK_IMAGE_ROW })
+    vi.mocked(db.insert).mockReturnValueOnce({
+      values: vi.fn().mockReturnValueOnce({
+        returning: vi.fn().mockResolvedValueOnce([{ ...MOCK_LIST_ITEM, imageId: MOCK_IMAGE_ROW.id }]),
+      }),
+    } as never)
+    vi.mocked(db.query.listItems.findFirst).mockResolvedValueOnce(
+      { ...MOCK_LIST_ITEM, imageId: MOCK_IMAGE_ROW.id, image: MOCK_IMAGE_ROW } as never,
+    )
+
+    const response = await apiMultipartRequest('/v1/list-items', {
+      method: 'POST',
+      token,
+      fields: { listId: LIST_ID, itemId: ITEM_ID, quantityDesired: '3' },
+      image: { buffer: Buffer.from([1, 2, 3, 4]) },
+    })
+
+    const body = (await response.json()) as {
+      listItem: { imageId: string | null; image: { urls: { sm: string; md: string; lg: string } } | null }
+    }
+    expect(response.status).toBe(201)
+    expect(mockProcessOptionalImage).toHaveBeenCalledTimes(1)
+    expect(body.listItem.imageId).toBe(MOCK_IMAGE_ROW.id)
+    expect(body.listItem.image?.urls.sm).toContain('-300.webp')
+  })
+
+  it('propagates INVALID_IMAGE_TYPE from the pipeline on multipart create', async () => {
+    const token = await generateTestToken(AUTH_USER.id)
+    mockAuthChain()
+    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(
+      { ...MOCK_LIST, collaborators: [{ userId: AUTH_USER.id, user: AUTH_USER }] } as never,
+    )
+    vi.mocked(db.query.listCollaborators.findFirst).mockResolvedValueOnce(MOCK_COLLABORATOR as never)
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(MOCK_ITEM as never)
+    const { ErrorCode } = await import('../../shared/enums/error-code.js')
+    mockProcessOptionalImage.mockResolvedValueOnce({ errorCode: ErrorCode.INVALID_IMAGE_TYPE })
+
+    const response = await apiMultipartRequest('/v1/list-items', {
+      method: 'POST',
+      token,
+      fields: { listId: LIST_ID, itemId: ITEM_ID },
+      image: { buffer: Buffer.from([1, 2, 3, 4]) },
+    })
+
+    expect(response.status).toBe(400)
+  })
 })
 
 describe('PATCH /v1/list-items/:id', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockProcessOptionalImage.mockResolvedValue({ image: null })
   })
 
   it('returns 200 with updated list item', async () => {

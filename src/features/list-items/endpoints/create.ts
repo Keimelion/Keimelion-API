@@ -4,12 +4,15 @@ import { authMiddleware, getAuthUser } from '../../../shared/middlewares/auth.js
 import { listContributorMiddleware } from '../../../shared/middlewares/list-access.middleware.js'
 import { RATE_LIMITS } from '../../../shared/utils/rate-limiter.js'
 import { jsonResult, sendError } from '../../../shared/utils/response.js'
-import { ErrorCode } from '../../../shared/enums/error-code.js'
 import {
   creatorNoteSchema,
   quantityDesiredSchema,
 } from '../../../db/entities/list-items/list-items.schemas.js'
-import { isMultipartRequest, parseMultipart } from '../../uploads/multipart.js'
+import {
+  isMultipartRequest,
+  parseJsonOrMultipart,
+  parseMultipartFields,
+} from '../../uploads/multipart.js'
 import type { AppVariables, FeatureRouter } from '../../../shared/types/app.js'
 import { createListItem } from '../list-items.service.js'
 
@@ -41,21 +44,37 @@ export function mountCreateListItem(router: FeatureRouter): void {
       resolveListId: resolveListIdFromRequest,
     }),
     async (context) => {
-      if (isMultipartRequest(context)) return handleMultipart(context)
-      return handleJson(context)
+      const parsed = await parseJsonOrMultipart(context, {
+        jsonSchema: jsonCreateListItemSchema,
+        multipartSchema: multipartCreateListItemSchema,
+      })
+      if (!parsed.ok) {
+        return sendError(parsed.errorCode, parsed.issues ? { issues: parsed.issues } : {})
+      }
+
+      const user = getAuthUser(context)
+      return jsonResult(
+        context,
+        await createListItem(
+          {
+            listId: parsed.data.listId,
+            itemId: parsed.data.itemId,
+            quantityDesired: parsed.data.quantityDesired ?? null,
+            creatorNote: parsed.data.creatorNote ?? null,
+            imageBuffer: parsed.imageBuffer,
+          },
+          user.id,
+        ),
+      )
     },
   )
 }
 
 async function resolveListIdFromRequest(context: AppContext): Promise<string | null> {
   if (isMultipartRequest(context)) {
-    try {
-      const body = (await context.req.parseBody()) as Record<string, unknown>
-      const value = body.listId
-      return typeof value === 'string' ? value : null
-    } catch {
-      return null
-    }
+    const parsed = await parseMultipartFields(context)
+    if ('errorCode' in parsed) return null
+    return parsed.fields.listId ?? null
   }
   try {
     const body = (await context.req.raw.clone().json()) as { listId?: unknown }
@@ -63,57 +82,4 @@ async function resolveListIdFromRequest(context: AppContext): Promise<string | n
   } catch {
     return null
   }
-}
-
-async function handleJson(context: AppContext): Promise<Response> {
-  let payload: unknown
-  try {
-    payload = await context.req.json()
-  } catch {
-    return sendError(ErrorCode.BAD_REQUEST)
-  }
-  const result = jsonCreateListItemSchema.safeParse(payload)
-  if (!result.success) {
-    return sendError(ErrorCode.UNPROCESSABLE_ENTITY, { issues: result.error.issues })
-  }
-
-  const user = getAuthUser(context)
-  return jsonResult(
-    context,
-    await createListItem(
-      {
-        listId: result.data.listId,
-        itemId: result.data.itemId,
-        quantityDesired: result.data.quantityDesired ?? null,
-        creatorNote: result.data.creatorNote ?? null,
-        imageBuffer: null,
-      },
-      user.id,
-    ),
-  )
-}
-
-async function handleMultipart(context: AppContext): Promise<Response> {
-  const parsed = await parseMultipart(context, 'image')
-  if ('errorCode' in parsed) return sendError(parsed.errorCode)
-
-  const result = multipartCreateListItemSchema.safeParse(parsed.fields)
-  if (!result.success) {
-    return sendError(ErrorCode.UNPROCESSABLE_ENTITY, { issues: result.error.issues })
-  }
-
-  const user = getAuthUser(context)
-  return jsonResult(
-    context,
-    await createListItem(
-      {
-        listId: result.data.listId,
-        itemId: result.data.itemId,
-        quantityDesired: result.data.quantityDesired ?? null,
-        creatorNote: result.data.creatorNote ?? null,
-        imageBuffer: parsed.imageBuffer,
-      },
-      user.id,
-    ),
-  )
 }

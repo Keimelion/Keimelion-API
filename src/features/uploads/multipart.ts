@@ -1,20 +1,16 @@
+import { z } from 'zod'
 import type { Context } from 'hono'
+import type { ZodIssue, ZodTypeAny, infer as zInfer } from 'zod'
 import { ErrorCode } from '../../shared/enums/error-code.js'
 import { logger } from '../../shared/utils/logger.js'
 
 const JSON_CONTENT_TYPE = 'application/json'
 const MULTIPART_CONTENT_TYPE = 'multipart/form-data'
+const DEFAULT_IMAGE_FIELD = 'image'
 
-export interface ParsedMultipart {
-  fields: Record<string, string>
-  imageBuffer: Buffer | null
-}
-
-export interface MultipartParseError {
-  errorCode: ErrorCode
-}
-
-export type MultipartParseResult = ParsedMultipart | MultipartParseError
+export const multipartBoolSchema = z
+  .enum(['true', 'false', '1', '0', 'yes', 'no'])
+  .transform((raw) => raw === 'true' || raw === '1' || raw === 'yes')
 
 export function isJsonRequest(context: Context): boolean {
   const contentType = context.req.header('Content-Type') ?? ''
@@ -26,9 +22,20 @@ export function isMultipartRequest(context: Context): boolean {
   return contentType.toLowerCase().startsWith(MULTIPART_CONTENT_TYPE)
 }
 
-export async function parseMultipart(
+interface ParsedMultipartFields {
+  fields: Record<string, string>
+  imageBuffer: Buffer | null
+}
+
+interface MultipartParseError {
+  errorCode: ErrorCode
+}
+
+type MultipartParseResult = ParsedMultipartFields | MultipartParseError
+
+export async function parseMultipartFields(
   context: Context,
-  imageFieldName: string,
+  imageFieldName: string = DEFAULT_IMAGE_FIELD,
 ): Promise<MultipartParseResult> {
   let body: Record<string, unknown>
   try {
@@ -74,8 +81,53 @@ function isFileLike(value: unknown): value is Blob {
   )
 }
 
-export function parseBooleanField(raw: string | undefined): boolean {
-  if (raw === undefined) return false
-  const normalized = raw.toLowerCase()
-  return normalized === 'true' || normalized === '1' || normalized === 'yes'
+interface ParseJsonOrMultipartOptions<JsonSchema extends ZodTypeAny, MultipartSchema extends ZodTypeAny> {
+  jsonSchema: JsonSchema
+  multipartSchema: MultipartSchema
+  imageField?: string
+}
+
+export type ParsedJsonOrMultipart<JsonSchema extends ZodTypeAny, MultipartSchema extends ZodTypeAny> =
+  | { ok: true; kind: 'json'; data: zInfer<JsonSchema>; imageBuffer: null }
+  | { ok: true; kind: 'multipart'; data: zInfer<MultipartSchema>; imageBuffer: Buffer | null }
+  | { ok: false; errorCode: ErrorCode; issues?: ZodIssue[] }
+
+export async function parseJsonOrMultipart<
+  JsonSchema extends ZodTypeAny,
+  MultipartSchema extends ZodTypeAny,
+>(
+  context: Context,
+  options: ParseJsonOrMultipartOptions<JsonSchema, MultipartSchema>,
+): Promise<ParsedJsonOrMultipart<JsonSchema, MultipartSchema>> {
+  if (isMultipartRequest(context)) {
+    const parsed = await parseMultipartFields(context, options.imageField ?? DEFAULT_IMAGE_FIELD)
+    if ('errorCode' in parsed) return { ok: false, errorCode: parsed.errorCode }
+    const result = options.multipartSchema.safeParse(parsed.fields)
+    if (!result.success) {
+      return { ok: false, errorCode: ErrorCode.UNPROCESSABLE_ENTITY, issues: result.error.issues }
+    }
+    return {
+      ok: true,
+      kind: 'multipart',
+      data: result.data as zInfer<MultipartSchema>,
+      imageBuffer: parsed.imageBuffer,
+    }
+  }
+
+  let payload: unknown
+  try {
+    payload = await context.req.json()
+  } catch {
+    return { ok: false, errorCode: ErrorCode.BAD_REQUEST }
+  }
+  const result = options.jsonSchema.safeParse(payload)
+  if (!result.success) {
+    return { ok: false, errorCode: ErrorCode.UNPROCESSABLE_ENTITY, issues: result.error.issues }
+  }
+  return {
+    ok: true,
+    kind: 'json',
+    data: result.data as zInfer<JsonSchema>,
+    imageBuffer: null,
+  }
 }
