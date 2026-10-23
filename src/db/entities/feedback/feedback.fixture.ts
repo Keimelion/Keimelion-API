@@ -3,9 +3,11 @@ import { FeedbackStatuses } from '../../../shared/enums/feedback-status.js'
 import { feedback } from './feedback.schema.js'
 import type { FeedbackStatus } from '../../../shared/enums/feedback-status.js'
 
+type FeedbackInsert = typeof feedback.$inferInsert
+
 interface FeedbackFixture {
   id: string
-  authorEmail: string
+  authorEmail: string | null
   title: string
   description: string
   status: FeedbackStatus
@@ -43,13 +45,34 @@ const FEEDBACK_FIXTURES: readonly FeedbackFixture[] = [
     status: FeedbackStatuses.CLOSED,
     context: null,
   },
+  {
+    id: '7d3f0b40-0006-4b60-8000-000000000004',
+    authorEmail: null,
+    title: 'Feedback anonyme (auteur supprimé)',
+    description:
+      "Author was deleted and user_id was SET NULL — covers the orphan feedback admin case.",
+    status: FeedbackStatuses.OPEN,
+    context: null,
+  },
 ]
 
 export async function seedFeedback(db: typeof Db): Promise<void> {
   const userRows = await db.query.users.findMany({ columns: { id: true, email: true } })
   const userIdByEmail = new Map(userRows.map((row) => [row.email, row.id]))
 
-  const values = FEEDBACK_FIXTURES.flatMap((fixture) => {
+  const values = FEEDBACK_FIXTURES.flatMap<FeedbackInsert>((fixture) => {
+    if (fixture.authorEmail === null) {
+      return [
+        {
+          id: fixture.id,
+          userId: null,
+          title: fixture.title,
+          description: fixture.description,
+          status: fixture.status,
+          context: fixture.context,
+        },
+      ]
+    }
     const userId = userIdByEmail.get(fixture.authorEmail)
     if (!userId) return []
     return [

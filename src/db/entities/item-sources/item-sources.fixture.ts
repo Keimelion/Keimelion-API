@@ -6,10 +6,12 @@ import { ITEM_IDS } from '../items/items.fixture.js'
 import { itemSources } from './item-sources.schema.js'
 import type { SupportedCurrency } from '../../../shared/enums/currency.js'
 
+type ItemSourceInsert = typeof itemSources.$inferInsert
+
 interface ItemSourceFixture {
   id: string
   itemId: string
-  shopSlug: string
+  shopSlug: string | null
   sourceUrl: string | null
   price: string
   currency: SupportedCurrency
@@ -80,17 +82,41 @@ const ITEM_SOURCE_FIXTURES: readonly ItemSourceFixture[] = [
     price: '120.00',
     currency: SupportedCurrencies.GBP,
   },
+  {
+    id: '7d3f0b40-0004-4b60-8000-000000000009',
+    itemId: ITEM_IDS.WEDDING_WINE,
+    shopSlug: null,
+    sourceUrl: 'https://example.com/dev/custom-wine-shop',
+    price: '35.00',
+    currency: SupportedCurrencies.EUR,
+  },
 ]
 
 export async function seedItemSources(db: typeof Db): Promise<void> {
-  const slugs = Array.from(new Set(ITEM_SOURCE_FIXTURES.map((fixture) => fixture.shopSlug)))
+  const slugs = Array.from(
+    new Set(
+      ITEM_SOURCE_FIXTURES.flatMap((fixture) => (fixture.shopSlug !== null ? [fixture.shopSlug] : [])),
+    ),
+  )
   const shopRows = await db.query.shops.findMany({
     where: inArray(shops.slug, slugs),
     columns: { id: true, slug: true },
   })
   const shopIdBySlug = new Map(shopRows.map((row) => [row.slug, row.id]))
 
-  const values = ITEM_SOURCE_FIXTURES.flatMap((fixture) => {
+  const values = ITEM_SOURCE_FIXTURES.flatMap<ItemSourceInsert>((fixture) => {
+    if (fixture.shopSlug === null) {
+      return [
+        {
+          id: fixture.id,
+          itemId: fixture.itemId,
+          shopId: null,
+          sourceUrl: fixture.sourceUrl,
+          price: fixture.price,
+          currency: fixture.currency,
+        },
+      ]
+    }
     const shopId = shopIdBySlug.get(fixture.shopSlug)
     if (!shopId) return []
     return [

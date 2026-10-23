@@ -1,5 +1,5 @@
 import type { db as Db } from '../../client.js'
-import { ListStatuses } from '../../../shared/enums/list-status.js'
+import { type ListStatus, ListStatuses } from '../../../shared/enums/list-status.js'
 import { lists } from './lists.schema.js'
 
 /**
@@ -13,6 +13,8 @@ export const LIST_IDS = {
   HOUSEWARMING: '7d3f0b40-0001-4b60-8000-000000000002',
   WEDDING: '7d3f0b40-0001-4b60-8000-000000000003',
   SOFT_DELETED: '7d3f0b40-0001-4b60-8000-000000000004',
+  ARCHIVED: '7d3f0b40-0001-4b60-8000-000000000005',
+  STATUS_DELETED: '7d3f0b40-0001-4b60-8000-000000000006',
 } as const
 
 interface ListFixture {
@@ -21,6 +23,7 @@ interface ListFixture {
   slug: string
   description: string | null
   occasionSlug: string | null
+  listStatus: ListStatus
   deletedAt: Date | null
 }
 
@@ -31,6 +34,7 @@ const LIST_FIXTURES: readonly ListFixture[] = [
     slug: 'mon-anniversaire-dev01',
     description: 'Mes envies pour mon anniversaire.',
     occasionSlug: 'birthday',
+    listStatus: ListStatuses.ACTIVE,
     deletedAt: null,
   },
   {
@@ -39,6 +43,7 @@ const LIST_FIXTURES: readonly ListFixture[] = [
     slug: 'cremaillere-dev01',
     description: 'Pour la pendaison de crémaillère.',
     occasionSlug: 'first-apartment',
+    listStatus: ListStatuses.ACTIVE,
     deletedAt: null,
   },
   {
@@ -47,6 +52,7 @@ const LIST_FIXTURES: readonly ListFixture[] = [
     slug: 'liste-de-mariage-dev01',
     description: 'Notre liste de mariage — merci pour votre présence !',
     occasionSlug: 'wedding',
+    listStatus: ListStatuses.ACTIVE,
     deletedAt: null,
   },
   {
@@ -55,7 +61,26 @@ const LIST_FIXTURES: readonly ListFixture[] = [
     slug: 'ancienne-liste-dev01',
     description: 'Soft-deleted dev list — useful for RGPD export testing.',
     occasionSlug: null,
+    listStatus: ListStatuses.ACTIVE,
     deletedAt: new Date('2026-02-01T00:00:00Z'),
+  },
+  {
+    id: LIST_IDS.ARCHIVED,
+    title: 'Noël 2024',
+    slug: 'noel-2024-dev01',
+    description: 'Archived dev list — covers the list_status = archived admin filter.',
+    occasionSlug: null,
+    listStatus: ListStatuses.ARCHIVED,
+    deletedAt: null,
+  },
+  {
+    id: LIST_IDS.STATUS_DELETED,
+    title: 'Liste supprimée',
+    slug: 'liste-supprimee-dev01',
+    description: 'list_status = deleted dev list — covers the hard-tombstoned admin case.',
+    occasionSlug: null,
+    listStatus: ListStatuses.DELETED,
+    deletedAt: new Date('2026-03-15T00:00:00Z'),
   },
 ]
 
@@ -72,7 +97,7 @@ export async function seedLists(db: typeof Db): Promise<void> {
     description: fixture.description,
     occasionTypeId:
       fixture.occasionSlug !== null ? occasionIdBySlug.get(fixture.occasionSlug) ?? null : null,
-    listStatus: ListStatuses.ACTIVE,
+    listStatus: fixture.listStatus,
     deletedAt: fixture.deletedAt,
   }))
 

@@ -1,8 +1,19 @@
 import type { db as Db } from '../../client.js'
-import { hashPassword } from '../../../shared/utils/hash.js'
+import { hashPassword, hashSha256Hex } from '../../../shared/utils/hash.js'
 import { users } from './users.schema.js'
 
 const FIXTURE_PASSWORD = 'password'
+
+/**
+ * Deterministic raw reset tokens for dev — hashed with SHA-256 before storage
+ * (matches the hash scheme used by `requestPasswordReset` in `auth.service.ts`).
+ * Expose the RAW tokens here so a dev can hit `POST /auth/reset-password` with
+ * them during manual QA.
+ */
+export const DEV_RESET_TOKENS = {
+  USER_VALID: 'dev-reset-token-user-valid-01',
+  USER_EXPIRED: 'dev-reset-token-user-expired-01',
+} as const
 
 export async function seedUsers(db: typeof Db): Promise<void> {
   const passwordHashed = await hashPassword(FIXTURE_PASSWORD)
@@ -19,6 +30,8 @@ export async function seedUsers(db: typeof Db): Promise<void> {
       isMarketingOptedIn: true,
       emailVerifiedAt: new Date('2025-06-01T09:20:00Z'),
       lastActiveAt: new Date('2026-04-01T14:20:00Z'),
+      passwordResetToken: hashSha256Hex(DEV_RESET_TOKENS.USER_VALID),
+      passwordResetTokenExpiresAt: new Date('2099-12-31T23:59:59Z'),
     },
     {
       email: 'moderator@example.com',
@@ -65,6 +78,8 @@ export async function seedUsers(db: typeof Db): Promise<void> {
       isCgvAccepted: true,
       cgvAcceptedAt: new Date('2026-04-10T08:00:00Z'),
       isMarketingOptedIn: false,
+      passwordResetToken: hashSha256Hex(DEV_RESET_TOKENS.USER_EXPIRED),
+      passwordResetTokenExpiresAt: new Date('2024-01-01T00:00:00Z'),
     },
     {
       email: 'deleted.user@example.com',

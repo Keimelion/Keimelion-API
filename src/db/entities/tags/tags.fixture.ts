@@ -13,6 +13,8 @@ const TAG_FIXTURES = [
   { slug: 'urgent', name: 'urgent' },
 ] as const
 
+const ORPHAN_TAG_FIXTURE = { slug: 'legacy-orphan', name: 'legacy-orphan' } as const
+
 export async function seedTags(db: typeof Db): Promise<void> {
   const author = await db.query.users.findFirst({
     where: eq(users.email, DEFAULT_TAG_AUTHOR_EMAIL),
@@ -22,9 +24,14 @@ export async function seedTags(db: typeof Db): Promise<void> {
     throw new Error(`seedTags: seedUsers must run first (missing ${DEFAULT_TAG_AUTHOR_EMAIL})`)
   }
 
+  const values = [
+    ...TAG_FIXTURES.map((fixture) => ({ ...fixture, createdByUserId: author.id })),
+    { ...ORPHAN_TAG_FIXTURE, createdByUserId: null },
+  ]
+
   const inserted = await db
     .insert(tags)
-    .values(TAG_FIXTURES.map((fixture) => ({ ...fixture, createdByUserId: author.id })))
+    .values(values)
     .onConflictDoNothing({ target: tags.slug })
     .returning({ id: tags.id })
 
