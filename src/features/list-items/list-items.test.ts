@@ -11,6 +11,7 @@ const AUTH_USER = {
   authProvider: 'email' as const,
   role: 'user' as const,
   avatarUrl: null,
+  avatarImageId: null,
   isCgvAccepted: true,
   cgvAcceptedAt: new Date('2024-01-01'),
   isMarketingOptedIn: false,
@@ -72,11 +73,23 @@ const MOCK_LIST_ITEM = {
   itemStatus: 'available',
   sortOrder: null,
   creatorNote: null,
+  imageId: null,
+  image: null,
   createdAt: new Date('2024-01-01'),
   updatedAt: new Date('2024-01-01'),
 }
 
 const ACCESS_TOKEN_ENTRY = makeAccessTokenEntry(AUTH_USER.id)
+
+const MOCK_ITEM = {
+  id: ITEM_ID,
+  name: 'Test Item',
+  description: null,
+  imageUrl: null,
+  createdByUserId: AUTH_USER.id,
+  createdAt: new Date('2024-01-01'),
+  updatedAt: new Date('2024-01-01'),
+}
 
 function mockAuthChain(): void {
   vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
@@ -84,12 +97,103 @@ function mockAuthChain(): void {
 }
 
 function mockListItemOwnershipChain(): void {
-  vi.mocked(db.query.listItems.findFirst).mockResolvedValueOnce(MOCK_LIST_ITEM as never)
+  vi.mocked(db.query.listItems.findFirst).mockResolvedValue(MOCK_LIST_ITEM as never)
   vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(
     { ...MOCK_LIST, collaborators: [{ userId: AUTH_USER.id, user: AUTH_USER }] } as never,
   )
   vi.mocked(db.query.listCollaborators.findFirst).mockResolvedValueOnce(MOCK_COLLABORATOR as never)
 }
+
+describe('POST /v1/list-items', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('returns 201 with created list item for JSON body', async () => {
+    const token = await generateTestToken(AUTH_USER.id)
+    mockAuthChain()
+    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(
+      { ...MOCK_LIST, collaborators: [{ userId: AUTH_USER.id, user: AUTH_USER }] } as never,
+    )
+    vi.mocked(db.query.listCollaborators.findFirst).mockResolvedValueOnce(MOCK_COLLABORATOR as never)
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(MOCK_ITEM as never)
+    vi.mocked(db.insert).mockReturnValueOnce({
+      values: vi.fn().mockReturnValueOnce({
+        returning: vi.fn().mockResolvedValueOnce([MOCK_LIST_ITEM]),
+      }),
+    } as never)
+
+    const response = await apiRequest('/v1/list-items', {
+      method: 'POST',
+      token,
+      body: { listId: LIST_ID, itemId: ITEM_ID, quantityDesired: 2 },
+    })
+
+    const body = await response.json() as { listItem: { listId: string; image: unknown } }
+    expect(response.status).toBe(201)
+    expect(body.listItem.listId).toBe(LIST_ID)
+    expect(body.listItem.image).toBeNull()
+  })
+
+  it('returns 404 when the referenced item does not exist', async () => {
+    const token = await generateTestToken(AUTH_USER.id)
+    mockAuthChain()
+    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(
+      { ...MOCK_LIST, collaborators: [{ userId: AUTH_USER.id, user: AUTH_USER }] } as never,
+    )
+    vi.mocked(db.query.listCollaborators.findFirst).mockResolvedValueOnce(MOCK_COLLABORATOR as never)
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(undefined)
+
+    const response = await apiRequest('/v1/list-items', {
+      method: 'POST',
+      token,
+      body: { listId: LIST_ID, itemId: ITEM_ID },
+    })
+
+    expect(response.status).toBe(404)
+  })
+
+  it('returns 403 when the user is not a contributor of the list', async () => {
+    const token = await generateTestToken(AUTH_USER.id)
+    mockAuthChain()
+    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(MOCK_LIST as never)
+    vi.mocked(db.query.listCollaborators.findFirst).mockResolvedValueOnce(undefined)
+
+    const response = await apiRequest('/v1/list-items', {
+      method: 'POST',
+      token,
+      body: { listId: LIST_ID, itemId: ITEM_ID },
+    })
+
+    expect(response.status).toBe(403)
+  })
+
+  it('returns 401 when not authenticated', async () => {
+    const response = await apiRequest('/v1/list-items', {
+      method: 'POST',
+      body: { listId: LIST_ID, itemId: ITEM_ID },
+    })
+
+    expect(response.status).toBe(401)
+  })
+
+  it('returns 422 when listId is not a UUID', async () => {
+    const token = await generateTestToken(AUTH_USER.id)
+    mockAuthChain()
+    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(
+      { ...MOCK_LIST, collaborators: [{ userId: AUTH_USER.id, user: AUTH_USER }] } as never,
+    )
+    vi.mocked(db.query.listCollaborators.findFirst).mockResolvedValueOnce(MOCK_COLLABORATOR as never)
+
+    const response = await apiRequest('/v1/list-items', {
+      method: 'POST',
+      token,
+      body: { listId: 'not-a-uuid', itemId: ITEM_ID },
+    })
+
+    expect(response.status).toBe(422)
+  })
+})
 
 describe('PATCH /v1/list-items/:id', () => {
   beforeEach(() => {
@@ -144,10 +248,34 @@ describe('PATCH /v1/list-items/:id', () => {
     expect(response.status).toBe(200)
   })
 
+  it('returns 200 and persists imageId=null when clearImage=true', async () => {
+    const token = await generateTestToken(AUTH_USER.id)
+    mockAuthChain()
+    mockListItemOwnershipChain()
+
+    const setMock = vi.fn().mockReturnValueOnce({
+      where: vi.fn().mockReturnValueOnce({
+        returning: vi.fn().mockResolvedValueOnce([{ ...MOCK_LIST_ITEM, imageId: null }]),
+      }),
+    })
+    vi.mocked(db.update).mockReturnValueOnce({ set: setMock } as never)
+
+    const response = await apiRequest(`/v1/list-items/${LIST_ITEM_ID}`, {
+      method: 'PATCH',
+      token,
+      body: { clearImage: true },
+    })
+
+    expect(response.status).toBe(200)
+    expect(setMock).toHaveBeenCalledOnce()
+    const patch = setMock.mock.calls[0]?.[0] as Record<string, unknown>
+    expect(patch.imageId).toBeNull()
+  })
+
   it('returns 200 when user is an editor of the list', async () => {
     const token = await generateTestToken(AUTH_USER.id)
     mockAuthChain()
-    vi.mocked(db.query.listItems.findFirst).mockResolvedValueOnce(MOCK_LIST_ITEM as never)
+    vi.mocked(db.query.listItems.findFirst).mockResolvedValue(MOCK_LIST_ITEM as never)
     vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(MOCK_LIST as never)
     vi.mocked(db.query.listCollaborators.findFirst).mockResolvedValueOnce(MOCK_EDITOR_COLLABORATOR as never)
 

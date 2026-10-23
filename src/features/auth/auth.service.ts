@@ -16,8 +16,12 @@ import {
   markEmailAsVerified,
   setPasswordResetToken,
   resetUserPassword,
+  updateUserProfile,
 } from '../users/users.repository.js'
+import { processImage } from '../uploads/image.pipeline.js'
 import { toUserDetail } from '../../shared/types/user.js'
+import type { User } from '../../db/entities/users/users.schema.js'
+import type { Image } from '../../db/entities/images/images.schema.js'
 import {
   storeTokenAndUpdateActivity,
   revokeTokenAndUpdateActivity,
@@ -37,23 +41,50 @@ import type { ResetPasswordInput } from './endpoints/reset-password.js'
 const PASSWORD_RESET_TOKEN_TTL_MS = 60 * 60 * 1000
 const REFRESH_TOKEN_BYTE_LENGTH = 32
 
-export async function registerUser(input: RegisterInput): Promise<ServiceResult<{ user: UserDetail; refreshToken: string }>> {
+export async function registerUser(
+  input: RegisterInput,
+  avatarBuffer: Buffer | null = null,
+): Promise<ServiceResult<{ user: UserDetail; refreshToken: string }>> {
   if (await isEmailAlreadyTaken(input.email)) {
     return serviceError(ErrorCode.CONFLICT)
   }
 
   const emailVerifyToken = randomUUID()
-  const createdUser = await insertUser(input, emailVerifyToken)
+  const createdUser = await insertUser(input, emailVerifyToken, null)
 
   if (!createdUser) {
     return serviceError(ErrorCode.USER_CREATION_FAILED)
   }
 
   sendVerificationEmail(input.email, emailVerifyToken)
-
   const rawRefreshToken = await issueRefreshToken(createdUser.id)
 
-  return { data: { user: toUserDetail(createdUser), refreshToken: rawRefreshToken }, httpStatus: HttpStatus.CREATED }
+  const finalUser = await maybeAttachAvatar(createdUser, avatarBuffer)
+  if ('errorCode' in finalUser) return serviceError(finalUser.errorCode)
+
+  return {
+    data: {
+      user: toUserDetail({ ...finalUser.row, avatarImage: finalUser.avatarImage }),
+      refreshToken: rawRefreshToken,
+    },
+    httpStatus: HttpStatus.CREATED,
+  }
+}
+
+interface AvatarAttachOutcome {
+  row: User
+  avatarImage: Image | null
+}
+
+async function maybeAttachAvatar(
+  createdUser: User,
+  avatarBuffer: Buffer | null,
+): Promise<AvatarAttachOutcome | { errorCode: ErrorCode }> {
+  if (!avatarBuffer) return { row: createdUser, avatarImage: null }
+  const imageOutcome = await processImage(avatarBuffer, createdUser.id)
+  if ('errorCode' in imageOutcome) return { errorCode: imageOutcome.errorCode }
+  const updated = await updateUserProfile(createdUser.id, { avatarImageId: imageOutcome.image.id })
+  return { row: updated ?? createdUser, avatarImage: imageOutcome.image }
 }
 
 export async function verifyEmail(input: VerifyEmailInput): Promise<ServiceResult<{ message: string }>> {

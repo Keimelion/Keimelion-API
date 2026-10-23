@@ -34,6 +34,9 @@ const envSchema = z.object({
     .default('https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml'),
   FEEDBACK_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(5),
   FEEDBACK_RATE_LIMIT_PER_HOUR: z.coerce.number().int().positive().default(20),
+  UPLOADS_DIR: z.string().min(1).default('./uploads'),
+  UPLOADS_MAX_SIZE_BYTES: z.coerce.number().int().positive().default(10_000_000),
+  UPLOADS_PUBLIC_BASE_URL: z.string().url().default('http://localhost:3000/uploads'),
 })
 
 const parsed = envSchema.safeParse(process.env)

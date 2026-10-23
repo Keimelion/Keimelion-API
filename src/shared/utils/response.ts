@@ -56,6 +56,9 @@ export const errorMap: Record<ErrorCode, { status: ContentfulStatusCode; message
   INVALID_OPERATION:       { status: HttpStatus.BAD_REQUEST,           message: 'Operation not allowed for this account type' },
   FEEDBACK_CREATION_FAILED: { status: HttpStatus.INTERNAL_SERVER_ERROR, message: 'Feedback could not be submitted' },
   FEEDBACK_NOT_FOUND:      { status: HttpStatus.NOT_FOUND,             message: FEEDBACK_NOT_FOUND_MESSAGE },
+  INVALID_IMAGE:           { status: HttpStatus.BAD_REQUEST,           message: 'The uploaded image is empty or could not be decoded' },
+  INVALID_IMAGE_TYPE:      { status: HttpStatus.BAD_REQUEST,           message: 'The uploaded image must be a JPEG, PNG or WEBP file' },
+  PAYLOAD_TOO_LARGE:       { status: HttpStatus.PAYLOAD_TOO_LARGE,     message: 'The uploaded file exceeds the maximum allowed size' },
   INTERNAL_ERROR:          { status: HttpStatus.INTERNAL_SERVER_ERROR, message: 'An unexpected error occurred' },
 }
 

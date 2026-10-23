@@ -10,7 +10,7 @@ type SetPasswordResetTokenFields = Partial<Pick<typeof users.$inferInsert, 'pass
 type ResetPasswordFields = Pick<typeof users.$inferInsert, 'passwordHash' | 'passwordResetToken' | 'passwordResetTokenExpiresAt'>
 
 type UpdateUserProfileFields = Partial<
-  Pick<typeof users.$inferInsert, 'username' | 'avatarUrl' | 'isMarketingOptedIn' | 'defaultCurrencyCode'>
+  Pick<typeof users.$inferInsert, 'username' | 'avatarUrl' | 'avatarImageId' | 'isMarketingOptedIn' | 'defaultCurrencyCode'>
 >
 
 export function findUserByEmail(email: string): Promise<User | undefined> {
@@ -21,7 +21,11 @@ export function findUserByEmailVerifyToken(token: string): Promise<User | undefi
   return db.query.users.findFirst({ where: eq(users.emailVerifyToken, token) })
 }
 
-export async function insertUser(input: RegisterInput, emailVerifyToken: string): Promise<User | undefined> {
+export async function insertUser(
+  input: RegisterInput,
+  emailVerifyToken: string,
+  avatarImageId: string | null = null,
+): Promise<User | undefined> {
   const passwordHash = await hashPassword(input.password)
   const emailVerifyTokenExpiresAt = new Date(Date.now() + env.EMAIL_VERIFY_TOKEN_TTL_HOURS * 60 * 60 * 1000)
 
@@ -36,6 +40,7 @@ export async function insertUser(input: RegisterInput, emailVerifyToken: string)
       cgvAcceptedAt: new Date(),
       isMarketingOptedIn: input.isMarketingOptedIn,
       ...(input.defaultCurrency !== undefined && { defaultCurrencyCode: input.defaultCurrency }),
+      ...(avatarImageId !== null && { avatarImageId }),
       emailVerifyToken,
       emailVerifyTokenExpiresAt,
     })

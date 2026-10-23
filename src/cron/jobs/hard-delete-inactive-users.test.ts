@@ -32,6 +32,7 @@ function makeUser(overrides: Partial<User> = {}): User {
     authProvider: 'email',
     role: 'user',
     avatarUrl: null,
+    avatarImageId: null,
     isCgvAccepted: false,
     cgvAcceptedAt: null,
     isMarketingOptedIn: false,

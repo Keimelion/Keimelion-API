@@ -4,6 +4,7 @@ import { users } from './users.schema.js'
 import type { User } from './users.schema.js'
 import { userDeletionAudit } from '../user-deletion-audit/user-deletion-audit.schema.js'
 import type { DeletionReason } from '../../../shared/enums/deletion-reason.js'
+import type { UserRowWithAvatar } from '../../../shared/types/user.js'
 
 const HARD_DELETE_BATCH_SIZE = 100
 
@@ -23,6 +24,13 @@ type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
 export function findUserById(id: string): Promise<User | undefined> {
   return db.query.users.findFirst({ where: eq(users.id, id) })
+}
+
+export function findUserByIdWithAvatar(id: string): Promise<UserRowWithAvatar | undefined> {
+  return db.query.users.findFirst({
+    where: eq(users.id, id),
+    with: { avatarImage: true },
+  }) as Promise<UserRowWithAvatar | undefined>
 }
 
 export function findUserByUsername(username: string): Promise<User | undefined> {

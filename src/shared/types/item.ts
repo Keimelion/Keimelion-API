@@ -3,6 +3,7 @@ import type { ItemSource } from '../../db/entities/item-sources/item-sources.sch
 import type { ItemCategory } from '../../db/entities/item-categories/item-categories.schema.js'
 import type { ItemTag } from '../../db/entities/item-tags/item-tags.schema.js'
 import type { ListItem } from '../../db/entities/list-items/list-items.schema.js'
+import type { Image } from '../../db/entities/images/images.schema.js'
 import type { Shop } from '../../db/entities/shops/shops.schema.js'
 import type {
   Category,
@@ -16,6 +17,8 @@ import type { Locale } from '../enums/locale.js'
 import { toShopPublic } from './shop.js'
 import { resolveCategoryName, toCategoryPublic } from './category.js'
 import { toTagPublic } from './tag.js'
+import { toImageDetail } from '../../features/uploads/images.mapper.js'
+import type { ImageDetail } from '../../features/uploads/images.mapper.js'
 
 export interface ItemDetail {
   id: string
@@ -82,6 +85,8 @@ export interface ListItemDetail {
   itemStatus: string
   sortOrder: number | null
   creatorNote: string | null
+  imageId: string | null
+  image: ImageDetail | null
   createdAt: Date
   updatedAt: Date
 }
@@ -90,6 +95,10 @@ export interface ListItemWrite {
   quantityDesired: number
   creatorNote: string | null
   sortOrder: number | null
+}
+
+export interface ListItemRowWithImage extends ListItem {
+  image: Image | null
 }
 
 export function toItemDetail(item: Item): ItemDetail {
@@ -139,7 +148,8 @@ export function toItemWithSources(item: ItemRowWithSources, locale: Locale): Ite
   }
 }
 
-export function toListItemDetail(listItem: ListItem): ListItemDetail {
+export function toListItemDetail(listItem: ListItem | ListItemRowWithImage): ListItemDetail {
+  const image = 'image' in listItem ? listItem.image : null
   return {
     id: listItem.id,
     listId: listItem.listId,
@@ -149,6 +159,8 @@ export function toListItemDetail(listItem: ListItem): ListItemDetail {
     itemStatus: listItem.itemStatus,
     sortOrder: listItem.sortOrder ?? null,
     creatorNote: listItem.creatorNote ?? null,
+    imageId: listItem.imageId ?? null,
+    image: image ? toImageDetail(image) : null,
     createdAt: listItem.createdAt,
     updatedAt: listItem.updatedAt,
   }
