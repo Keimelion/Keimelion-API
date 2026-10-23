@@ -5,12 +5,13 @@ import { serviceError } from '../../shared/utils/response.js'
 import { pickDefined } from '../../shared/utils/partial-update.js'
 import {
   deleteListItem,
+  findListItemById,
   findListItemByIdWithImage,
   insertListItem,
   updateListItem,
 } from '../../db/entities/list-items/list-items.repository.js'
 import { findItemById } from '../../db/entities/items/items.repository.js'
-import { processOptionalImage, rollbackImage } from '../uploads/images.service.js'
+import { cleanupReplacedImage, processOptionalImage, rollbackImage } from '../uploads/images.service.js'
 import { toListItemDetail } from '../../shared/types/item.js'
 import type { ListItemDetail, ListItemRowWithImage, ListItemWrite } from '../../shared/types/item.js'
 import type { ListItem } from '../../db/entities/list-items/list-items.schema.js'
@@ -75,6 +76,9 @@ export async function updateListItemById(
     return serviceError(ErrorCode.NO_FIELDS_TO_UPDATE)
   }
 
+  const previous = await findListItemById(listItemId)
+  const previousImageId = previous?.imageId ?? null
+
   const imageOutcome = await processOptionalImage(imageBuffer, uploadedBy)
   if ('errorCode' in imageOutcome) return serviceError(imageOutcome.errorCode)
 
@@ -84,6 +88,8 @@ export async function updateListItemById(
     await rollbackImage(imageOutcome.image?.id ?? null, 'list_item.update')
     return serviceError(ErrorCode.INTERNAL_ERROR)
   }
+
+  await cleanupReplacedImage(previousImageId, updated.imageId ?? null, 'list_item.update')
 
   const row = await hydrateImage(updated, imageOutcome.image)
   return { data: { listItem: toListItemDetail(row) }, httpStatus: HttpStatus.OK }
@@ -104,7 +110,8 @@ async function hydrateImage(
 export async function removeListItem(
   listItemId: string,
 ): Promise<ServiceResult<{ message: string }>> {
-  await deleteListItem(listItemId)
+  const removed = await deleteListItem(listItemId)
+  await cleanupReplacedImage(removed?.imageId ?? null, null, 'list_item.delete')
   return { data: { message: 'Item removed from list' }, httpStatus: HttpStatus.OK }
 }
 

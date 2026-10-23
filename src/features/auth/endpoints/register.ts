@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { RATE_LIMITS } from '../../../shared/utils/rate-limiter.js'
+import { multipartOnly, RATE_LIMITS } from '../../../shared/utils/rate-limiter.js'
 import { jsonResult, sendError } from '../../../shared/utils/response.js'
 import { registerUser } from '../auth.service.js'
 import {
@@ -36,7 +36,7 @@ const multipartRegisterSchema = z.object({
 export type RegisterInput = z.infer<typeof jsonRegisterSchema>
 
 export function mountRegister(router: FeatureRouter): void {
-  router.post('/register', RATE_LIMITS.STANDARD(), async (context) => {
+  router.post('/register', RATE_LIMITS.STANDARD(), multipartOnly(RATE_LIMITS.UPLOAD()), async (context) => {
     const parsed = await parseJsonOrMultipart(context, {
       jsonSchema: jsonRegisterSchema,
       multipartSchema: multipartRegisterSchema,

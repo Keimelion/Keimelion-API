@@ -2,7 +2,7 @@ import { z } from 'zod'
 import type { Context } from 'hono'
 import { authMiddleware, getAuthUser } from '../../../shared/middlewares/auth.js'
 import { listContributorMiddleware } from '../../../shared/middlewares/list-access.middleware.js'
-import { RATE_LIMITS } from '../../../shared/utils/rate-limiter.js'
+import { multipartOnly, RATE_LIMITS } from '../../../shared/utils/rate-limiter.js'
 import { jsonResult, sendError } from '../../../shared/utils/response.js'
 import {
   creatorNoteSchema,
@@ -39,6 +39,7 @@ export function mountCreateListItem(router: FeatureRouter): void {
     '/',
     authMiddleware,
     RATE_LIMITS.STANDARD(),
+    multipartOnly(RATE_LIMITS.UPLOAD()),
     listContributorMiddleware({
       paramName: 'listId',
       resolveListId: resolveListIdFromRequest,

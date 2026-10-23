@@ -4,10 +4,17 @@ import { apiMultipartRequest, apiRequest } from '../../shared/test/api-request.j
 import { generateTestToken, makeAccessTokenEntry } from '../../shared/test/auth.js'
 import type * as ImagesService from '../uploads/images.service.js'
 
-const { mockProcessOptionalImage } = vi.hoisted(() => ({ mockProcessOptionalImage: vi.fn() }))
+const { mockProcessOptionalImage, mockCleanupReplacedImage } = vi.hoisted(() => ({
+  mockProcessOptionalImage: vi.fn(),
+  mockCleanupReplacedImage: vi.fn(),
+}))
 vi.mock('../uploads/images.service.js', async () => {
   const actual = await vi.importActual<typeof ImagesService>('../uploads/images.service.js')
-  return { ...actual, processOptionalImage: mockProcessOptionalImage }
+  return {
+    ...actual,
+    processOptionalImage: mockProcessOptionalImage,
+    cleanupReplacedImage: mockCleanupReplacedImage,
+  }
 })
 
 const MOCK_IMAGE_ROW = {
@@ -128,6 +135,7 @@ describe('POST /v1/list-items', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockProcessOptionalImage.mockResolvedValue({ image: null })
+    mockCleanupReplacedImage.mockResolvedValue(undefined)
   })
 
   it('returns 201 with created list item for JSON body', async () => {
@@ -275,6 +283,40 @@ describe('PATCH /v1/list-items/:id', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockProcessOptionalImage.mockResolvedValue({ image: null })
+    mockCleanupReplacedImage.mockResolvedValue(undefined)
+  })
+
+  it('deletes the previous image row when the stored image is cleared', async () => {
+    const PREVIOUS_IMAGE_ID = '00000000-0000-0000-0000-0000000000bb'
+    const token = await generateTestToken(AUTH_USER.id)
+    mockAuthChain()
+    vi.mocked(db.query.listItems.findFirst).mockResolvedValue(
+      { ...MOCK_LIST_ITEM, imageId: PREVIOUS_IMAGE_ID } as never,
+    )
+    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(
+      { ...MOCK_LIST, collaborators: [{ userId: AUTH_USER.id, user: AUTH_USER }] } as never,
+    )
+    vi.mocked(db.query.listCollaborators.findFirst).mockResolvedValueOnce(MOCK_COLLABORATOR as never)
+    vi.mocked(db.update).mockReturnValueOnce({
+      set: vi.fn().mockReturnValueOnce({
+        where: vi.fn().mockReturnValueOnce({
+          returning: vi.fn().mockResolvedValueOnce([{ ...MOCK_LIST_ITEM, imageId: null }]),
+        }),
+      }),
+    } as never)
+
+    const response = await apiRequest(`/v1/list-items/${LIST_ITEM_ID}`, {
+      method: 'PATCH',
+      token,
+      body: { clearImage: true },
+    })
+
+    expect(response.status).toBe(200)
+    expect(mockCleanupReplacedImage).toHaveBeenCalledWith(
+      PREVIOUS_IMAGE_ID,
+      null,
+      'list_item.update',
+    )
   })
 
   it('rejects a multipart body combining clearImage=true with an image part (422)', async () => {
@@ -465,6 +507,27 @@ describe('PATCH /v1/list-items/:id', () => {
 describe('DELETE /v1/list-items/:id', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockCleanupReplacedImage.mockResolvedValue(undefined)
+  })
+
+  it('cleans up the attached image row when a list item carrying an image is deleted', async () => {
+    const DELETED_IMAGE_ID = '00000000-0000-0000-0000-0000000000cc'
+    const token = await generateTestToken(AUTH_USER.id)
+    mockAuthChain()
+    mockListItemOwnershipChain()
+    vi.mocked(db.delete).mockReturnValueOnce({
+      where: vi.fn().mockReturnValueOnce({
+        returning: vi.fn().mockResolvedValueOnce([{ ...MOCK_LIST_ITEM, imageId: DELETED_IMAGE_ID }]),
+      }),
+    } as never)
+
+    const response = await apiRequest(`/v1/list-items/${LIST_ITEM_ID}`, {
+      method: 'DELETE',
+      token,
+    })
+
+    expect(response.status).toBe(200)
+    expect(mockCleanupReplacedImage).toHaveBeenCalledWith(DELETED_IMAGE_ID, null, 'list_item.delete')
   })
 
   it('returns 200 with success message on delete', async () => {

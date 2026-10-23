@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { authMiddleware, getAuthUser } from '../../../shared/middlewares/auth.js'
+import { multipartOnly, RATE_LIMITS } from '../../../shared/utils/rate-limiter.js'
 import { jsonResult, sendError } from '../../../shared/utils/response.js'
 import type { FeatureRouter } from '../../../shared/types/app.js'
 import { updateProfile } from '../users.service.js'
@@ -29,7 +30,7 @@ const multipartUpdateProfileSchema = z.object({
 })
 
 export function mountUpdateProfile(router: FeatureRouter): void {
-  router.patch('/me', authMiddleware, async (context) => {
+  router.patch('/me', authMiddleware, multipartOnly(RATE_LIMITS.UPLOAD()), async (context) => {
     const parsed = await parseJsonOrMultipart(context, {
       jsonSchema: jsonUpdateProfileSchema,
       multipartSchema: multipartUpdateProfileSchema,

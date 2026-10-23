@@ -7,7 +7,7 @@ import { hashPassword, verifyPassword } from '../../shared/utils/hash.js'
 import { findUserById, findUserByIdWithAvatar, anonymizeUser, updatePasswordHash, insertDeletionAudit } from '../../db/entities/users/users.repository.js'
 import { deleteAllUserTokens } from '../../db/entities/access-tokens/access-tokens.repository.js'
 import { revokeAllUserSessions } from '../../shared/db/user-sessions.js'
-import { processOptionalImage, rollbackImage } from '../uploads/images.service.js'
+import { cleanupReplacedImage, processOptionalImage, rollbackImage } from '../uploads/images.service.js'
 import {
   findFeedbackByUser,
   findImagesByUploaderForExport,
@@ -79,6 +79,13 @@ export async function updateProfile(
   const { avatarBuffer, clearAvatar, ...rest } = input
   const fieldPatch = pickDefined(rest)
 
+  if (avatarBuffer && clearAvatar) {
+    return serviceError(ErrorCode.UNPROCESSABLE_ENTITY)
+  }
+
+  const previous = await findUserById(userId)
+  const previousAvatarImageId = previous?.avatarImageId ?? null
+
   const imageOutcome = await processOptionalImage(avatarBuffer, userId)
   if ('errorCode' in imageOutcome) return serviceError(imageOutcome.errorCode)
   const newImageId = imageOutcome.image?.id ?? null
@@ -93,6 +100,12 @@ export async function updateProfile(
     await rollbackImage(newImageId, 'user.update_profile')
     return serviceError(ErrorCode.USER_UPDATE_FAILED)
   }
+
+  await cleanupReplacedImage(
+    previousAvatarImageId,
+    updatedUser.avatarImageId ?? null,
+    'user.update_profile',
+  )
 
   return {
     data: { user: toUserDetail({ ...updatedUser, avatarImage: imageOutcome.image }) },

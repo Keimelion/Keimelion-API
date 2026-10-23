@@ -40,3 +40,22 @@ export async function rollbackImage(imageId: string | null, context: string): Pr
     logger.error({ error, imageId, context }, 'Failed to rollback image row')
   }
 }
+
+// Deletes the previous image row when a parent entity replaces or clears its image.
+// Files on disk stay (dedup makes them harmless; a separate orphan-file GC may sweep them).
+export async function cleanupReplacedImage(
+  previousImageId: string | null,
+  currentImageId: string | null,
+  context: string,
+): Promise<void> {
+  if (!previousImageId) return
+  if (previousImageId === currentImageId) return
+  try {
+    await deleteImageById(previousImageId)
+  } catch (error: unknown) {
+    logger.error(
+      { error, previousImageId, currentImageId, context },
+      'Failed to cleanup replaced image row',
+    )
+  }
+}

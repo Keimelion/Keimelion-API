@@ -3,7 +3,7 @@ import { zValidator } from '@hono/zod-validator'
 import { uuidParamSchema } from '../../../shared/schemas/params.js'
 import { authMiddleware, getAuthUser } from '../../../shared/middlewares/auth.js'
 import { listContributorMiddleware } from '../../../shared/middlewares/list-access.middleware.js'
-import { RATE_LIMITS } from '../../../shared/utils/rate-limiter.js'
+import { multipartOnly, RATE_LIMITS } from '../../../shared/utils/rate-limiter.js'
 import { validationErrorHandler } from '../../../shared/utils/validation.js'
 import { jsonResult, sendError } from '../../../shared/utils/response.js'
 import {
@@ -39,6 +39,7 @@ export function mountUpdateListItem(router: FeatureRouter): void {
     '/:id',
     authMiddleware,
     RATE_LIMITS.STANDARD(),
+    multipartOnly(RATE_LIMITS.UPLOAD()),
     zValidator('param', uuidParamSchema, validationErrorHandler),
     listContributorMiddleware({
       paramName: 'id',
