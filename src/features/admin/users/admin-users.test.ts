@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { db } from '../../../db/client.js'
 import { apiRequest } from '../../../shared/test/api-request.js'
 import { generateTestToken, makeAccessTokenEntry } from '../../../shared/test/auth.js'
-import { ADMIN_USER_FIXTURE, makeAdminUser } from '../../../shared/test/fixtures/users.js'
+import { ADMIN_USER_FIXTURE as ADMIN_USER, makeAdminUser } from '../../../shared/test/fixtures/users.js'
 import { logger } from '../../../shared/utils/logger.js'
 
 vi.mock('../../../shared/utils/logger.js', () => ({
@@ -13,7 +13,6 @@ vi.mock('../../../shared/utils/logger.js', () => ({
   },
 }))
 
-const ADMIN_USER = ADMIN_USER_FIXTURE
 
 const TARGET_USER = makeAdminUser({
   id: '00000000-0000-0000-0000-000000000002',
