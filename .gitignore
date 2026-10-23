@@ -26,3 +26,6 @@ Thumbs.db
 *.swp
 *.swo
 
+
+# Uploads directory (local dev image storage)
+/uploads/

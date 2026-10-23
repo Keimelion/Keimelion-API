@@ -12,6 +12,7 @@ const SAFE_USER = {
   authProvider: 'email' as const,
   role: 'user' as const,
   avatarUrl: null,
+  avatarImageId: null,
   isCgvAccepted: true,
   cgvAcceptedAt: new Date('2024-01-01'),
   isMarketingOptedIn: false,
@@ -898,6 +899,110 @@ describe('GET /v1/users/me/export', () => {
       status: 'reviewed',
     })
     expect(rows[0]).toHaveProperty('context')
+  })
+
+  it('includes an images key in the JSON export payload with only images uploaded by the user', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+
+    const imageRow = {
+      id: '00000000-0000-0000-0000-00000000e001',
+      hash: 'a'.repeat(64),
+      fileKey: 'aa/aa/' + 'a'.repeat(64),
+      mime: 'image/webp',
+      sizeBytes: 1234,
+      width: 640,
+      height: 480,
+      uploadedBy: SAFE_USER.id,
+      createdAt: new Date('2024-04-01'),
+      updatedAt: new Date('2024-04-01'),
+    }
+
+    vi.mocked(db.query.images.findMany).mockResolvedValueOnce([imageRow] as never)
+
+    const response = await apiRequest('/v1/users/me/export?format=json', { token })
+
+    expect(response.status).toBe(200)
+    const body = await response.json() as {
+      images: { id: string; hash: string; mime: string; urls: { sm: string; md: string; lg: string }; fileKey?: unknown }[]
+    }
+    expect(body).toHaveProperty('images')
+    expect(body.images).toHaveLength(1)
+    expect(body.images[0]?.id).toBe(imageRow.id)
+    expect(body.images[0]?.hash).toBe(imageRow.hash)
+    expect(body.images[0]?.urls.sm).toContain('-300.webp')
+    expect(body.images[0]?.urls.md).toContain('-800.webp')
+    expect(body.images[0]?.urls.lg).toContain('-1600.webp')
+    expect(body.images[0]).not.toHaveProperty('fileKey')
+    expect(body.images[0]).not.toHaveProperty('uploadedBy')
+  })
+
+  it('returns an empty images array when the user has uploaded none', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+
+    vi.mocked(db.query.images.findMany).mockResolvedValueOnce([] as never)
+
+    const response = await apiRequest('/v1/users/me/export?format=json', { token })
+
+    expect(response.status).toBe(200)
+    const body = await response.json() as { images: unknown[] }
+    expect(body.images).toEqual([])
+  })
+
+  it('registers images.csv with the exact allow-list required by RGPD', () => {
+    const imagesDescriptor = EXPORT_ENTITY_REGISTRY.find(
+      (descriptor) => descriptor.filename === 'images.csv',
+    )
+    expect(imagesDescriptor).toBeDefined()
+    expect(imagesDescriptor?.columns).toEqual([
+      'id',
+      'hash',
+      'mime',
+      'sizeBytes',
+      'width',
+      'height',
+      'createdAt',
+      'urlSm',
+      'urlMd',
+      'urlLg',
+    ])
+    expect(imagesDescriptor?.columns).not.toContain('fileKey')
+    expect(imagesDescriptor?.columns).not.toContain('uploadedBy')
+    expect(imagesDescriptor?.columns).not.toContain('urls')
+  })
+
+  it('fetches uploader-scoped images for RGPD', async () => {
+    const imagesDescriptor = EXPORT_ENTITY_REGISTRY.find(
+      (descriptor) => descriptor.filename === 'images.csv',
+    )
+    const row = {
+      id: '00000000-0000-0000-0000-00000000e002',
+      hash: 'b'.repeat(64),
+      fileKey: 'bb/bb/' + 'b'.repeat(64),
+      mime: 'image/jpeg',
+      sizeBytes: 2048,
+      width: 1024,
+      height: 768,
+      uploadedBy: SAFE_USER.id,
+      createdAt: new Date('2024-04-02'),
+      updatedAt: new Date('2024-04-02'),
+    }
+
+    vi.mocked(db.query.images.findMany).mockResolvedValueOnce([row] as never)
+
+    expect(imagesDescriptor).toBeDefined()
+    const rows = await (imagesDescriptor as { fetchRows: (userId: string) => Promise<object[]> }).fetchRows(SAFE_USER.id)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ id: row.id, hash: row.hash, mime: 'image/jpeg', sizeBytes: 2048 })
+    expect(rows[0]).toHaveProperty('urlSm')
+    expect(rows[0]).toHaveProperty('urlMd')
+    expect(rows[0]).toHaveProperty('urlLg')
+    expect(rows[0]).not.toHaveProperty('urls')
+    expect(rows[0]).not.toHaveProperty('fileKey')
+    expect(rows[0]).not.toHaveProperty('uploadedBy')
   })
 
 })

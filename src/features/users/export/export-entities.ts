@@ -1,6 +1,7 @@
 import { findUserById } from '../../../db/entities/users/users.repository.js'
 import {
   findFeedbackByUser,
+  findImagesByUploaderForExport,
   findItemsByCreator,
   findItemSourcesByCreator,
   findListItemsForContributor,
@@ -13,6 +14,7 @@ import { toFeedbackDetail } from '../../../shared/types/feedback.js'
 import { toItemDetail, toItemSourceDetailWithoutShop, toListItemDetail } from '../../../shared/types/item.js'
 import { toListDetail } from '../../../shared/types/list.js'
 import { toTagDetail } from '../../../shared/types/tag.js'
+import { toImageDetail } from '../../uploads/images.mapper.js'
 import type { List } from '../../../db/entities/lists/lists.schema.js'
 import type { ListTag } from '../../../db/entities/list-tags/list-tags.schema.js'
 import type { ListDetail } from '../../../shared/types/list.js'
@@ -135,6 +137,7 @@ const listItemsEntityDescriptor: ExportEntityDescriptor = {
     'itemStatus',
     'sortOrder',
     'creatorNote',
+    'imageId',
     'createdAt',
     'updatedAt',
   ],
@@ -203,6 +206,29 @@ const feedbackEntityDescriptor: ExportEntityDescriptor = {
   },
 }
 
+const imagesEntityDescriptor: ExportEntityDescriptor = {
+  filename: 'images.csv',
+  columns: [
+    'id',
+    'hash',
+    'mime',
+    'sizeBytes',
+    'width',
+    'height',
+    'createdAt',
+    'urlSm',
+    'urlMd',
+    'urlLg',
+  ],
+  fetchRows: async (userId: string) => {
+    const rows = await findImagesByUploaderForExport(userId)
+    return rows.map((image) => {
+      const { urls, ...rest } = toImageDetail(image)
+      return { ...rest, urlSm: urls.sm, urlMd: urls.md, urlLg: urls.lg }
+    })
+  },
+}
+
 export const EXPORT_ENTITY_REGISTRY: ExportEntityDescriptor[] = [
   profileEntityDescriptor,
   itemsEntityDescriptor,
@@ -212,4 +238,5 @@ export const EXPORT_ENTITY_REGISTRY: ExportEntityDescriptor[] = [
   tagsEntityDescriptor,
   listTagsEntityDescriptor,
   feedbackEntityDescriptor,
+  imagesEntityDescriptor,
 ]

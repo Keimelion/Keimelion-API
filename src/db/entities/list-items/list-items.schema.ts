@@ -2,6 +2,7 @@ import { integer, pgTable, smallint, text, unique, uuid, varchar } from 'drizzle
 import { timestamps, uuidPrimaryKey } from '../../../shared/db/columns.js'
 import { lists } from '../lists/lists.schema.js'
 import { items } from '../items/items.schema.js'
+import { images } from '../images/images.schema.js'
 
 export const listItems = pgTable(
   'list_items',
@@ -14,6 +15,7 @@ export const listItems = pgTable(
     itemStatus: varchar('item_status', { length: 20 }).notNull().default('available'),
     sortOrder: integer('sort_order'),
     creatorNote: text('creator_note'),
+    imageId: uuid('image_id').references(() => images.id, { onDelete: 'set null' }),
     ...timestamps(),
   },
   (table) => [

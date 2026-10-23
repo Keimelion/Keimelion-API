@@ -29,11 +29,21 @@ export function createRateLimiter(limit: number, windowMs: number = ONE_MINUTE_M
 // STRICT — hot credential paths: brute-force surface (login, logout, change-password).
 // STANDARD — normal writes: signup and admin-triggered mutations.
 // SENSITIVE — side-effect-heavy or brute-force-resistant paths: password reset flow, token refresh.
+// UPLOAD — image uploads: expensive (sharp decode + webp encode × 3) and disk-bound; tighter than STANDARD.
 export const RATE_LIMITS = {
   STRICT: () => createRateLimiter(5, ONE_MINUTE_MS),
   STANDARD: () => createRateLimiter(20, ONE_MINUTE_MS),
   SENSITIVE: () => createRateLimiter(10, TEN_MINUTES_MS),
+  UPLOAD: () => createRateLimiter(10, ONE_MINUTE_MS),
 } as const
+
+export function multipartOnly(middleware: MiddlewareHandler): MiddlewareHandler {
+  return async (context, next) => {
+    const contentType = context.req.header('Content-Type') ?? ''
+    if (!contentType.toLowerCase().startsWith('multipart/form-data')) return next()
+    return middleware(context, next)
+  }
+}
 
 // Per-user when authenticated (keyed on user.id so a single account cannot bypass by rotating IPs),
 // per-IP for anonymous callers. Must be mounted AFTER optionalAuthMiddleware so that

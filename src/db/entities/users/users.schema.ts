@@ -1,9 +1,11 @@
 import { boolean, char, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid, varchar } from 'drizzle-orm/pg-core'
+import type { AnyPgColumn } from 'drizzle-orm/pg-core'
 import { USER_ROLE_VALUES } from '../../../shared/enums/user-role.js'
 import { AUTH_PROVIDER_VALUES } from '../../../shared/enums/auth-provider.js'
 import { timestamps, uuidPrimaryKey } from '../../../shared/db/columns.js'
 import { currencies } from '../currencies/currencies.schema.js'
 import { SupportedCurrencies } from '../../../shared/enums/currency.js'
+import { images } from '../images/images.schema.js'
 
 export const userRoleEnum = pgEnum('user_role', USER_ROLE_VALUES)
 export const authProviderEnum = pgEnum('auth_provider', AUTH_PROVIDER_VALUES)
@@ -16,6 +18,7 @@ export const users = pgTable('users', {
   authProvider: authProviderEnum('auth_provider').notNull(),
   role: userRoleEnum('role').notNull().default('user'),
   avatarUrl: text('avatar_url'),
+  avatarImageId: uuid('avatar_image_id').references((): AnyPgColumn => images.id, { onDelete: 'set null' }),
   isCgvAccepted: boolean('is_cgv_accepted').notNull().default(false),
   cgvAcceptedAt: timestamp('cgv_accepted_at', { withTimezone: true }),
   isMarketingOptedIn: boolean('is_marketing_opted_in').notNull().default(false),

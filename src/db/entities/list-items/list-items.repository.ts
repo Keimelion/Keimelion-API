@@ -2,6 +2,7 @@ import { eq } from 'drizzle-orm'
 import { db } from '../../client.js'
 import { listItems } from './list-items.schema.js'
 import type { ListItem } from './list-items.schema.js'
+import type { ListItemRowWithImage } from '../../../shared/types/item.js'
 
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
@@ -11,9 +12,10 @@ interface InsertListItemInput {
   quantityDesired: number
   creatorNote: string | null
   itemStatus: string
+  imageId?: string | null
 }
 
-type UpdateListItemFields = Partial<Pick<typeof listItems.$inferInsert, 'quantityDesired' | 'creatorNote' | 'sortOrder'>>
+type UpdateListItemFields = Partial<Pick<typeof listItems.$inferInsert, 'quantityDesired' | 'creatorNote' | 'sortOrder' | 'imageId'>>
 
 export async function insertListItem(input: InsertListItemInput, tx?: DbTransaction): Promise<ListItem | undefined> {
   const client = tx ?? db
@@ -23,6 +25,15 @@ export async function insertListItem(input: InsertListItemInput, tx?: DbTransact
 
 export function findListItemById(id: string): Promise<ListItem | undefined> {
   return db.query.listItems.findFirst({ where: eq(listItems.id, id) })
+}
+
+export function findListItemByIdWithImage(
+  id: string,
+): Promise<ListItemRowWithImage | undefined> {
+  return db.query.listItems.findFirst({
+    where: eq(listItems.id, id),
+    with: { image: true },
+  }) as Promise<ListItemRowWithImage | undefined>
 }
 
 export async function updateListItem(id: string, input: UpdateListItemFields): Promise<ListItem | undefined> {

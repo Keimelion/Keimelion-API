@@ -26,6 +26,9 @@ export const ErrorCode = {
   INVALID_OPERATION:       'INVALID_OPERATION',
   FEEDBACK_CREATION_FAILED: 'FEEDBACK_CREATION_FAILED',
   FEEDBACK_NOT_FOUND:       'FEEDBACK_NOT_FOUND',
+  INVALID_IMAGE:           'INVALID_IMAGE',
+  INVALID_IMAGE_TYPE:      'INVALID_IMAGE_TYPE',
+  PAYLOAD_TOO_LARGE:       'PAYLOAD_TOO_LARGE',
   INTERNAL_ERROR:          'INTERNAL_ERROR',
 } as const
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode]
