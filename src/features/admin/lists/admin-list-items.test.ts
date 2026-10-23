@@ -2,39 +2,18 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { db } from '../../../db/client.js'
 import { apiRequest } from '../../../shared/test/api-request.js'
 import { generateTestToken, makeAccessTokenEntry } from '../../../shared/test/auth.js'
+import { makeAdminUser } from '../../../shared/test/fixtures/users.js'
 
-const ADMIN_USER = {
-  id: '00000000-0000-0000-0000-000000000001',
-  email: 'admin@example.com',
-  username: 'adminuser',
-  passwordHash: 'hashed',
-  authProvider: 'email' as const,
-  role: 'admin' as const,
-  avatarUrl: null,
-  avatarImageId: null,
-  isCgvAccepted: true,
-  cgvAcceptedAt: new Date('2024-01-01'),
-  isMarketingOptedIn: false,
-  defaultCurrencyCode: 'USD' as string,
-  emailVerifyToken: null,
-  emailVerifyTokenExpiresAt: null,
-  emailVerifiedAt: new Date('2024-01-02'),
-  passwordResetToken: null,
-  passwordResetTokenExpiresAt: null,
-  lastActiveAt: null,
-  deletedAt: null,
-  bannedAt: null,
-  banReason: null,
-  createdAt: new Date('2024-01-01'),
-  updatedAt: new Date('2024-01-01'),
-}
+// This suite asserts on `displayCurrency: 'USD'` as the admin's default — override
+// `defaultCurrencyCode` on every variant so the fixture change does not alter behaviour.
+const ADMIN_USER = makeAdminUser({ defaultCurrencyCode: 'USD' })
 
-const NON_ADMIN_USER = {
-  ...ADMIN_USER,
+const NON_ADMIN_USER = makeAdminUser({
   id: '00000000-0000-0000-0000-000000000002',
   email: 'user@example.com',
-  role: 'user' as const,
-}
+  role: 'user',
+  defaultCurrencyCode: 'USD',
+})
 
 const LIST_ROW = {
   id: '00000000-0000-0000-0000-000000000010',
