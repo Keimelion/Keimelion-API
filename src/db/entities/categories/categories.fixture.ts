@@ -14,26 +14,70 @@ const ROOT_CATEGORY_FIXTURES = [
   { slug: 'other', fr: 'Autre', en: 'Other' },
 ] as const
 
+const CHILD_CATEGORY_FIXTURES = [
+  {
+    slug: 'audio',
+    parentSlug: 'electronics',
+    fr: 'Audio',
+    en: 'Audio',
+  },
+  {
+    slug: 'small-appliances',
+    parentSlug: 'home-decor',
+    fr: 'Petit électroménager',
+    en: 'Small appliances',
+  },
+  {
+    slug: 'board-games',
+    parentSlug: 'toys-games',
+    fr: 'Jeux de société',
+    en: 'Board games',
+  },
+] as const
+
 export async function seedCategories(db: typeof Db): Promise<void> {
-  const rows = ROOT_CATEGORY_FIXTURES.map((fixture) => ({
+  const rootRows = ROOT_CATEGORY_FIXTURES.map((fixture) => ({
     slug: fixture.slug,
     parentId: null,
     depth: 0,
   }))
 
-  const inserted = await db
+  const insertedRoots = await db
     .insert(categories)
-    .values(rows)
+    .values(rootRows)
     .onConflictDoNothing()
     .returning({ id: categories.id, slug: categories.slug })
 
-  const existing = await db.query.categories.findMany({
+  const rootsNow = await db.query.categories.findMany({
     columns: { id: true, slug: true },
   })
+  const slugToId = new Map(rootsNow.map((row) => [row.slug, row.id]))
 
-  const slugToId = new Map(existing.map((row) => [row.slug, row.id]))
+  const childRows = CHILD_CATEGORY_FIXTURES.flatMap((fixture) => {
+    const parentId = slugToId.get(fixture.parentSlug)
+    if (!parentId) return []
+    return [{ slug: fixture.slug, parentId, depth: 1 }]
+  })
 
-  const translationValues = ROOT_CATEGORY_FIXTURES.flatMap((fixture) => {
+  const insertedChildren =
+    childRows.length > 0
+      ? await db
+          .insert(categories)
+          .values(childRows)
+          .onConflictDoNothing()
+          .returning({ id: categories.id, slug: categories.slug })
+      : []
+
+  if (insertedChildren.length > 0) {
+    for (const child of insertedChildren) slugToId.set(child.slug, child.id)
+  }
+
+  const allFixtures = [
+    ...ROOT_CATEGORY_FIXTURES.map((fixture) => ({ slug: fixture.slug, fr: fixture.fr, en: fixture.en })),
+    ...CHILD_CATEGORY_FIXTURES.map((fixture) => ({ slug: fixture.slug, fr: fixture.fr, en: fixture.en })),
+  ]
+
+  const translationValues = allFixtures.flatMap((fixture) => {
     const id = slugToId.get(fixture.slug)
     if (!id) return []
     return [
@@ -46,5 +90,6 @@ export async function seedCategories(db: typeof Db): Promise<void> {
     await db.insert(categoryTranslations).values(translationValues).onConflictDoNothing()
   }
 
-  console.log(`  categories   ${String(inserted.length)} rows`)
+  const totalInserted = insertedRoots.length + insertedChildren.length
+  console.log(`  categories   ${String(totalInserted)} rows`)
 }
