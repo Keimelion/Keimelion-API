@@ -16,6 +16,7 @@ import {
   findListItemsForContributor,
   findListsOwnedByForExport,
   findListTagsForOwner,
+  findReservationsForExport,
   findTagsCreatedByUser,
 } from './export/rgpd-export.repository.js'
 import { updateUserProfile } from './users.repository.js'
@@ -180,7 +181,17 @@ export async function exportUserData(userId: string, format: ExportFormat): Prom
   const user = await findUserById(userId)
   const profile = user ? toUserDetail(user) : null
 
-  const [rawItems, rawItemSources, rawListItems, rawLists, rawTags, rawListTags, rawFeedback, rawImages] = await Promise.all([
+  const [
+    rawItems,
+    rawItemSources,
+    rawListItems,
+    rawLists,
+    rawTags,
+    rawListTags,
+    rawFeedback,
+    rawReservations,
+    rawImages,
+  ] = await Promise.all([
     findItemsByCreator(userId),
     findItemSourcesByCreator(userId),
     findListItemsForContributor(userId),
@@ -188,6 +199,7 @@ export async function exportUserData(userId: string, format: ExportFormat): Prom
     findTagsCreatedByUser(userId),
     findListTagsForOwner(userId),
     findFeedbackByUser(userId),
+    findReservationsForExport(userId),
     findImagesByUploaderForExport(userId),
   ])
 
@@ -202,6 +214,7 @@ export async function exportUserData(userId: string, format: ExportFormat): Prom
       tags: rawTags.map(toTagDetail),
       listTags: rawListTags.map(toExportListTagRow),
       feedback: rawFeedback.map(toFeedbackDetail),
+      reservations: rawReservations,
       images: rawImages.map(toImageDetail),
     },
     contentType: EXPORT_JSON_CONTENT_TYPE,

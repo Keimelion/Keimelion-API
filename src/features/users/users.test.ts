@@ -974,6 +974,116 @@ describe('GET /v1/users/me/export', () => {
     expect(imagesDescriptor?.columns).not.toContain('urls')
   })
 
+  it('registers my_reservations.csv with the exact allow-list required by RGPD', () => {
+    const reservationsDescriptor = EXPORT_ENTITY_REGISTRY.find(
+      (descriptor) => descriptor.filename === 'my_reservations.csv',
+    )
+    expect(reservationsDescriptor).toBeDefined()
+    expect(reservationsDescriptor?.columns).toEqual([
+      'reservationId',
+      'listItemId',
+      'listTitle',
+      'itemName',
+      'quantityBooked',
+      'createdAt',
+    ])
+  })
+
+  it('returns an empty reservations array when the user has booked nothing', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    vi.mocked(db.query.reservations.findMany).mockResolvedValueOnce([])
+
+    const response = await apiRequest('/v1/users/me/export?format=json', { token })
+
+    expect(response.status).toBe(200)
+    const body = await response.json() as { reservations: unknown[] }
+    expect(body.reservations).toEqual([])
+  })
+
+  it('includes a reservations key in the JSON export payload with a single reservation', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+
+    const reservationRow = {
+      id: '00000000-0000-0000-0000-00000000f001',
+      listItemId: '00000000-0000-0000-0000-00000000f101',
+      userId: SAFE_USER.id,
+      quantityBooked: 2,
+      createdAt: new Date('2024-05-01'),
+      listItem: {
+        list: { title: 'Wedding list' },
+        item: { name: 'Fancy vase' },
+      },
+    }
+
+    vi.mocked(db.query.reservations.findMany).mockResolvedValueOnce([reservationRow] as never)
+
+    const response = await apiRequest('/v1/users/me/export?format=json', { token })
+
+    expect(response.status).toBe(200)
+    const body = await response.json() as {
+      reservations: {
+        reservationId: string
+        listItemId: string
+        listTitle: string
+        itemName: string
+        quantityBooked: number
+      }[]
+    }
+    expect(body).toHaveProperty('reservations')
+    expect(body.reservations).toHaveLength(1)
+    expect(body.reservations[0]?.reservationId).toBe(reservationRow.id)
+    expect(body.reservations[0]?.listTitle).toBe('Wedding list')
+    expect(body.reservations[0]?.itemName).toBe('Fancy vase')
+    expect(body.reservations[0]?.quantityBooked).toBe(2)
+  })
+
+  it('includes a reservations key in the JSON export payload with multiple reservations', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+
+    const rows = [
+      {
+        id: '00000000-0000-0000-0000-00000000f201',
+        listItemId: '00000000-0000-0000-0000-00000000f301',
+        userId: SAFE_USER.id,
+        quantityBooked: 1,
+        createdAt: new Date('2024-05-10'),
+        listItem: {
+          list: { title: 'List A' },
+          item: { name: 'Item A' },
+        },
+      },
+      {
+        id: '00000000-0000-0000-0000-00000000f202',
+        listItemId: '00000000-0000-0000-0000-00000000f302',
+        userId: SAFE_USER.id,
+        quantityBooked: 3,
+        createdAt: new Date('2024-05-11'),
+        listItem: {
+          list: { title: 'List B' },
+          item: { name: 'Item B' },
+        },
+      },
+    ]
+
+    vi.mocked(db.query.reservations.findMany).mockResolvedValueOnce(rows as never)
+
+    const response = await apiRequest('/v1/users/me/export?format=json', { token })
+
+    expect(response.status).toBe(200)
+    const body = await response.json() as { reservations: { reservationId: string }[] }
+    expect(body.reservations).toHaveLength(2)
+    expect(body.reservations.map((row) => row.reservationId)).toEqual([
+      rows[0]?.id,
+      rows[1]?.id,
+    ])
+  })
+
   it('fetches uploader-scoped images for RGPD', async () => {
     const imagesDescriptor = EXPORT_ENTITY_REGISTRY.find(
       (descriptor) => descriptor.filename === 'images.csv',
