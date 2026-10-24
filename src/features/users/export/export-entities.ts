@@ -7,6 +7,7 @@ import {
   findListItemsForContributor,
   findListsOwnedByForExport,
   findListTagsForOwner,
+  findReservationsForExport,
   findTagsCreatedByUser,
 } from './rgpd-export.repository.js'
 import { toUserDetail } from '../../../shared/types/user.js'
@@ -206,6 +207,19 @@ const feedbackEntityDescriptor: ExportEntityDescriptor = {
   },
 }
 
+const reservationsEntityDescriptor: ExportEntityDescriptor = {
+  filename: 'my_reservations.csv',
+  columns: [
+    'reservationId',
+    'listItemId',
+    'listTitle',
+    'itemName',
+    'quantityBooked',
+    'createdAt',
+  ],
+  fetchRows: async (userId: string) => findReservationsForExport(userId),
+}
+
 const imagesEntityDescriptor: ExportEntityDescriptor = {
   filename: 'images.csv',
   columns: [
@@ -238,5 +252,6 @@ export const EXPORT_ENTITY_REGISTRY: ExportEntityDescriptor[] = [
   tagsEntityDescriptor,
   listTagsEntityDescriptor,
   feedbackEntityDescriptor,
+  reservationsEntityDescriptor,
   imagesEntityDescriptor,
 ]

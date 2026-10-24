@@ -148,6 +148,13 @@
       "when": 1792802019406,
       "tag": "0020_check_constraints",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1792835291676,
+      "tag": "0021_add-reservations-table",
+      "breakpoints": true
     }
   ]
 }

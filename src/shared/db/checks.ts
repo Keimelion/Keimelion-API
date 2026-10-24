@@ -38,6 +38,8 @@ export const nonNegativeInt = (name: string) => integer(name)
 
 export const nonNegativeSmallInt = (name: string) => smallint(name)
 
+export const positiveSmallInt = (name: string) => smallint(name)
+
 export const nonEmptyCheck = (column: AnyPgColumn, constraintName?: string): CheckBuilder =>
   check(constraintName ?? `${column.name}_non_empty_check`, sql`char_length(${column}) >= 1`)
 
@@ -65,3 +67,6 @@ export const nonNegativeCheck = (
     : sql`${column} >= 0`
   return check(options.constraintName ?? `${column.name}_non_negative_check`, expression)
 }
+
+export const positiveCheck = (column: AnyPgColumn, constraintName?: string): CheckBuilder =>
+  check(constraintName ?? `${column.name}_positive_check`, sql`${column} >= 1`)

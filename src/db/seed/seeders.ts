@@ -13,6 +13,7 @@ import { seedListItems } from '../entities/list-items/list-items.fixture.js'
 import { seedItemTags } from '../entities/item-tags/item-tags.fixture.js'
 import { seedItemCategories } from '../entities/item-categories/item-categories.fixture.js'
 import { seedFeedback } from '../entities/feedback/feedback.fixture.js'
+import { seedReservations } from '../entities/reservations/reservations.fixture.js'
 
 export type Seeder = (db: typeof Db) => Promise<void>
 
@@ -31,4 +32,5 @@ export const SEEDERS: readonly Seeder[] = [
   seedItemTags,
   seedItemCategories,
   seedFeedback,
+  seedReservations,
 ]

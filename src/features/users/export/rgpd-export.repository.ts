@@ -1,4 +1,4 @@
-import { and, eq, inArray } from 'drizzle-orm'
+import { and, desc, eq, inArray } from 'drizzle-orm'
 import { db } from '../../../db/client.js'
 import { feedback } from '../../../db/entities/feedback/feedback.schema.js'
 import { images } from '../../../db/entities/images/images.schema.js'
@@ -8,6 +8,7 @@ import { listCollaborators } from '../../../db/entities/list-collaborators/list-
 import { listItems } from '../../../db/entities/list-items/list-items.schema.js'
 import { listTags } from '../../../db/entities/list-tags/list-tags.schema.js'
 import { lists } from '../../../db/entities/lists/lists.schema.js'
+import { reservations } from '../../../db/entities/reservations/reservations.schema.js'
 import { tags } from '../../../db/entities/tags/tags.schema.js'
 import { CollabRoles, CONTRIBUTOR_ROLE_VALUES } from '../../../shared/enums/collab-role.js'
 import type { Feedback } from '../../../db/entities/feedback/feedback.schema.js'
@@ -84,4 +85,37 @@ export async function findListTagsForOwner(userId: string): Promise<ListTag[]> {
   return db.query.listTags.findMany({
     where: inArray(listTags.listId, ownedListIds),
   })
+}
+
+export interface ReservationExportRow {
+  reservationId: string
+  listItemId: string
+  listTitle: string
+  itemName: string
+  quantityBooked: number
+  createdAt: Date
+}
+
+export async function findReservationsForExport(userId: string): Promise<ReservationExportRow[]> {
+  const rows = await db.query.reservations.findMany({
+    where: eq(reservations.userId, userId),
+    orderBy: desc(reservations.createdAt),
+    with: {
+      listItem: {
+        with: {
+          list: { columns: { title: true } },
+          item: { columns: { name: true } },
+        },
+      },
+    },
+  })
+
+  return rows.map((row) => ({
+    reservationId: row.id,
+    listItemId: row.listItemId,
+    listTitle: row.listItem.list.title,
+    itemName: row.listItem.item.name,
+    quantityBooked: row.quantityBooked,
+    createdAt: row.createdAt,
+  }))
 }
