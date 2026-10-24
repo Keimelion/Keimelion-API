@@ -19,7 +19,11 @@ import {
   findReservationsForExport,
   findTagsCreatedByUser,
 } from './export/rgpd-export.repository.js'
-import { updateUserProfile } from './users.repository.js'
+import {
+  countMyReservations,
+  findMyReservationsPaged,
+  updateUserProfile,
+} from './users.repository.js'
 import { toUserDetail } from '../../shared/types/user.js'
 import { toFeedbackDetail } from '../../shared/types/feedback.js'
 import { toItemDetail, toItemSourceDetailWithoutShop, toListItemDetail } from '../../shared/types/item.js'
@@ -31,11 +35,16 @@ import {
   toExportListRow,
   toExportListTagRow,
 } from './export/export-entities.js'
+import { buildPaginatedResponse } from '../../shared/schemas/pagination.js'
+import { toReservationProfileEntry } from '../reservations/reservations.types.js'
+import type { ReservationProfileEntry } from '../reservations/reservations.types.js'
 import type { UserDetail, UserWrite } from '../../shared/types/user.js'
 import type { ServiceResult } from '../../shared/types/service.js'
+import type { PaginatedResponse } from '../../shared/types/api.js'
 import type { PartialWrite } from '../../shared/types/api.js'
 import type { ChangePasswordInput } from './endpoints/change-password.js'
 import type { ExportFormat } from './endpoints/export-data.js'
+import type { ListMyReservationsInput } from './endpoints/get-my-reservations.js'
 
 export interface UpdateUserProfileInput extends PartialWrite<UserWrite> {
   avatarBuffer: Buffer | null
@@ -165,6 +174,21 @@ export async function changePassword(userId: string, input: ChangePasswordInput)
   })
 
   return { data: { message: 'Password changed successfully' }, httpStatus: HttpStatus.OK }
+}
+
+export async function listMyReservations(
+  userId: string,
+  input: ListMyReservationsInput,
+): Promise<ServiceResult<PaginatedResponse<ReservationProfileEntry>>> {
+  const [rows, total] = await Promise.all([
+    findMyReservationsPaged(userId, input, input.sort),
+    countMyReservations(userId),
+  ])
+
+  return {
+    data: buildPaginatedResponse(rows.map(toReservationProfileEntry), input, total),
+    httpStatus: HttpStatus.OK,
+  }
 }
 
 export async function exportUserData(userId: string, format: ExportFormat): Promise<ExportResult> {

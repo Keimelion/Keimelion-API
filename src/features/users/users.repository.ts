@@ -1,10 +1,23 @@
-import { eq } from 'drizzle-orm'
+import { and, count, eq, inArray, isNull } from 'drizzle-orm'
 import { db } from '../../db/client.js'
 import { users } from '../../db/entities/users/users.schema.js'
+import { reservations } from '../../db/entities/reservations/reservations.schema.js'
+import { listItems } from '../../db/entities/list-items/list-items.schema.js'
+import { lists } from '../../db/entities/lists/lists.schema.js'
+import { listCollaborators } from '../../db/entities/list-collaborators/list-collaborators.schema.js'
+import {
+  userReservationsEntity,
+  type UserReservationsSortField,
+} from '../../db/entities/reservations/reservations.repository.js'
+import { CollabRoles } from '../../shared/enums/collab-role.js'
+import { getOffset } from '../../shared/schemas/pagination.js'
 import { env } from '../../config/env.js'
 import { hashPassword } from '../../shared/utils/hash.js'
 import type { User } from '../../db/entities/users/users.schema.js'
 import type { RegisterInput } from '../auth/endpoints/register.js'
+import type { ReservationProfileRow } from '../reservations/reservations.types.js'
+import type { PaginationInput } from '../../shared/schemas/pagination.js'
+import type { SortInput } from '../../shared/schemas/sort.js'
 
 type SetPasswordResetTokenFields = Partial<Pick<typeof users.$inferInsert, 'passwordResetToken' | 'passwordResetTokenExpiresAt'>>
 type ResetPasswordFields = Pick<typeof users.$inferInsert, 'passwordHash' | 'passwordResetToken' | 'passwordResetTokenExpiresAt'>
@@ -83,4 +96,57 @@ export async function setPasswordResetToken(userId: string, input: SetPasswordRe
 
 export async function resetUserPassword(userId: string, input: ResetPasswordFields): Promise<void> {
   await db.update(users).set(input).where(eq(users.id, userId))
+}
+
+const MY_RESERVATIONS_HYDRATION = {
+  listItem: {
+    with: {
+      item: true,
+      list: {
+        with: {
+          collaborators: {
+            where: eq(listCollaborators.collabRole, CollabRoles.OWNER),
+            limit: 1,
+            with: { user: true },
+          },
+        },
+      },
+    },
+  },
+} as const
+
+function myReservationsWhere(userId: string): ReturnType<typeof and> {
+  const activeListItemIds = db
+    .select({ id: listItems.id })
+    .from(listItems)
+    .innerJoin(lists, eq(listItems.listId, lists.id))
+    .where(isNull(lists.deletedAt))
+  return and(
+    eq(reservations.userId, userId),
+    inArray(reservations.listItemId, activeListItemIds),
+  )
+}
+
+export async function findMyReservationsPaged(
+  userId: string,
+  pagination: PaginationInput,
+  sort: SortInput<UserReservationsSortField> | undefined,
+): Promise<ReservationProfileRow[]> {
+  const offset = getOffset(pagination)
+  const rows = await db.query.reservations.findMany({
+    where: myReservationsWhere(userId),
+    orderBy: userReservationsEntity.buildOrderBy(sort),
+    limit: pagination.limit,
+    offset,
+    with: MY_RESERVATIONS_HYDRATION,
+  })
+  return rows as ReservationProfileRow[]
+}
+
+export async function countMyReservations(userId: string): Promise<number> {
+  const [row] = await db
+    .select({ count: count() })
+    .from(reservations)
+    .where(myReservationsWhere(userId))
+  return row?.count ?? 0
 }

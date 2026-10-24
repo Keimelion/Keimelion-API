@@ -37,10 +37,12 @@ const buildSelectChain = (resolvedValue: unknown[] = []) => {
     orderBy: vi.fn(() => Promise.resolve(resolvedValue)),
     where: vi.fn(),
     leftJoin: vi.fn(),
+    innerJoin: vi.fn(),
     from: vi.fn(),
   }
   chain.where.mockReturnValue(chain)
   chain.leftJoin.mockReturnValue(chain)
+  chain.innerJoin.mockReturnValue(chain)
   chain.from.mockReturnValue(chain)
   return chain
 }
