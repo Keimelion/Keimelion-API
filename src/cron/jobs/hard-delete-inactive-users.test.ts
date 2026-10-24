@@ -6,6 +6,10 @@ vi.mock('../../db/entities/users/users.repository.js', () => ({
   insertDeletionAudit: vi.fn(),
 }))
 
+vi.mock('../../features/reservations/reservations.service.js', () => ({
+  reconcileListItemsForUserHardDelete: vi.fn(),
+}))
+
 vi.mock('../../shared/utils/logger.js', () => ({
   logger: {
     info: vi.fn(),
@@ -16,6 +20,7 @@ vi.mock('../../shared/utils/logger.js', () => ({
 
 import { env } from '../../config/env.js'
 import { findUsersEligibleForHardDelete, hardDeleteUser, insertDeletionAudit } from '../../db/entities/users/users.repository.js'
+import { reconcileListItemsForUserHardDelete } from '../../features/reservations/reservations.service.js'
 import { db } from '../../db/client.js'
 import { logger } from '../../shared/utils/logger.js'
 import { hardDeleteInactiveUsers } from './hard-delete-inactive-users.js'
@@ -138,6 +143,31 @@ describe('hard-delete-inactive-users cron job', () => {
       reason: 'soft_delete_grace',
     })
     expect(deleteCall?.[0]).toBe(user.id)
+  })
+
+  it('reconciles list-item reservation counters BEFORE deleting the user', async () => {
+    const user = makeUser({ deletedAt: new Date('2020-01-01') })
+    vi.mocked(findUsersEligibleForHardDelete).mockResolvedValueOnce([
+      { user, reason: 'soft_delete_grace' },
+    ])
+
+    const callOrder: string[] = []
+    vi.mocked(reconcileListItemsForUserHardDelete).mockImplementationOnce(() => {
+      callOrder.push('reconcile')
+      return Promise.resolve()
+    })
+    vi.mocked(hardDeleteUser).mockImplementationOnce(() => {
+      callOrder.push('delete')
+      return Promise.resolve()
+    })
+
+    hardDeleteInactiveUsers.start()
+    await vi.advanceTimersByTimeAsync(INTERVAL_MS)
+
+    expect(vi.mocked(reconcileListItemsForUserHardDelete)).toHaveBeenCalledOnce()
+    const reconcileCall = vi.mocked(reconcileListItemsForUserHardDelete).mock.calls[0]
+    expect(reconcileCall?.[0]).toBe(user.id)
+    expect(callOrder).toEqual(['reconcile', 'delete'])
   })
 
   it('logs error and continues when a per-user transaction fails', async () => {

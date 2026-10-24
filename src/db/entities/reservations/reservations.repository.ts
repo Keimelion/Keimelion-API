@@ -1,4 +1,4 @@
-import { count, desc, eq } from 'drizzle-orm'
+import { and, count, desc, eq } from 'drizzle-orm'
 import { db } from '../../client.js'
 import { defineEntity } from '../../../shared/db/entity-descriptor.js'
 import { getOffset } from '../../../shared/schemas/pagination.js'
@@ -42,6 +42,28 @@ export async function createReservation(
 
 export function findReservationById(id: string): Promise<Reservation | undefined> {
   return db.query.reservations.findFirst({ where: eq(reservations.id, id) })
+}
+
+export async function findReservationByIdForUpdate(
+  id: string,
+  tx: DbOrTx,
+): Promise<Reservation | undefined> {
+  const [row] = await tx.select().from(reservations).where(eq(reservations.id, id)).for('update')
+  return row
+}
+
+export function findReservationByListItemAndUser(
+  listItemId: string,
+  userId: string,
+  tx: DbOrTx = db,
+): Promise<Reservation | undefined> {
+  return tx.query.reservations.findFirst({
+    where: and(eq(reservations.listItemId, listItemId), eq(reservations.userId, userId)),
+  })
+}
+
+export function findReservationsByUserId(userId: string, tx: DbOrTx = db): Promise<Reservation[]> {
+  return tx.query.reservations.findMany({ where: eq(reservations.userId, userId) })
 }
 
 export function findReservationsForUser(

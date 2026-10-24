@@ -7,6 +7,7 @@ import {
 } from '../../db/entities/users/users.repository.js'
 import type { User } from '../../db/entities/users/users.schema.js'
 import type { DeletionReason } from '../../shared/enums/deletion-reason.js'
+import { reconcileListItemsForUserHardDelete } from '../../features/reservations/reservations.service.js'
 import { logger } from '../../shared/utils/logger.js'
 import { createCronJob } from '../create-cron-job.js'
 
@@ -31,6 +32,7 @@ async function processUser(user: User, reason: DeletionReason): Promise<boolean>
         deletedAt: user.deletedAt,
         reason,
       })
+      await reconcileListItemsForUserHardDelete(user.id, tx)
       await hardDeleteUser(user.id, tx)
     })
     return true

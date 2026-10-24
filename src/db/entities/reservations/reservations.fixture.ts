@@ -1,4 +1,7 @@
+import { eq, inArray, sql } from 'drizzle-orm'
 import type { db as Db } from '../../client.js'
+import { listItems } from '../list-items/list-items.schema.js'
+import { ItemStatuses } from '../../../shared/enums/item-status.js'
 import { reservations } from './reservations.schema.js'
 
 interface ReservationFixture {
@@ -64,6 +67,32 @@ export async function seedReservations(db: typeof Db): Promise<void> {
     .values(values)
     .onConflictDoNothing({ target: reservations.id })
     .returning({ id: reservations.id })
+
+  // Keep list_items.quantity_reserved_total and item_status consistent with the
+  // seeded reservations so the invariant maintained by the reserve endpoint also
+  // holds in dev fixtures.
+  const affectedListItemIds = [...new Set(values.map((row) => row.listItemId))]
+  if (affectedListItemIds.length > 0) {
+    const totalsByListItem = new Map<string, number>()
+    for (const value of values) {
+      const previous = totalsByListItem.get(value.listItemId) ?? 0
+      totalsByListItem.set(value.listItemId, previous + value.quantityBooked)
+    }
+
+    const rows = await db
+      .select({ id: listItems.id, quantityDesired: listItems.quantityDesired })
+      .from(listItems)
+      .where(inArray(listItems.id, affectedListItemIds))
+
+    for (const row of rows) {
+      const reserved = totalsByListItem.get(row.id) ?? 0
+      const nextStatus = reserved >= row.quantityDesired ? ItemStatuses.RESERVED : ItemStatuses.AVAILABLE
+      await db
+        .update(listItems)
+        .set({ quantityReservedTotal: reserved, itemStatus: nextStatus, updatedAt: sql`now()` })
+        .where(eq(listItems.id, row.id))
+    }
+  }
 
   console.log(`  reservations     ${String(inserted.length)} rows`)
 }
