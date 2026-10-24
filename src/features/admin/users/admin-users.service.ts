@@ -14,8 +14,10 @@ import { findAllUsers, countUsers, adminUpdateUser, adminInsertUser } from './ad
 import { findUserById, softDeleteUser } from '../../../db/entities/users/users.repository.js'
 import { revokeAllUserSessions } from '../../../shared/db/user-sessions.js'
 import { toAdminUser } from './admin-users.mapper.js'
-import { countReservationsByUserIds } from '../reservations/admin-reservations.repository.js'
-import { countReservationsForUser } from '../../../db/entities/reservations/reservations.repository.js'
+import {
+  countReservationsByUserIds,
+  countReservationsForUser,
+} from '../../../db/entities/reservations/reservations.repository.js'
 import { AdminAction } from '../admin.enums.js'
 import type { AdminUser } from './admin-users.mapper.js'
 import type { User } from '../../../db/entities/users/users.schema.js'

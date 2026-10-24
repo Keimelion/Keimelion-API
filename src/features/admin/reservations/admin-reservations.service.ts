@@ -11,11 +11,12 @@ import {
   countReservations,
   findReservationByIdHydrated,
   findReservationsPaged,
+  resolveListItemIdsForList,
 } from './admin-reservations.repository.js'
 import { toAdminReservation } from './admin-reservations.mapper.js'
 import type { AdminReservation } from './admin-reservations.mapper.js'
 import type {
-  AdminReservationsFilters,
+  AdminReservationsScopedFilters,
   AdminReservationsSortField,
 } from './admin-reservations.repository.js'
 import type { Reservation } from '../../../db/entities/reservations/reservations.schema.js'
@@ -34,10 +35,19 @@ export interface ListReservationsInput extends PaginationInput {
 export async function listReservations(
   input: ListReservationsInput,
 ): Promise<ServiceResult<PaginatedResponse<AdminReservation>>> {
-  const filters: AdminReservationsFilters = {
+  const listItemIds =
+    input.listId !== undefined ? await resolveListItemIdsForList(input.listId) : null
+  if (listItemIds !== null && listItemIds.length === 0) {
+    return {
+      data: buildPaginatedResponse<AdminReservation>([], input, 0),
+      httpStatus: HttpStatus.OK,
+    }
+  }
+
+  const filters: AdminReservationsScopedFilters = {
     userId: input.userId,
     listItemId: input.listItemId,
-    listId: input.listId,
+    listItemIds: listItemIds ?? undefined,
   }
   const [rows, total] = await Promise.all([
     findReservationsPaged(filters, input, input.sort),

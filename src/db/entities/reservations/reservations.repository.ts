@@ -1,7 +1,8 @@
-import { and, count, desc, eq } from 'drizzle-orm'
+import { and, count, desc, eq, inArray } from 'drizzle-orm'
 import { db } from '../../client.js'
 import { defineEntity } from '../../../shared/db/entity-descriptor.js'
 import { getOffset } from '../../../shared/schemas/pagination.js'
+import { listItems } from '../list-items/list-items.schema.js'
 import { reservations } from './reservations.schema.js'
 import type { Reservation } from './reservations.schema.js'
 import type { PaginationInput } from '../../../shared/schemas/pagination.js'
@@ -121,4 +122,37 @@ export async function upsertReservationQuantity(
     })
     .returning()
   return row
+}
+
+export async function countReservationsByItemIds(itemIds: string[]): Promise<Map<string, number>> {
+  const map = new Map<string, number>()
+  if (itemIds.length === 0) return map
+
+  const rows = await db
+    .select({ itemId: listItems.itemId, total: count(reservations.id) })
+    .from(listItems)
+    .leftJoin(reservations, eq(reservations.listItemId, listItems.id))
+    .where(inArray(listItems.itemId, itemIds))
+    .groupBy(listItems.itemId)
+
+  for (const row of rows) {
+    map.set(row.itemId, row.total)
+  }
+  return map
+}
+
+export async function countReservationsByUserIds(userIds: string[]): Promise<Map<string, number>> {
+  const map = new Map<string, number>()
+  if (userIds.length === 0) return map
+
+  const rows = await db
+    .select({ userId: reservations.userId, total: count() })
+    .from(reservations)
+    .where(inArray(reservations.userId, userIds))
+    .groupBy(reservations.userId)
+
+  for (const row of rows) {
+    map.set(row.userId, row.total)
+  }
+  return map
 }

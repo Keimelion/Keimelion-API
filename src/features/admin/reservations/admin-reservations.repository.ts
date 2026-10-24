@@ -28,6 +28,12 @@ export interface AdminReservationsFilters {
   listId?: string | undefined
 }
 
+export interface AdminReservationsScopedFilters {
+  userId?: string | undefined
+  listItemId?: string | undefined
+  listItemIds?: readonly string[] | undefined
+}
+
 const RESERVATION_HYDRATION = {
   user: true,
   listItem: {
@@ -47,7 +53,7 @@ const RESERVATION_HYDRATION = {
   },
 } as const
 
-async function resolveListItemIdsForList(listId: string): Promise<string[]> {
+export async function resolveListItemIdsForList(listId: string): Promise<string[]> {
   const rows = await db
     .select({ id: listItems.id })
     .from(listItems)
@@ -55,31 +61,26 @@ async function resolveListItemIdsForList(listId: string): Promise<string[]> {
   return rows.map((row) => row.id)
 }
 
-function buildWhere(
-  filters: AdminReservationsFilters,
-  listItemIdsForList: string[] | null,
-): SQL | undefined {
+function buildWhere(filters: AdminReservationsScopedFilters): SQL | undefined {
   const clauses: SQL[] = []
   if (filters.userId !== undefined) clauses.push(eq(reservations.userId, filters.userId))
   if (filters.listItemId !== undefined) clauses.push(eq(reservations.listItemId, filters.listItemId))
-  if (listItemIdsForList !== null) clauses.push(inArray(reservations.listItemId, listItemIdsForList))
+  if (filters.listItemIds !== undefined) {
+    clauses.push(inArray(reservations.listItemId, [...filters.listItemIds]))
+  }
   if (clauses.length === 0) return undefined
   if (clauses.length === 1) return clauses[0]
   return and(...clauses)
 }
 
 export async function findReservationsPaged(
-  filters: AdminReservationsFilters,
+  filters: AdminReservationsScopedFilters,
   pagination: PaginationInput,
   sort: SortInput<AdminReservationsSortField> | undefined,
 ): Promise<AdminReservationRow[]> {
-  const listItemIdsForList =
-    filters.listId !== undefined ? await resolveListItemIdsForList(filters.listId) : null
-  if (listItemIdsForList !== null && listItemIdsForList.length === 0) return []
-
   const offset = getOffset(pagination)
   const rows = await db.query.reservations.findMany({
-    where: buildWhere(filters, listItemIdsForList),
+    where: buildWhere(filters),
     orderBy: adminReservationsEntity.buildOrderBy(sort),
     limit: pagination.limit,
     offset,
@@ -88,15 +89,11 @@ export async function findReservationsPaged(
   return rows as AdminReservationRow[]
 }
 
-export async function countReservations(filters: AdminReservationsFilters): Promise<number> {
-  const listItemIdsForList =
-    filters.listId !== undefined ? await resolveListItemIdsForList(filters.listId) : null
-  if (listItemIdsForList !== null && listItemIdsForList.length === 0) return 0
-
+export async function countReservations(filters: AdminReservationsScopedFilters): Promise<number> {
   const [row] = await db
     .select({ count: count() })
     .from(reservations)
-    .where(buildWhere(filters, listItemIdsForList))
+    .where(buildWhere(filters))
   return row?.count ?? 0
 }
 
@@ -123,37 +120,4 @@ export async function findReservationsByItemId(itemId: string): Promise<AdminRes
     with: RESERVATION_HYDRATION,
   })
   return rows as AdminReservationRow[]
-}
-
-export async function countReservationsByItemIds(itemIds: string[]): Promise<Map<string, number>> {
-  const map = new Map<string, number>()
-  if (itemIds.length === 0) return map
-
-  const rows = await db
-    .select({ itemId: listItems.itemId, total: count(reservations.id) })
-    .from(listItems)
-    .leftJoin(reservations, eq(reservations.listItemId, listItems.id))
-    .where(inArray(listItems.itemId, itemIds))
-    .groupBy(listItems.itemId)
-
-  for (const row of rows) {
-    map.set(row.itemId, row.total)
-  }
-  return map
-}
-
-export async function countReservationsByUserIds(userIds: string[]): Promise<Map<string, number>> {
-  const map = new Map<string, number>()
-  if (userIds.length === 0) return map
-
-  const rows = await db
-    .select({ userId: reservations.userId, total: count() })
-    .from(reservations)
-    .where(inArray(reservations.userId, userIds))
-    .groupBy(reservations.userId)
-
-  for (const row of rows) {
-    map.set(row.userId, row.total)
-  }
-  return map
 }

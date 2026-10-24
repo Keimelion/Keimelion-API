@@ -23,10 +23,8 @@ import { normalizeTagSlugs } from '../../../shared/utils/slug.js'
 import { findAllItemsWithSources, countItems } from './admin-items.repository.js'
 import { toItemWithSources } from '../../../shared/types/item.js'
 import { toAdminItem, toAdminItemDetail } from './admin-items.mapper.js'
-import {
-  countReservationsByItemIds,
-  findReservationsByItemId,
-} from '../reservations/admin-reservations.repository.js'
+import { countReservationsByItemIds } from '../../../db/entities/reservations/reservations.repository.js'
+import { findReservationsByItemId } from '../reservations/admin-reservations.repository.js'
 import { AdminAction } from '../admin.enums.js'
 import type { items } from '../../../db/entities/items/items.schema.js'
 import type { ItemWithSources } from '../../../shared/types/item.js'
