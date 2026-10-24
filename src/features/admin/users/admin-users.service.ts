@@ -14,8 +14,11 @@ import { findAllUsers, countUsers, adminUpdateUser, adminInsertUser } from './ad
 import { findUserById, softDeleteUser } from '../../../db/entities/users/users.repository.js'
 import { revokeAllUserSessions } from '../../../shared/db/user-sessions.js'
 import { toAdminUser } from './admin-users.mapper.js'
+import { countReservationsByUserIds } from '../reservations/admin-reservations.repository.js'
+import { countReservationsForUser } from '../../../db/entities/reservations/reservations.repository.js'
 import { AdminAction } from '../admin.enums.js'
 import type { AdminUser } from './admin-users.mapper.js'
+import type { User } from '../../../db/entities/users/users.schema.js'
 import type { UserRole } from '../../../shared/enums/user-role.js'
 import type { ServiceResult } from '../../../shared/types/service.js'
 import type { PaginatedResponse } from '../../../shared/types/api.js'
@@ -53,7 +56,7 @@ export async function createUser(
 
   if ('errorCode' in outcome) return serviceError(outcome.errorCode)
 
-  const createdUser = toAdminUser(outcome.row)
+  const createdUser = toAdminUser(outcome.row, 0)
 
   logAdminUserCreation(adminId, createdUser.id, input.role)
   sendAdminInvitationEmail(input.email, rawPasswordResetToken)
@@ -69,9 +72,14 @@ export async function createUser(
 
 export async function listUsers(input: ListUsersInput): Promise<ServiceResult<PaginatedResponse<AdminUser>>> {
   const [userRows, total] = await Promise.all([findAllUsers(input, input), countUsers(input)])
+  const countByUserId = await countReservationsByUserIds(userRows.map((row) => row.id))
 
   return {
-    data: buildPaginatedResponse(userRows.map(toAdminUser), input, total),
+    data: buildPaginatedResponse(
+      userRows.map((row) => toAdminUser(row, countByUserId.get(row.id) ?? 0)),
+      input,
+      total,
+    ),
     httpStatus: HttpStatus.OK,
   }
 }
@@ -83,7 +91,8 @@ export async function getUserById(id: string): Promise<ServiceResult<{ user: Adm
     return serviceError(ErrorCode.NOT_FOUND)
   }
 
-  return { data: { user: toAdminUser(user) }, httpStatus: HttpStatus.OK }
+  const reservationsCount = await countReservationsForUser(id)
+  return { data: { user: toAdminUser(user, reservationsCount) }, httpStatus: HttpStatus.OK }
 }
 
 export async function updateUser(
@@ -103,20 +112,23 @@ export async function updateUser(
 
   const shouldRevoke = input.role !== undefined && input.role !== targetUser.role
 
-  let updatedUser: AdminUser | undefined
+  let updatedRow: User | undefined
 
   await db.transaction(async (tx) => {
     const result = await adminUpdateUser(targetUserId, pickDefined(input), tx)
     if (!result) return
-    updatedUser = toAdminUser(result)
+    updatedRow = result
     if (shouldRevoke) {
       await revokeAllUserSessions(targetUserId, tx)
     }
   })
 
-  if (!updatedUser) {
+  if (!updatedRow) {
     return serviceError(ErrorCode.USER_UPDATE_FAILED)
   }
+
+  const reservationsCount = await countReservationsForUser(targetUserId)
+  const updatedUser = toAdminUser(updatedRow, reservationsCount)
 
   logger.info({
     adminId,

@@ -16,9 +16,10 @@ import {
   findReservationsByUserId,
   upsertReservationQuantity,
 } from '../../db/entities/reservations/reservations.repository.js'
-import { toReservationDetail } from './reservations.types.js'
+import { toReservationSummary } from './reservations.types.js'
 import type { ItemStatus } from '../../shared/enums/item-status.js'
 import type { ListItem } from '../../db/entities/list-items/list-items.schema.js'
+import type { Reservation } from '../../db/entities/reservations/reservations.schema.js'
 import type { ServiceResult } from '../../shared/types/service.js'
 import type {
   ListItemReservationSummary,
@@ -84,7 +85,7 @@ export async function createOrUpdateReservation(
 
     return {
       data: {
-        reservation: toReservationDetail(reservation),
+        reservation: toReservationSummary(reservation),
         listItem: toListItemReservationSummary(updatedListItem),
       },
       httpStatus: existing ? HttpStatus.OK : HttpStatus.CREATED,
@@ -100,18 +101,29 @@ export async function cancelReservation(
     const reservation = await findReservationByIdForUpdate(reservationId, tx)
     if (!reservation) return serviceError(ErrorCode.NOT_FOUND)
     if (reservation.userId !== userId) return serviceError(ErrorCode.FORBIDDEN)
-
-    const listItem = await findListItemByIdForUpdate(reservation.listItemId, tx)
-    if (!listItem) return serviceError(ErrorCode.NOT_FOUND)
-
-    const removed = await deleteReservation(reservationId, tx)
-    if (!removed) return serviceError(ErrorCode.INTERNAL_ERROR)
-
-    const newTotal = Math.max(0, listItem.quantityReservedTotal - reservation.quantityBooked)
-    await applyReservationTotal(reservation.listItemId, newTotal, listItem.quantityDesired, tx)
-
-    return { data: null, httpStatus: HttpStatus.NO_CONTENT }
+    return cancelReservationAtomic(tx, reservation)
   })
+}
+
+/**
+ * Shared cancel primitive — assumes the caller has already SELECT ... FOR UPDATE'd
+ * the reservation and performed any ownership check. Locks the parent list_item,
+ * deletes the reservation and reconciles quantity_reserved_total + item_status.
+ */
+export async function cancelReservationAtomic(
+  tx: DbTransaction,
+  reservation: Reservation,
+): Promise<ServiceResult<null>> {
+  const listItem = await findListItemByIdForUpdate(reservation.listItemId, tx)
+  if (!listItem) return serviceError(ErrorCode.NOT_FOUND)
+
+  const removed = await deleteReservation(reservation.id, tx)
+  if (!removed) return serviceError(ErrorCode.INTERNAL_ERROR)
+
+  const newTotal = Math.max(0, listItem.quantityReservedTotal - reservation.quantityBooked)
+  await applyReservationTotal(reservation.listItemId, newTotal, listItem.quantityDesired, tx)
+
+  return { data: null, httpStatus: HttpStatus.NO_CONTENT }
 }
 
 export async function reconcileListItemsForUserHardDelete(
