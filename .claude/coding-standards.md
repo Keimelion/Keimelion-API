@@ -279,6 +279,37 @@ Enums that are specific to a single file stay local; enums shared across multipl
 
 ---
 
+## Enum columns — repositories and fixtures carry the enum type, not `string`
+
+When a column is enum-shaped — a Drizzle `pgEnum`, or a `varchar` backed by a shared `*_VALUES` constant — its TypeScript signature everywhere it crosses a boundary (repository row types, fixture types, service inputs, mapper outputs) must be the derived enum type, not `string`. Typing a closed value set as an open string is a lie that defeats the whole point of defining the enum.
+
+```typescript
+// ❌ — leaks `string` for a column whose values are closed
+interface AdminListItemRow {
+  itemStatus: string
+}
+
+interface ListCollaboratorFixture {
+  inviteStatus: string
+}
+
+// ✅ — import the derived type from the enum file
+import type { ItemStatus } from '../../shared/enums/item-status.js'
+import type { InviteStatus } from '../../shared/enums/invite-status.js'
+
+interface AdminListItemRow {
+  itemStatus: ItemStatus
+}
+
+interface ListCollaboratorFixture {
+  inviteStatus: InviteStatus
+}
+```
+
+This applies even when the column is still a plain `varchar` at the Postgres level: if the allowed set is captured by a `*_VALUES as const`, the TS surface already has a precise type — use it. When migrating a column from `varchar` to `pgEnum`, sweep every repository / fixture / mapper that touches it and tighten `string` → the enum type in the same change.
+
+---
+
 ## No magic numbers or strings — local constants
 
 Any literal that is not immediately obvious from context must be named. Define it as a `const` at the top of the file (or in `src/types/` if reused across files).
