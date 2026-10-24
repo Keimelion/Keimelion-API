@@ -22,13 +22,12 @@ import { replaceItemTags } from '../../../db/entities/item-tags/item-tags.reposi
 import { normalizeTagSlugs } from '../../../shared/utils/slug.js'
 import { findAllItemsWithSources, countItems } from './admin-items.repository.js'
 import { toItemWithSources } from '../../../shared/types/item.js'
-import { toAdminItem, toAdminItemDetail } from './admin-items.mapper.js'
+import { toAdminItem } from './admin-items.mapper.js'
 import { countReservationsByItemIds } from '../../../db/entities/reservations/reservations.repository.js'
-import { findReservationsByItemId } from '../reservations/admin-reservations.repository.js'
 import { AdminAction } from '../admin.enums.js'
 import type { items } from '../../../db/entities/items/items.schema.js'
 import type { ItemWithSources } from '../../../shared/types/item.js'
-import type { AdminItem, AdminItemDetail } from './admin-items.mapper.js'
+import type { AdminItem } from './admin-items.mapper.js'
 import type { ServiceResult } from '../../../shared/types/service.js'
 import type { PaginatedResponse } from '../../../shared/types/api.js'
 import type { Locale } from '../../../shared/enums/locale.js'
@@ -129,14 +128,14 @@ export async function listItems(
 export async function getItemById(
   id: string,
   locale: Locale,
-): Promise<ServiceResult<{ item: AdminItemDetail }>> {
+): Promise<ServiceResult<{ item: AdminItem }>> {
   const row = await findItemByIdWithSources(id)
   if (!row) return serviceError(ErrorCode.NOT_FOUND)
 
-  const reservationRows = await findReservationsByItemId(id)
+  const countByItemId = await countReservationsByItemIds([id])
 
   return {
-    data: { item: toAdminItemDetail(row, locale, reservationRows) },
+    data: { item: toAdminItem(row, locale, countByItemId.get(id) ?? 0) },
     httpStatus: HttpStatus.OK,
   }
 }

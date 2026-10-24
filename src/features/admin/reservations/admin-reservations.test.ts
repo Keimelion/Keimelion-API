@@ -254,8 +254,7 @@ describe('GET /v1/admin/reservations', () => {
   it('resolves listId filter via list_items lookup and returns empty when the list has no list_items', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
-    mockResolveListItemIdsForList([]) // findReservationsPaged
-    mockResolveListItemIdsForList([]) // countReservations
+    mockResolveListItemIdsForList([])
 
     const response = await apiRequest(`/v1/admin/reservations?listId=${LIST_ID}`, { token })
 
@@ -263,6 +262,21 @@ describe('GET /v1/admin/reservations', () => {
     expect(response.status).toBe(200)
     expect(body.items).toHaveLength(0)
     expect(body.pagination.total).toBe(0)
+  })
+
+  it('resolves itemId filter via list_items lookup and returns matching reservations', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockResolveListItemIdsForList([LIST_ITEM_ID])
+    mockListReservations([RESERVATION_ROW])
+    mockCountReservationsChain(1)
+
+    const response = await apiRequest(`/v1/admin/reservations?itemId=${ITEM_ID}`, { token })
+
+    const body = await response.json() as { items: unknown[]; pagination: { total: number } }
+    expect(response.status).toBe(200)
+    expect(body.items).toHaveLength(1)
+    expect(body.pagination.total).toBe(1)
   })
 
   it('issues a single Drizzle query per page (no N+1 reloads for reserver / listItem / list / owner)', async () => {

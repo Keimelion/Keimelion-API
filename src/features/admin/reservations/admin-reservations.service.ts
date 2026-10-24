@@ -11,7 +11,7 @@ import {
   countReservations,
   findReservationByIdHydrated,
   findReservationsPaged,
-  resolveListItemIdsForList,
+  resolveListItemIds,
 } from './admin-reservations.repository.js'
 import { toAdminReservation } from './admin-reservations.mapper.js'
 import type { AdminReservation } from './admin-reservations.mapper.js'
@@ -29,14 +29,14 @@ export interface ListReservationsInput extends PaginationInput {
   userId?: string | undefined
   listItemId?: string | undefined
   listId?: string | undefined
+  itemId?: string | undefined
   sort?: SortInput<AdminReservationsSortField> | undefined
 }
 
 export async function listReservations(
   input: ListReservationsInput,
 ): Promise<ServiceResult<PaginatedResponse<AdminReservation>>> {
-  const listItemIds =
-    input.listId !== undefined ? await resolveListItemIdsForList(input.listId) : null
+  const listItemIds = await resolveListItemIds({ listId: input.listId, itemId: input.itemId })
   if (listItemIds !== null && listItemIds.length === 0) {
     return {
       data: buildPaginatedResponse<AdminReservation>([], input, 0),

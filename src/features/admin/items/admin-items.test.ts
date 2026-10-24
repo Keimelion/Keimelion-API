@@ -335,14 +335,6 @@ function mockReservationCountsByItemIds(counts = new Map<string, number>()): voi
   vi.mocked(db.select).mockReturnValueOnce(chain as never)
 }
 
-function mockReservationsByItemIdEmpty(): void {
-  // Admin item detail hydration: first query lists list_items for the item, returning [] here.
-  const chain = {
-    from: vi.fn().mockReturnThis(),
-    where: vi.fn().mockResolvedValueOnce([]),
-  }
-  vi.mocked(db.select).mockReturnValueOnce(chain as never)
-}
 
 function mockHardDeleteTransaction(refCount: number, deletedRow: unknown): void {
   const txSelectChain = {
@@ -958,29 +950,33 @@ describe('GET /v1/admin/items/:id', () => {
     vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
   })
 
-  it('returns 200 with item and sources', async () => {
+  it('returns 200 with item, sources and reservationCount', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
     mockFindItemById(itemWith([SOURCE_ROW]))
-    mockReservationsByItemIdEmpty()
+    mockReservationCountsByItemIds(new Map([[ITEM_ROW.id, 3]]))
 
     const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}`, { token })
 
     const body = await response.json() as {
-      item: { name: string; sources: unknown[]; reservations: unknown[]; reservationCount: number }
+      item: Record<string, unknown> & {
+        name: string
+        sources: unknown[]
+        reservationCount: number
+      }
     }
     expect(response.status).toBe(200)
     expect(body.item.name).toBe('Test Item')
     expect(body.item.sources).toHaveLength(1)
-    expect(body.item.reservations).toEqual([])
-    expect(body.item.reservationCount).toBe(0)
+    expect(body.item.reservationCount).toBe(3)
+    expect(body.item).not.toHaveProperty('reservations')
   })
 
   it('does not expose deletedAt on item', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
     mockFindItemById(itemWith([]))
-    mockReservationsByItemIdEmpty()
+    mockReservationCountsByItemIds()
 
     const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}`, { token })
 

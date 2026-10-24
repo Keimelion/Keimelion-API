@@ -13,6 +13,7 @@ const listAdminReservationsQuerySchema = paginationQuerySchema.extend({
   userId: z.string().uuid().optional(),
   listItemId: z.string().uuid().optional(),
   listId: z.string().uuid().optional(),
+  itemId: z.string().uuid().optional(),
 })
 
 export type ListAdminReservationsInput = z.infer<typeof listAdminReservationsQuerySchema>

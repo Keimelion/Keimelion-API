@@ -26,12 +26,18 @@ export interface AdminReservationsFilters {
   userId?: string | undefined
   listItemId?: string | undefined
   listId?: string | undefined
+  itemId?: string | undefined
 }
 
 export interface AdminReservationsScopedFilters {
   userId?: string | undefined
   listItemId?: string | undefined
   listItemIds?: readonly string[] | undefined
+}
+
+export interface ListItemsScope {
+  listId?: string | undefined
+  itemId?: string | undefined
 }
 
 const RESERVATION_HYDRATION = {
@@ -53,11 +59,15 @@ const RESERVATION_HYDRATION = {
   },
 } as const
 
-export async function resolveListItemIdsForList(listId: string): Promise<string[]> {
-  const rows = await db
-    .select({ id: listItems.id })
-    .from(listItems)
-    .where(eq(listItems.listId, listId))
+export async function resolveListItemIds(scope: ListItemsScope): Promise<string[] | null> {
+  if (scope.listId === undefined && scope.itemId === undefined) return null
+
+  const clauses: SQL[] = []
+  if (scope.listId !== undefined) clauses.push(eq(listItems.listId, scope.listId))
+  if (scope.itemId !== undefined) clauses.push(eq(listItems.itemId, scope.itemId))
+  const where = clauses.length === 1 ? clauses[0] : and(...clauses)
+
+  const rows = await db.select({ id: listItems.id }).from(listItems).where(where)
   return rows.map((row) => row.id)
 }
 
@@ -107,17 +117,3 @@ export async function findReservationByIdHydrated(
   return row as AdminReservationRow | undefined
 }
 
-export async function findReservationsByItemId(itemId: string): Promise<AdminReservationRow[]> {
-  const listItemRows = await db
-    .select({ id: listItems.id })
-    .from(listItems)
-    .where(eq(listItems.itemId, itemId))
-  const listItemIds = listItemRows.map((row) => row.id)
-  if (listItemIds.length === 0) return []
-
-  const rows = await db.query.reservations.findMany({
-    where: inArray(reservations.listItemId, listItemIds),
-    with: RESERVATION_HYDRATION,
-  })
-  return rows as AdminReservationRow[]
-}
