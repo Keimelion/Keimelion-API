@@ -1,5 +1,6 @@
-import { index, integer, pgTable, text, uuid } from 'drizzle-orm/pg-core'
+import { index, pgTable, text, uuid } from 'drizzle-orm/pg-core'
 import { timestamps, uuidPrimaryKey } from '../../../shared/db/columns.js'
+import { nonNegativeCheck, nonNegativeInt } from '../../../shared/db/checks.js'
 import { users } from '../users/users.schema.js'
 
 export const images = pgTable(
@@ -9,15 +10,20 @@ export const images = pgTable(
     hash: text('hash').notNull(),
     fileKey: text('file_key').notNull(),
     mime: text('mime').notNull(),
-    sizeBytes: integer('size_bytes').notNull(),
-    width: integer('width').notNull(),
-    height: integer('height').notNull(),
+    sizeBytes: nonNegativeInt('size_bytes').notNull(),
+    width: nonNegativeInt('width').notNull(),
+    height: nonNegativeInt('height').notNull(),
     uploadedBy: uuid('uploaded_by')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     ...timestamps(),
   },
-  (table) => [index('images_uploaded_by_idx').on(table.uploadedBy)],
+  (table) => [
+    index('images_uploaded_by_idx').on(table.uploadedBy),
+    nonNegativeCheck(table.sizeBytes),
+    nonNegativeCheck(table.width),
+    nonNegativeCheck(table.height),
+  ],
 )
 
 export type Image = typeof images.$inferSelect

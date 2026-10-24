@@ -134,6 +134,20 @@
       "when": 1792792961216,
       "tag": "0018_index_list_collaborators_owner_joins",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1792802005889,
+      "tag": "0019_pgenum_item_invite_reason",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1792802019406,
+      "tag": "0020_check_constraints",
+      "breakpoints": true
     }
   ]
 }

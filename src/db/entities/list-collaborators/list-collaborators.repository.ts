@@ -1,10 +1,11 @@
 import { and, eq, inArray } from 'drizzle-orm'
 import { db } from '../../client.js'
 import { CollabRoles, CONTRIBUTOR_ROLE_VALUES } from '../../../shared/enums/collab-role.js'
+import { InviteStatuses } from '../../../shared/enums/invite-status.js'
 import { listCollaborators } from './list-collaborators.schema.js'
 import type { ListCollaborator } from './list-collaborators.schema.js'
 
-const OWNER_INVITE_STATUS = 'accepted'
+const OWNER_INVITE_STATUS = InviteStatuses.ACCEPTED
 
 type DbOrTx = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0]
 
