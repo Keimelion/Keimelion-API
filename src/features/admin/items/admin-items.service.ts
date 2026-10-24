@@ -22,9 +22,12 @@ import { replaceItemTags } from '../../../db/entities/item-tags/item-tags.reposi
 import { normalizeTagSlugs } from '../../../shared/utils/slug.js'
 import { findAllItemsWithSources, countItems } from './admin-items.repository.js'
 import { toItemWithSources } from '../../../shared/types/item.js'
+import { toAdminItem } from './admin-items.mapper.js'
+import { countReservationsByItemIds } from '../../../db/entities/reservations/reservations.repository.js'
 import { AdminAction } from '../admin.enums.js'
 import type { items } from '../../../db/entities/items/items.schema.js'
 import type { ItemWithSources } from '../../../shared/types/item.js'
+import type { AdminItem } from './admin-items.mapper.js'
 import type { ServiceResult } from '../../../shared/types/service.js'
 import type { PaginatedResponse } from '../../../shared/types/api.js'
 import type { Locale } from '../../../shared/enums/locale.js'
@@ -108,12 +111,13 @@ export async function createItem(
 export async function listItems(
   input: ListItemsInput,
   locale: Locale,
-): Promise<ServiceResult<PaginatedResponse<ItemWithSources>>> {
+): Promise<ServiceResult<PaginatedResponse<AdminItem>>> {
   const [rows, total] = await Promise.all([findAllItemsWithSources(input, input), countItems(input)])
+  const countByItemId = await countReservationsByItemIds(rows.map((row) => row.id))
 
   return {
     data: buildPaginatedResponse(
-      rows.map((row) => toItemWithSources(row, locale)),
+      rows.map((row) => toAdminItem(row, locale, countByItemId.get(row.id) ?? 0)),
       input,
       total,
     ),
@@ -124,12 +128,14 @@ export async function listItems(
 export async function getItemById(
   id: string,
   locale: Locale,
-): Promise<ServiceResult<{ item: ItemWithSources }>> {
+): Promise<ServiceResult<{ item: AdminItem }>> {
   const row = await findItemByIdWithSources(id)
   if (!row) return serviceError(ErrorCode.NOT_FOUND)
 
+  const countByItemId = await countReservationsByItemIds([id])
+
   return {
-    data: { item: toItemWithSources(row, locale) },
+    data: { item: toAdminItem(row, locale, countByItemId.get(id) ?? 0) },
     httpStatus: HttpStatus.OK,
   }
 }

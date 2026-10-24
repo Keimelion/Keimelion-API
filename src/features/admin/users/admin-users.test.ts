@@ -36,6 +36,24 @@ function mockCountChain(total: number): void {
   vi.mocked(db.select).mockReturnValueOnce(chain as never)
 }
 
+function mockReservationCountsByUserIds(counts = new Map<string, number>()): void {
+  const rows = Array.from(counts, ([userId, total]) => ({ userId, total }))
+  const chain = {
+    from: vi.fn().mockReturnThis(),
+    where: vi.fn().mockReturnThis(),
+    groupBy: vi.fn().mockResolvedValueOnce(rows),
+  }
+  vi.mocked(db.select).mockReturnValueOnce(chain as never)
+}
+
+function mockReservationCountForUser(total = 0): void {
+  const chain = {
+    from: vi.fn().mockReturnThis(),
+    where: vi.fn().mockResolvedValueOnce([{ count: total }]),
+  }
+  vi.mocked(db.select).mockReturnValueOnce(chain as never)
+}
+
 describe('GET /v1/admin/users', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -47,6 +65,7 @@ describe('GET /v1/admin/users', () => {
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     mockListUsers([ADMIN_USER, TARGET_USER])
     mockCountChain(2)
+    mockReservationCountsByUserIds()
 
     const response = await apiRequest('/v1/admin/users', { token })
 
@@ -62,6 +81,7 @@ describe('GET /v1/admin/users', () => {
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     mockListUsers([ADMIN_USER])
     mockCountChain(1)
+    mockReservationCountsByUserIds()
 
     const response = await apiRequest('/v1/admin/users', { token })
 
@@ -77,6 +97,7 @@ describe('GET /v1/admin/users', () => {
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     mockListUsers([deletedUser])
     mockCountChain(1)
+    mockReservationCountsByUserIds()
 
     const response = await apiRequest('/v1/admin/users?deletedAt%5BisNull%5D=false', { token })
 
@@ -105,6 +126,7 @@ describe('GET /v1/admin/users', () => {
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     mockListUsers([ADMIN_USER])
     mockCountChain(1)
+    mockReservationCountsByUserIds()
 
     const response = await apiRequest('/v1/admin/users?role%5Beq%5D=admin', { token })
 
@@ -119,6 +141,7 @@ describe('GET /v1/admin/users', () => {
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     mockListUsers([bannedUser])
     mockCountChain(1)
+    mockReservationCountsByUserIds()
 
     const response = await apiRequest('/v1/admin/users?bannedAt%5BisNull%5D=false', { token })
 
@@ -132,6 +155,7 @@ describe('GET /v1/admin/users', () => {
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     mockListUsers([ADMIN_USER, TARGET_USER])
     mockCountChain(2)
+    mockReservationCountsByUserIds()
 
     const response = await apiRequest('/v1/admin/users?bannedAt%5BisNull%5D=true', { token })
 
@@ -145,6 +169,7 @@ describe('GET /v1/admin/users', () => {
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     mockListUsers([ADMIN_USER])
     mockCountChain(1)
+    mockReservationCountsByUserIds()
 
     const response = await apiRequest(
       '/v1/admin/users?createdAt%5Bgte%5D=2024-01-01T00:00:00Z&createdAt%5Blte%5D=2024-12-31T23:59:59Z',
@@ -159,6 +184,7 @@ describe('GET /v1/admin/users', () => {
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     mockListUsers([ADMIN_USER, TARGET_USER])
     mockCountChain(2)
+    mockReservationCountsByUserIds()
 
     const response = await apiRequest('/v1/admin/users?sort=email:asc', { token })
 
@@ -170,6 +196,7 @@ describe('GET /v1/admin/users', () => {
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     mockListUsers([ADMIN_USER, TARGET_USER])
     mockCountChain(2)
+    mockReservationCountsByUserIds()
 
     const response = await apiRequest('/v1/admin/users?sort=username:asc', { token })
 
@@ -181,6 +208,7 @@ describe('GET /v1/admin/users', () => {
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     mockListUsers([ADMIN_USER])
     mockCountChain(1)
+    mockReservationCountsByUserIds()
 
     const response = await apiRequest(
       '/v1/admin/users?role%5Beq%5D=admin&bannedAt%5BisNull%5D=true&sort=email:asc&page=1&limit=50',
@@ -198,6 +226,7 @@ describe('GET /v1/admin/users', () => {
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     mockListUsers([ADMIN_USER])
     mockCountChain(1)
+    mockReservationCountsByUserIds()
 
     const response = await apiRequest('/v1/admin/users?role%5Beq%5D=admin', { token })
 
@@ -211,6 +240,7 @@ describe('GET /v1/admin/users', () => {
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     mockListUsers([ADMIN_USER])
     mockCountChain(1)
+    mockReservationCountsByUserIds()
 
     const response = await apiRequest('/v1/admin/users', { token })
 
@@ -301,6 +331,7 @@ describe('GET /v1/admin/users', () => {
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     mockListUsers([ADMIN_USER])
     mockCountChain(1)
+    mockReservationCountsByUserIds()
 
     const response = await apiRequest('/v1/admin/users?email%5Bilike%5D=admin', { token })
 
@@ -314,6 +345,7 @@ describe('GET /v1/admin/users', () => {
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     mockListUsers([TARGET_USER])
     mockCountChain(1)
+    mockReservationCountsByUserIds()
 
     const response = await apiRequest('/v1/admin/users?username%5Bilike%5D=regular', { token })
 
@@ -327,6 +359,7 @@ describe('GET /v1/admin/users', () => {
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     mockListUsers([TARGET_USER])
     mockCountChain(1)
+    mockReservationCountsByUserIds()
 
     const response = await apiRequest('/v1/admin/users?bannedAt%5BisNull%5D=true', { token })
 
@@ -338,6 +371,7 @@ describe('GET /v1/admin/users', () => {
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     mockListUsers([ADMIN_USER])
     mockCountChain(1)
+    mockReservationCountsByUserIds()
 
     const response = await apiRequest('/v1/admin/users?role%5Beq%5D=admin&email%5Bilike%5D=admin', { token })
 
@@ -422,12 +456,27 @@ describe('GET /v1/admin/users/:id', () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(TARGET_USER)
+    mockReservationCountForUser()
 
     const response = await apiRequest(`/v1/admin/users/${TARGET_USER.id}`, { token })
 
-    const body = await response.json() as { user: { email: string } }
+    const body = await response.json() as { user: { email: string; reservationsCount: number } }
     expect(response.status).toBe(200)
     expect(body.user.email).toBe('user@example.com')
+    expect(body.user.reservationsCount).toBe(0)
+  })
+
+  it('includes a reservationsCount matching the user tally', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(TARGET_USER)
+    mockReservationCountForUser(3)
+
+    const response = await apiRequest(`/v1/admin/users/${TARGET_USER.id}`, { token })
+
+    const body = await response.json() as { user: { reservationsCount: number } }
+    expect(response.status).toBe(200)
+    expect(body.user.reservationsCount).toBe(3)
   })
 
   it('returns 200 including soft-deleted user', async () => {
@@ -435,6 +484,7 @@ describe('GET /v1/admin/users/:id', () => {
     const deletedUser = { ...TARGET_USER, deletedAt: new Date('2024-06-01') }
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(deletedUser)
+    mockReservationCountForUser()
 
     const response = await apiRequest(`/v1/admin/users/${TARGET_USER.id}`, { token })
 
@@ -496,6 +546,7 @@ describe('PATCH /v1/admin/users/:id', () => {
       }
       return callback(tx as never)
     })
+    mockReservationCountForUser()
 
     const response = await apiRequest(`/v1/admin/users/${TARGET_USER.id}`, {
       method: 'PATCH',
@@ -619,6 +670,7 @@ describe('PATCH /v1/admin/users/:id', () => {
       }
       return callback(tx as never)
     })
+    mockReservationCountForUser()
 
     const response = await apiRequest(`/v1/admin/users/${TARGET_USER.id}`, {
       method: 'PATCH',
@@ -662,6 +714,7 @@ describe('PATCH /v1/admin/users/:id', () => {
       capturedTx = tx
       return callback(tx as never)
     })
+    mockReservationCountForUser()
 
     const response = await apiRequest(`/v1/admin/users/${TARGET_USER.id}`, {
       method: 'PATCH',
@@ -694,6 +747,7 @@ describe('PATCH /v1/admin/users/:id', () => {
       capturedTx = tx
       return callback(tx as never)
     })
+    mockReservationCountForUser()
 
     const response = await apiRequest(`/v1/admin/users/${TARGET_USER.id}`, {
       method: 'PATCH',
@@ -726,6 +780,7 @@ describe('PATCH /v1/admin/users/:id', () => {
       capturedTx = tx
       return callback(tx as never)
     })
+    mockReservationCountForUser()
 
     const response = await apiRequest(`/v1/admin/users/${TARGET_USER.id}`, {
       method: 'PATCH',
