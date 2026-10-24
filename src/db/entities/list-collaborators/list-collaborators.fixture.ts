@@ -1,9 +1,10 @@
 import type { db as Db } from '../../client.js'
 import { CollabRoles } from '../../../shared/enums/collab-role.js'
+import { InviteStatuses } from '../../../shared/enums/invite-status.js'
 import { LIST_IDS } from '../lists/lists.fixture.js'
 import { listCollaborators } from './list-collaborators.schema.js'
 
-const OWNER_INVITE_STATUS = 'accepted'
+const OWNER_INVITE_STATUS = InviteStatuses.ACCEPTED
 
 interface CollabFixture {
   id: string

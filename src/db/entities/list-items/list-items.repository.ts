@@ -3,6 +3,7 @@ import { db } from '../../client.js'
 import { listItems } from './list-items.schema.js'
 import type { ListItem } from './list-items.schema.js'
 import type { ListItemRowWithImage } from '../../../shared/types/item.js'
+import type { ItemStatus } from '../../../shared/enums/item-status.js'
 
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
@@ -11,7 +12,7 @@ interface InsertListItemInput {
   itemId: string
   quantityDesired: number
   creatorNote: string | null
-  itemStatus: string
+  itemStatus: ItemStatus
   imageId?: string | null
 }
 
