@@ -74,10 +74,10 @@ export async function createOrUpdateReservation(
     )
     if (!reservation) return serviceError(ErrorCode.INTERNAL_ERROR)
 
-    const nextStatus = computeNextItemStatus(newTotal, current.quantityDesired)
-    const updatedListItem = await updateListItemReservationState(
+    const updatedListItem = await applyReservationTotal(
       input.listItemId,
-      { quantityReservedTotal: newTotal, itemStatus: nextStatus },
+      newTotal,
+      current.quantityDesired,
       tx,
     )
     if (!updatedListItem) return serviceError(ErrorCode.INTERNAL_ERROR)
@@ -108,12 +108,7 @@ export async function cancelReservation(
     if (!removed) return serviceError(ErrorCode.INTERNAL_ERROR)
 
     const newTotal = Math.max(0, listItem.quantityReservedTotal - reservation.quantityBooked)
-    const nextStatus = computeNextItemStatus(newTotal, listItem.quantityDesired)
-    await updateListItemReservationState(
-      reservation.listItemId,
-      { quantityReservedTotal: newTotal, itemStatus: nextStatus },
-      tx,
-    )
+    await applyReservationTotal(reservation.listItemId, newTotal, listItem.quantityDesired, tx)
 
     return { data: null, httpStatus: HttpStatus.NO_CONTENT }
   })
@@ -136,14 +131,23 @@ export async function reconcileListItemsForUserHardDelete(
     const current = await findListItemByIdForUpdate(listItemId, tx)
     if (!current) continue
     const newTotal = Math.max(0, current.quantityReservedTotal - quantityToRelease)
-    const nextStatus = computeNextItemStatus(newTotal, current.quantityDesired)
-    if (newTotal === current.quantityReservedTotal && nextStatus === current.itemStatus) continue
-    await updateListItemReservationState(
-      listItemId,
-      { quantityReservedTotal: newTotal, itemStatus: nextStatus },
-      tx,
-    )
+    if (newTotal === current.quantityReservedTotal) continue
+    await applyReservationTotal(listItemId, newTotal, current.quantityDesired, tx)
   }
+}
+
+async function applyReservationTotal(
+  listItemId: string,
+  newTotal: number,
+  quantityDesired: number,
+  tx: DbTransaction,
+): Promise<ListItem | undefined> {
+  const nextStatus = computeNextItemStatus(newTotal, quantityDesired)
+  return updateListItemReservationState(
+    listItemId,
+    { quantityReservedTotal: newTotal, itemStatus: nextStatus },
+    tx,
+  )
 }
 
 function computeNextItemStatus(reservedTotal: number, quantityDesired: number): ItemStatus {
