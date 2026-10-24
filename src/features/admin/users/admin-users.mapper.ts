@@ -6,13 +6,15 @@ export interface AdminUser extends UserDetail {
   bannedAt: Date | null
   banReason: string | null
   deletedAt: Date | null
+  reservationsCount: number
 }
 
-export function toAdminUser(user: User): AdminUser {
+export function toAdminUser(user: User, reservationsCount: number): AdminUser {
   return {
     ...toUserDetail(user),
     bannedAt: user.bannedAt ?? null,
     banReason: user.banReason ?? null,
     deletedAt: user.deletedAt ?? null,
+    reservationsCount,
   }
 }

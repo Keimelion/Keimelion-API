@@ -1,7 +1,7 @@
 import type { ItemStatus } from '../../shared/enums/item-status.js'
 import type { Reservation } from '../../db/entities/reservations/reservations.schema.js'
 
-export interface ReservationDetail {
+export interface ReservationSummary {
   id: string
   listItemId: string
   userId: string
@@ -16,11 +16,11 @@ export interface ListItemReservationSummary {
 }
 
 export interface ReservationActionResponse {
-  reservation: ReservationDetail
+  reservation: ReservationSummary
   listItem: ListItemReservationSummary
 }
 
-export function toReservationDetail(row: Reservation): ReservationDetail {
+export function toReservationSummary(row: Reservation): ReservationSummary {
   return {
     id: row.id,
     listItemId: row.listItemId,
