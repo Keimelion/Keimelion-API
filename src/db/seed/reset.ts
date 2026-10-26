@@ -6,7 +6,7 @@ import { drizzle } from 'drizzle-orm/postgres-js'
 import { env } from '../../config/env.js'
 import * as schema from '../entities/index.js'
 import { SEEDERS } from './seeders.js'
-import { getSeedImageFileKey } from './seed-images.js'
+import { getSeedImageFileKeys } from './seed-images.js'
 
 const client = postgres(env.DATABASE_URL)
 const db = drizzle(client, { schema })
@@ -17,14 +17,16 @@ try {
   await client`DROP SCHEMA IF EXISTS drizzle CASCADE`
   await client`CREATE SCHEMA public`
 
-  // Wipe disk variants for the seeded fixture so a fresh reset is deterministic:
-  // the schema drop removes the images row but leaves webp files on disk,
+  // Wipe disk variants for the seeded fixtures so a fresh reset is deterministic:
+  // the schema drop removes the images rows but leaves webp files on disk,
   // which would make the next pipeline run skip writes (and hide regressions
-  // in writeAllVariants). We only touch the fixture's own content-addressed
+  // in writeAllVariants). We only touch each fixture's own content-addressed
   // directory, never the full UPLOADS_DIR, so unrelated local uploads survive.
   console.log('Clearing seeded image variants from UPLOADS_DIR...')
-  const seedFileKey = await getSeedImageFileKey()
-  await rm(join(env.UPLOADS_DIR, dirname(seedFileKey)), { recursive: true, force: true })
+  const seedFileKeys = await getSeedImageFileKeys()
+  for (const key of seedFileKeys) {
+    await rm(join(env.UPLOADS_DIR, dirname(key)), { recursive: true, force: true })
+  }
 
   console.log('Running migrations...')
   await migrate(db, { migrationsFolder: 'src/db/migrations' })
