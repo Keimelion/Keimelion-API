@@ -14,6 +14,7 @@ import { seedItemTags } from '../entities/item-tags/item-tags.fixture.js'
 import { seedItemCategories } from '../entities/item-categories/item-categories.fixture.js'
 import { seedFeedback } from '../entities/feedback/feedback.fixture.js'
 import { seedReservations } from '../entities/reservations/reservations.fixture.js'
+import { seedImages } from './seed-images.js'
 
 export type Seeder = (db: typeof Db) => Promise<void>
 
@@ -33,4 +34,5 @@ export const SEEDERS: readonly Seeder[] = [
   seedItemCategories,
   seedFeedback,
   seedReservations,
+  seedImages,
 ]
