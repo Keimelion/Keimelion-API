@@ -870,6 +870,18 @@ describe('GET /v1/admin/items', () => {
     expect(response.status).toBe(200)
   })
 
+  it('filters by id[eq]', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    vi.mocked(db.query.items.findMany).mockResolvedValueOnce([itemWith([])] as never)
+    mockCountChain(1)
+    mockReservationCountsByItemIds()
+
+    const response = await apiRequest('/v1/admin/items?id%5Beq%5D=11111111-1111-1111-1111-111111111111', { token })
+    expect(response.status).toBe(200)
+  })
+
   it('filters by name[ilike]', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()

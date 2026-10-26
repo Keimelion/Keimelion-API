@@ -16,6 +16,7 @@ export const itemsEntity = defineEntity({
   },
   defaultSort: [{ field: 'createdAt', direction: 'desc' }],
   filterable: {
+    id:              { column: items.id,              operators: ['eq', 'in'] },
     name:            { column: items.name,            operators: ['eq', 'ilike'] },
     createdByUserId: { column: items.createdByUserId, operators: ['eq', 'isNull'] },
     createdAt:       { column: items.createdAt,       operators: ['gte', 'lte', 'between'], valueType: 'date' },

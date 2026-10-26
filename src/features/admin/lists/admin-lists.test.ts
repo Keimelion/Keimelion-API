@@ -340,6 +340,19 @@ describe('GET /v1/admin/lists', () => {
     expect(response.status).toBe(422)
   })
 
+  it('filters by id[eq]', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    vi.mocked(db.query.lists.findMany).mockResolvedValueOnce([rowWithOwner(LIST_ROW, OWNER_USER)] as never)
+    mockCountChain(1)
+
+    const response = await apiRequest(`/v1/admin/lists?id%5Beq%5D=${LIST_ROW.id}`, { token })
+    expect(response.status).toBe(200)
+    const body = await response.json() as { items: { id: string }[] }
+    expect(body.items[0]?.id).toBe(LIST_ROW.id)
+  })
+
   it('filters by listStatus[eq]', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
