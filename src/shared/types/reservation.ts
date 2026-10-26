@@ -30,6 +30,7 @@ export interface ReservationRowHydrated extends Reservation {
 
 export interface ReservationListItemSummary {
   id: string
+  itemId: string
   name: string
   quantityDesired: number
   image: ImageDetail | null
@@ -58,6 +59,7 @@ export function toReservationDetail(row: ReservationRowHydrated): ReservationDet
     createdAt: row.createdAt,
     listItem: {
       id: row.listItem.id,
+      itemId: row.listItem.item.id,
       name: row.listItem.item.name,
       quantityDesired: row.listItem.quantityDesired,
       image: row.listItem.image ? toImageDetail(row.listItem.image) : null,
