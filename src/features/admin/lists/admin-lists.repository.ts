@@ -31,6 +31,7 @@ export const listsEntity = defineEntity({
   sortable: LIST_SORTABLE_FIELDS,
   defaultSort: LIST_DEFAULT_SORT,
   filterable: {
+    id:             { column: lists.id,             operators: ['eq', 'in'] },
     title:          { column: lists.title,          operators: ['eq', 'ilike'] },
     listStatus:     { column: lists.listStatus,     operators: ['eq', 'in'],   valueSchema: listStatusSchema },
     occasionTypeId: { column: lists.occasionTypeId, operators: ['eq', 'isNull'], valueSchema: occasionTypeIdSchema },

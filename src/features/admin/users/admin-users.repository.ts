@@ -24,6 +24,7 @@ export const usersEntity = defineEntity({
   },
   defaultSort: [{ field: 'createdAt', direction: 'desc' }],
   filterable: {
+    id:        { column: users.id,        operators: ['eq', 'in'] },
     email:     { column: users.email,     operators: ['eq', 'ilike'] },
     username:  { column: users.username,  operators: ['eq', 'ilike'] },
     createdAt: { column: users.createdAt, operators: ['gte', 'lte', 'between'], valueType: 'date' },
