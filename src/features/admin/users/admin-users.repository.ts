@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { USER_ROLE_VALUES } from '../../../shared/enums/user-role.js'
 import { defineEntity, buildSoftDeleteDefault } from '../../../shared/db/entity-descriptor.js'
 import type { User } from '../../../db/entities/users/users.schema.js'
+import type { UserRowWithAvatar } from '../../../shared/types/user.js'
 
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 import { getOffset } from '../../../shared/schemas/pagination.js'
@@ -66,7 +67,10 @@ export async function countUsers(filters: ListUsersFilters): Promise<number> {
   return row?.count ?? 0
 }
 
-export function findAllUsers(input: PaginationInput, filters: ListUsersFilters): Promise<User[]> {
+export function findAllUsers(
+  input: PaginationInput,
+  filters: ListUsersFilters,
+): Promise<UserRowWithAvatar[]> {
   const offset = getOffset(input)
 
   return db.query.users.findMany({
@@ -74,7 +78,8 @@ export function findAllUsers(input: PaginationInput, filters: ListUsersFilters):
     orderBy: usersEntity.buildOrderBy(filters.sort),
     limit: input.limit,
     offset,
-  })
+    with: { avatarImage: true },
+  }) as Promise<UserRowWithAvatar[]>
 }
 
 export async function adminUpdateUser(

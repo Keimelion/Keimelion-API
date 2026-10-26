@@ -76,6 +76,38 @@ describe('GET /v1/admin/users', () => {
     expect(body.pagination.total).toBe(2)
   })
 
+  it('populates avatar.urls on rows whose avatarImage JOIN is attached', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    const avatarImageRow = {
+      id: '00000000-0000-0000-0000-0000000000a1',
+      hash: 'abc123',
+      fileKey: 'ab/c1/abc123',
+      mime: 'image/jpeg',
+      sizeBytes: 1024,
+      width: 300,
+      height: 300,
+      uploadedBy: TARGET_USER.id,
+      createdAt: new Date('2024-02-01'),
+      updatedAt: new Date('2024-02-01'),
+    }
+    const userWithAvatar = { ...TARGET_USER, avatarImageId: avatarImageRow.id, avatarImage: avatarImageRow }
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
+    mockListUsers([userWithAvatar])
+    mockCountChain(1)
+    mockReservationCountsByUserIds()
+
+    const response = await apiRequest('/v1/admin/users', { token })
+
+    const body = await response.json() as {
+      items: { avatar: { urls: { sm: string; md: string; lg: string } } | null }[]
+    }
+    expect(response.status).toBe(200)
+    expect(body.items[0]?.avatar).not.toBeNull()
+    expect(body.items[0]?.avatar?.urls.sm).toContain('ab/c1/abc123-300.webp')
+    expect(body.items[0]?.avatar?.urls.md).toContain('ab/c1/abc123-800.webp')
+    expect(body.items[0]?.avatar?.urls.lg).toContain('ab/c1/abc123-1600.webp')
+  })
+
   it('hides soft-deleted users by default', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)

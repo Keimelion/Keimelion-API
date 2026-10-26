@@ -1,6 +1,6 @@
 import type { User } from '../../../db/entities/users/users.schema.js'
 import { toUserDetail } from '../../../shared/types/user.js'
-import type { UserDetail } from '../../../shared/types/user.js'
+import type { UserDetail, UserRowWithAvatar } from '../../../shared/types/user.js'
 
 export interface AdminUser extends UserDetail {
   bannedAt: Date | null
@@ -9,7 +9,10 @@ export interface AdminUser extends UserDetail {
   reservationsCount: number
 }
 
-export function toAdminUser(user: User, reservationsCount: number): AdminUser {
+export function toAdminUser(
+  user: User | UserRowWithAvatar,
+  reservationsCount: number,
+): AdminUser {
   return {
     ...toUserDetail(user),
     bannedAt: user.bannedAt ?? null,
