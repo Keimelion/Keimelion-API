@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { secureHeaders } from 'hono/secure-headers'
+import { serveStatic } from '@hono/node-server/serve-static'
 import { env } from './config/env.js'
 import { requestIdMiddleware } from './shared/middlewares/request-id.js'
 import { rateLimitMiddleware } from './shared/middlewares/rate-limit.js'
@@ -9,6 +10,7 @@ import { resolveLocaleMiddleware } from './shared/middlewares/resolve-locale.js'
 import { mountRoutes } from './features/index.js'
 import { ErrorCode } from './shared/enums/error-code.js'
 import { HttpMethod, HttpHeader } from './shared/enums/http.js'
+import { NodeEnvs } from './shared/enums/node-env.js'
 import { sendError } from './shared/utils/response.js'
 import { logger } from './shared/utils/logger.js'
 
@@ -42,6 +44,19 @@ app.use(
     credentials: true,
   }),
 )
+
+// 7. Dev-only static mount for uploaded image variants. In production, nginx
+// serves /uploads/* directly before Hono (see KEI-123 tech notes), so this
+// middleware stays gated to avoid shadowing it.
+if (env.NODE_ENV !== NodeEnvs.PRODUCTION) {
+  app.use(
+    '/uploads/*',
+    serveStatic({
+      root: env.UPLOADS_DIR,
+      rewriteRequestPath: (path) => path.replace(/^\/uploads/, ''),
+    }),
+  )
+}
 
 // Routes
 mountRoutes(app)
