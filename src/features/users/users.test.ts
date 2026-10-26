@@ -1116,3 +1116,280 @@ describe('GET /v1/users/me/export', () => {
   })
 
 })
+
+const OTHER_USER_ID = '00000000-0000-0000-0000-000000000099'
+const RESERVATION_LIST_ID = '00000000-0000-0000-0000-00000001a001'
+const RESERVATION_LIST_ITEM_ID = '00000000-0000-0000-0000-00000001b001'
+const RESERVATION_ID = '00000000-0000-0000-0000-00000001c001'
+
+const RESERVATION_PROFILE_ROW = {
+  id: RESERVATION_ID,
+  listItemId: RESERVATION_LIST_ITEM_ID,
+  userId: SAFE_USER.id,
+  quantityBooked: 2,
+  createdAt: new Date('2024-05-01'),
+  listItem: {
+    id: RESERVATION_LIST_ITEM_ID,
+    listId: RESERVATION_LIST_ID,
+    itemId: '00000000-0000-0000-0000-00000001b100',
+    quantityDesired: 3,
+    quantityReservedTotal: 2,
+    itemStatus: 'available',
+    sortOrder: null,
+    creatorNote: null,
+    imageId: '00000000-0000-0000-0000-00000001b200',
+    createdAt: new Date('2024-04-01'),
+    updatedAt: new Date('2024-04-01'),
+    item: {
+      id: '00000000-0000-0000-0000-00000001b100',
+      name: 'Fancy vase',
+      description: null,
+      imageUrl: null,
+      createdByUserId: null,
+      createdAt: new Date('2024-04-01'),
+      updatedAt: new Date('2024-04-01'),
+    },
+    list: {
+      id: RESERVATION_LIST_ID,
+      occasionTypeId: null,
+      title: 'Birthday',
+      slug: 'birthday',
+      description: null,
+      listStatus: 'active' as const,
+      deletedAt: null,
+      createdAt: new Date('2024-01-01'),
+      updatedAt: new Date('2024-01-01'),
+      collaborators: [
+        {
+          id: '00000000-0000-0000-0000-00000001d001',
+          listId: RESERVATION_LIST_ID,
+          userId: OTHER_USER_ID,
+          invitedEmail: null,
+          collabRole: 'owner' as const,
+          inviteStatus: 'accepted' as const,
+          inviteToken: null,
+          inviteTokenExpiresAt: null,
+          acceptedAt: new Date('2024-01-01'),
+          createdAt: new Date('2024-01-01'),
+          updatedAt: new Date('2024-01-01'),
+          user: { ...SAFE_USER, id: OTHER_USER_ID, username: 'owner-user' },
+        },
+      ],
+    },
+  },
+}
+
+/**
+ * listMyReservations builds two subqueries (feeding inArray) and one real
+ * count aggregate — three db.select() calls total, in an interleaved order
+ * driven by JS argument-evaluation (count aggregate is #2, not #3).
+ *
+ * We dodge the ordering trap by returning a universal chain from every
+ * db.select() call. The chain is both a drizzle-shaped chain (for the
+ * subqueries fed to inArray) and a thenable (for the awaited count
+ * aggregate — `await db.select(...).from(...).where(...)` resolves to
+ * `[{ count: total }]`).
+ */
+function mockMyReservationsCountChain(total: number): void {
+  const chain = {} as Record<string, unknown>
+  chain.from = vi.fn().mockReturnValue(chain)
+  chain.innerJoin = vi.fn().mockReturnValue(chain)
+  chain.where = vi.fn().mockReturnValue(chain)
+  chain.then = (resolve: (value: { count: number }[]) => unknown): unknown =>
+    Promise.resolve([{ count: total }]).then(resolve)
+  vi.mocked(db.select).mockReturnValue(chain as never)
+}
+
+describe('GET /v1/users/me/reservations', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+  })
+
+  it('returns 200 with an empty page when the caller has no reservations', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    vi.mocked(db.query.reservations.findMany).mockResolvedValueOnce([])
+    mockMyReservationsCountChain(0)
+
+    const response = await apiRequest('/v1/users/me/reservations', { token })
+
+    const body = await response.json() as {
+      items: unknown[]
+      pagination: { total: number; page: number; limit: number }
+    }
+    expect(response.status).toBe(200)
+    expect(body.items).toEqual([])
+    expect(body.pagination.total).toBe(0)
+    expect(body.pagination.page).toBe(1)
+  })
+
+  it('returns 200 with a hydrated entry for a single reservation', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    vi.mocked(db.query.reservations.findMany).mockResolvedValueOnce([RESERVATION_PROFILE_ROW] as never)
+    mockMyReservationsCountChain(1)
+
+    const response = await apiRequest('/v1/users/me/reservations', { token })
+
+    const body = await response.json() as {
+      items: {
+        reservation: { id: string; quantityBooked: number; createdAt: string }
+        listItem: { id: string; name: string; quantityDesired: number; imageId: string | null }
+        list: { id: string; slug: string; title: string; ownerDisplayName: string | null }
+      }[]
+      pagination: { total: number }
+    }
+    expect(response.status).toBe(200)
+    expect(body.pagination.total).toBe(1)
+    expect(body.items).toHaveLength(1)
+    expect(body.items[0]?.reservation.id).toBe(RESERVATION_ID)
+    expect(body.items[0]?.reservation.quantityBooked).toBe(2)
+    expect(body.items[0]?.listItem.id).toBe(RESERVATION_LIST_ITEM_ID)
+    expect(body.items[0]?.listItem.name).toBe('Fancy vase')
+    expect(body.items[0]?.listItem.quantityDesired).toBe(3)
+    expect(body.items[0]?.listItem.imageId).toBe('00000000-0000-0000-0000-00000001b200')
+    expect(body.items[0]?.list.id).toBe(RESERVATION_LIST_ID)
+    expect(body.items[0]?.list.slug).toBe('birthday')
+    expect(body.items[0]?.list.title).toBe('Birthday')
+    expect(body.items[0]?.list.ownerDisplayName).toBe('owner-user')
+  })
+
+  it('returns 200 with multiple reservations spanning several lists', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    const secondRow = {
+      ...RESERVATION_PROFILE_ROW,
+      id: '00000000-0000-0000-0000-00000001c002',
+      createdAt: new Date('2024-06-01'),
+      listItem: {
+        ...RESERVATION_PROFILE_ROW.listItem,
+        id: '00000000-0000-0000-0000-00000001b002',
+        imageId: null,
+        item: { ...RESERVATION_PROFILE_ROW.listItem.item, name: 'Other item' },
+        list: {
+          ...RESERVATION_PROFILE_ROW.listItem.list,
+          id: '00000000-0000-0000-0000-00000001a002',
+          slug: 'wedding',
+          title: 'Wedding',
+        },
+      },
+    }
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    vi.mocked(db.query.reservations.findMany).mockResolvedValueOnce(
+      [RESERVATION_PROFILE_ROW, secondRow] as never,
+    )
+    mockMyReservationsCountChain(2)
+
+    const response = await apiRequest('/v1/users/me/reservations', { token })
+
+    const body = await response.json() as {
+      items: { list: { slug: string }; listItem: { imageId: string | null } }[]
+      pagination: { total: number }
+    }
+    expect(response.status).toBe(200)
+    expect(body.pagination.total).toBe(2)
+    expect(body.items).toHaveLength(2)
+    expect(body.items.map((row) => row.list.slug)).toEqual(['birthday', 'wedding'])
+    expect(body.items[1]?.listItem.imageId).toBeNull()
+  })
+
+  it('surfaces ownerDisplayName as null when the owner is anonymized (user.username = null)', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    const anonymizedOwnerRow = {
+      ...RESERVATION_PROFILE_ROW,
+      listItem: {
+        ...RESERVATION_PROFILE_ROW.listItem,
+        list: {
+          ...RESERVATION_PROFILE_ROW.listItem.list,
+          collaborators: [
+            {
+              ...RESERVATION_PROFILE_ROW.listItem.list.collaborators[0],
+              user: { ...SAFE_USER, id: OTHER_USER_ID, username: null },
+            },
+          ],
+        },
+      },
+    }
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    vi.mocked(db.query.reservations.findMany).mockResolvedValueOnce([anonymizedOwnerRow] as never)
+    mockMyReservationsCountChain(1)
+
+    const response = await apiRequest('/v1/users/me/reservations', { token })
+
+    const body = await response.json() as {
+      items: { list: { ownerDisplayName: string | null } }[]
+    }
+    expect(response.status).toBe(200)
+    expect(body.items[0]?.list.ownerDisplayName).toBeNull()
+  })
+
+  it('passes pagination params to the repository (limit=5, page=2 → offset=5)', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    vi.mocked(db.query.reservations.findMany).mockResolvedValueOnce([])
+    mockMyReservationsCountChain(0)
+
+    const response = await apiRequest('/v1/users/me/reservations?page=2&limit=5', { token })
+
+    expect(response.status).toBe(200)
+    const findManyArgs = vi.mocked(db.query.reservations.findMany).mock.calls[0]?.[0]
+    expect(findManyArgs?.limit).toBe(5)
+    expect(findManyArgs?.offset).toBe(5)
+  })
+
+  it('issues a single findMany query (no N+1 for listItem / list / owner)', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    vi.mocked(db.query.reservations.findMany).mockResolvedValueOnce([RESERVATION_PROFILE_ROW] as never)
+    mockMyReservationsCountChain(1)
+
+    await apiRequest('/v1/users/me/reservations', { token })
+
+    expect(vi.mocked(db.query.reservations.findMany)).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(db.query.listItems.findMany)).not.toHaveBeenCalled()
+    expect(vi.mocked(db.query.lists.findMany)).not.toHaveBeenCalled()
+    expect(vi.mocked(db.query.users.findMany)).not.toHaveBeenCalled()
+  })
+
+  it('accepts sort=quantityBooked:asc and passes an orderBy clause to the repository', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    vi.mocked(db.query.reservations.findMany).mockResolvedValueOnce([])
+    mockMyReservationsCountChain(0)
+
+    const response = await apiRequest(
+      '/v1/users/me/reservations?sort=quantityBooked:asc',
+      { token },
+    )
+
+    expect(response.status).toBe(200)
+    const findManyArgs = vi.mocked(db.query.reservations.findMany).mock.calls[0]?.[0]
+    expect(findManyArgs?.orderBy).toBeDefined()
+  })
+
+  it('scopes the query to the caller — the repository where clause includes the auth user id', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    vi.mocked(db.query.reservations.findMany).mockResolvedValueOnce([])
+    mockMyReservationsCountChain(0)
+
+    await apiRequest('/v1/users/me/reservations', { token })
+
+    expect(vi.mocked(db.query.reservations.findMany)).toHaveBeenCalledTimes(1)
+    const findManyArgs = vi.mocked(db.query.reservations.findMany).mock.calls[0]?.[0]
+    expect(findManyArgs?.where).toBeDefined()
+  })
+
+  it('returns 422 when sort field is not whitelisted', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+
+    const response = await apiRequest('/v1/users/me/reservations?sort=unknown:asc', { token })
+    expect(response.status).toBe(422)
+  })
+
+  it('returns 401 when no authorization header is provided', async () => {
+    const response = await apiRequest('/v1/users/me/reservations')
+    expect(response.status).toBe(401)
+  })
+})
