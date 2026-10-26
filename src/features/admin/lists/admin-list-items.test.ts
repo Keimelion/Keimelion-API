@@ -266,6 +266,38 @@ describe('GET /v1/admin/lists/:id/items', () => {
     expect(body.items[1]?.sources.map((source) => source.price)).toEqual(['19.99', null])
   })
 
+  it('populates image.urls on list_items whose image JOIN is attached', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    const imageRow = {
+      id: '00000000-0000-0000-0000-0000000000c1',
+      hash: 'c0ffee',
+      fileKey: 'c0/ff/c0ffee',
+      mime: 'image/webp',
+      sizeBytes: 2048,
+      width: 400,
+      height: 400,
+      uploadedBy: ADMIN_USER.id,
+      createdAt: new Date('2024-02-01'),
+      updatedAt: new Date('2024-02-01'),
+    }
+    const listItemWithImage = { ...LIST_ITEM_WITH_PRICED, imageId: imageRow.id, image: imageRow }
+    mockAdminAuth()
+    mockFindListById(LIST_ROW)
+    mockFindListItems([listItemWithImage])
+    mockCountChain(1)
+
+    const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}/items`, { token })
+
+    const body = await response.json() as {
+      items: { image: { urls: { sm: string; md: string; lg: string } } | null }[]
+    }
+    expect(response.status).toBe(200)
+    expect(body.items[0]?.image).not.toBeNull()
+    expect(body.items[0]?.image?.urls.sm).toContain('c0/ff/c0ffee-300.webp')
+    expect(body.items[0]?.image?.urls.md).toContain('c0/ff/c0ffee-800.webp')
+    expect(body.items[0]?.image?.urls.lg).toContain('c0/ff/c0ffee-1600.webp')
+  })
+
   it('returns averagePrice as a USD scalar by default', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
