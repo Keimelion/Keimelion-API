@@ -22,6 +22,19 @@ export const app = new Hono()
 // 1. Request ID — must be first so all subsequent logs include the ID
 app.use('*', requestIdMiddleware)
 
+// 1b. CORP override for dev-only /uploads/* — secureHeaders sets
+// Cross-Origin-Resource-Policy: same-origin on every response AFTER next(),
+// which would prevent the BackOffice (:3001) from loading images from the
+// API (:3000) via <img>. Registering this middleware BEFORE secureHeaders
+// means on the response ascent it runs LAST, overwriting secureHeaders' value.
+// Dev-only: in production nginx serves /uploads/* without this header.
+if (env.NODE_ENV !== NodeEnvs.PRODUCTION) {
+  app.use('/uploads/*', async (c, next) => {
+    await next()
+    c.res.headers.set('Cross-Origin-Resource-Policy', 'cross-origin')
+  })
+}
+
 // 2. Secure HTTP headers
 app.use('*', secureHeaders())
 
