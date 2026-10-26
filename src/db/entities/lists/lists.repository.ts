@@ -1,11 +1,12 @@
-import { and, eq, isNull } from 'drizzle-orm'
+import { and, asc, eq, isNull, sql } from 'drizzle-orm'
 import { db } from '../../client.js'
 import { CollabRoles } from '../../../shared/enums/collab-role.js'
 import { pickDefined } from '../../../shared/utils/partial-update.js'
 import { listCollaborators } from '../list-collaborators/list-collaborators.schema.js'
+import { listItems } from '../list-items/list-items.schema.js'
 import { lists } from './lists.schema.js'
 import type { ListStatus } from '../../../shared/enums/list-status.js'
-import type { ListRowWithOwner } from '../../../shared/types/list.js'
+import type { ListRowWithOwner, PublicListRow } from '../../../shared/types/list.js'
 import type { List } from './lists.schema.js'
 
 export const LIST_WITH_OWNER = {
@@ -47,6 +48,45 @@ export async function findListWithOwner(
   if (!row) return undefined
   if (options.excludeDeleted && row.deletedAt !== null) return undefined
   return row
+}
+
+interface FindListBySlugOptions {
+  excludeDeleted: boolean
+}
+
+export function findListBySlug(
+  slug: string,
+  options: FindListBySlugOptions,
+): Promise<PublicListRow | undefined> {
+  const where = options.excludeDeleted
+    ? and(eq(lists.slug, slug), isNull(lists.deletedAt))
+    : eq(lists.slug, slug)
+  return db.query.lists.findFirst({
+    where,
+    with: {
+      collaborators: {
+        where: eq(listCollaborators.collabRole, CollabRoles.OWNER),
+        limit: 1,
+        with: { user: { with: { avatarImage: true } } },
+      },
+      listTags: {
+        with: { tag: true },
+      },
+      listItems: {
+        orderBy: [sql`${listItems.sortOrder} ASC NULLS LAST`, asc(listItems.createdAt)],
+        with: {
+          image: true,
+          item: {
+            with: {
+              sources: { with: { shop: true } },
+              itemCategories: { with: { category: { with: { translations: true } } } },
+              itemTags: { with: { tag: true } },
+            },
+          },
+        },
+      },
+    },
+  }) as Promise<PublicListRow | undefined>
 }
 
 export type InsertList = Pick<
