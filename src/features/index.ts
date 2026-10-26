@@ -10,6 +10,7 @@ import { itemsRouter } from './items/items.routes.js'
 import { categoriesRouter } from './categories/categories.routes.js'
 import { tagsRouter } from './tags/tags.routes.js'
 import { feedbackRouter } from './feedback/feedback.routes.js'
+import { publicRouter } from './public/public.routes.js'
 import { reservationsRouter } from './reservations/reservations.routes.js'
 
 export function mountRoutes(app: Hono): void {
@@ -25,6 +26,7 @@ export function mountRoutes(app: Hono): void {
   v1.route('/categories', categoriesRouter)
   v1.route('/tags', tagsRouter)
   v1.route('/feedback', feedbackRouter)
+  v1.route('/public', publicRouter)
   v1.route('/', reservationsRouter)
   app.route('/v1', v1)
 }

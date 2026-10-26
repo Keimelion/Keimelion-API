@@ -30,11 +30,14 @@ export function createRateLimiter(limit: number, windowMs: number = ONE_MINUTE_M
 // STANDARD — normal writes: signup and admin-triggered mutations.
 // SENSITIVE — side-effect-heavy or brute-force-resistant paths: password reset flow, token refresh.
 // UPLOAD — image uploads: expensive (sharp decode + webp encode × 3) and disk-bound; tighter than STANDARD.
+// PUBLIC — unauthenticated reads (shared wishlists by slug). Tighter than STANDARD because the
+// anonymous surface is a scraping target; still high enough for a human browsing one list.
 export const RATE_LIMITS = {
   STRICT: () => createRateLimiter(5, ONE_MINUTE_MS),
   STANDARD: () => createRateLimiter(20, ONE_MINUTE_MS),
   SENSITIVE: () => createRateLimiter(10, TEN_MINUTES_MS),
   UPLOAD: () => createRateLimiter(10, ONE_MINUTE_MS),
+  PUBLIC: () => createRateLimiter(10, ONE_MINUTE_MS),
 } as const
 
 export function multipartOnly(middleware: MiddlewareHandler): MiddlewareHandler {
