@@ -15,7 +15,7 @@ import { addItemToList } from '../lists.service.js'
 
 const addItemSchema = z
   .object({
-    itemId: z.string().uuid(),
+    itemId: z.guid(),
     quantityDesired: quantityDesiredSchema.optional(),
     creatorNote: creatorNoteSchema.optional(),
   })

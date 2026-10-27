@@ -88,7 +88,7 @@ const MOCK_LIST_ITEM = {
 const ACCESS_TOKEN_ENTRY = makeAccessTokenEntry(AUTH_USER.id)
 
 function mockAuthChain(): void {
-  vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+  vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
   vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(AUTH_USER)
 }
 
@@ -96,7 +96,7 @@ function mockListAndOwner(list: unknown = MOCK_LIST, owner: unknown = AUTH_USER)
   // The listOwnershipMiddleware fetches the list with its owner relation in one query
   // and derives ownership from the embedded collaborator — no separate DB call.
   vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(
-    (list && owner !== null ? rowWithOwner(list as object, owner) : list) as never,
+    (list && owner !== null ? rowWithOwner(list, owner) : list) as never,
   )
 }
 
@@ -164,7 +164,7 @@ function mockUpdateListRejects(error: unknown): void {
 describe('POST /v1/lists', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
   })
 
   it('returns 201 with created list when body is valid', async () => {
@@ -404,7 +404,7 @@ describe('POST /v1/lists', () => {
 describe('GET /v1/lists', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
   })
 
   it('returns 200 with paginated owned lists', async () => {
@@ -462,7 +462,7 @@ describe('GET /v1/lists', () => {
 describe('GET /v1/lists/:id', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
   })
 
   it('returns 200 with list detail when caller owns the list', async () => {
@@ -481,7 +481,7 @@ describe('GET /v1/lists/:id', () => {
   it('returns 404 when the list is soft-deleted', async () => {
     const token = await generateTestToken(AUTH_USER.id)
     mockAuthChain()
-    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(DELETED_LIST as never)
+    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(DELETED_LIST)
 
     const response = await apiRequest(`/v1/lists/${LIST_ID}`, { token })
     expect(response.status).toBe(404)
@@ -524,7 +524,7 @@ describe('GET /v1/lists/:id', () => {
 describe('PATCH /v1/lists/:id', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
   })
 
   it('returns 200 with updated list when patching title', async () => {
@@ -602,7 +602,7 @@ describe('PATCH /v1/lists/:id', () => {
   it('returns 404 when list is soft-deleted', async () => {
     const token = await generateTestToken(AUTH_USER.id)
     mockAuthChain()
-    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(DELETED_LIST as never)
+    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(DELETED_LIST)
 
     const response = await apiRequest(`/v1/lists/${LIST_ID}`, {
       method: 'PATCH',
@@ -714,7 +714,7 @@ describe('PATCH /v1/lists/:id', () => {
 describe('DELETE /v1/lists/:id', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
   })
 
   it('returns 204 when soft-deleting an owned active list', async () => {
@@ -730,7 +730,7 @@ describe('DELETE /v1/lists/:id', () => {
   it('returns 404 when the list is already soft-deleted', async () => {
     const token = await generateTestToken(AUTH_USER.id)
     mockAuthChain()
-    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(DELETED_LIST as never)
+    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(DELETED_LIST)
 
     const response = await apiRequest(`/v1/lists/${LIST_ID}`, { method: 'DELETE', token })
     expect(response.status).toBe(404)
@@ -770,7 +770,7 @@ describe('POST /v1/lists/:id/items', () => {
     const token = await generateTestToken(AUTH_USER.id)
     mockAuthChain()
     mockListAndOwner()
-    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(MOCK_ITEM as never)
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(MOCK_ITEM)
     mockInsertListItem(MOCK_LIST_ITEM)
 
     const response = await apiRequest(`/v1/lists/${LIST_ID}/items`, {
@@ -803,7 +803,7 @@ describe('POST /v1/lists/:id/items', () => {
 
   it('returns 422 when itemId is missing', async () => {
     const token = await generateTestToken(AUTH_USER.id)
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(AUTH_USER)
 
     const response = await apiRequest(`/v1/lists/${LIST_ID}/items`, {
@@ -817,7 +817,7 @@ describe('POST /v1/lists/:id/items', () => {
 
   it('returns 422 when itemId is not a UUID', async () => {
     const token = await generateTestToken(AUTH_USER.id)
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(AUTH_USER)
 
     const response = await apiRequest(`/v1/lists/${LIST_ID}/items`, {
@@ -831,7 +831,7 @@ describe('POST /v1/lists/:id/items', () => {
 
   it('returns 403 when user is not owner of the list', async () => {
     const token = await generateTestToken(AUTH_USER.id)
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(AUTH_USER)
     vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(
       rowWithOwner(MOCK_LIST, null) as never,
@@ -848,7 +848,7 @@ describe('POST /v1/lists/:id/items', () => {
 
   it('returns 404 when list does not exist', async () => {
     const token = await generateTestToken(AUTH_USER.id)
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(AUTH_USER)
     vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(undefined)
 
@@ -863,7 +863,7 @@ describe('POST /v1/lists/:id/items', () => {
 
   it('returns 422 when list id param is not a uuid', async () => {
     const token = await generateTestToken(AUTH_USER.id)
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(AUTH_USER)
 
     const response = await apiRequest('/v1/lists/not-a-uuid/items', {
@@ -914,7 +914,7 @@ function listTagLink(tag: typeof TAG_GAMING_ROW): {
 describe('lists mapper hydrates tags', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
   })
 
   it('returns tags array on GET /v1/lists/:id', async () => {

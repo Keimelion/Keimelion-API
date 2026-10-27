@@ -11,7 +11,7 @@ import type { FeatureRouter } from '../../../../shared/types/app.js'
 import { listListItemsByListId } from '../admin-lists.service.js'
 import { resolveDisplayCurrency } from '../display-currency.js'
 
-const listListItemsQuerySchema = paginationQuerySchema.merge(displayCurrencyQuerySchema)
+const listListItemsQuerySchema = paginationQuerySchema.extend(displayCurrencyQuerySchema.shape)
 
 export function mountListListItems(router: FeatureRouter): void {
   router.get(

@@ -10,4 +10,4 @@ export const listDescriptionSchema = z
   .nullable()
   .transform((value) => (value === '' ? null : value))
 
-export const listOccasionTypeIdSchema = z.string().uuid().nullable()
+export const listOccasionTypeIdSchema = z.guid().nullable()

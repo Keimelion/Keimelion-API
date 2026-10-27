@@ -6,7 +6,7 @@ import { verifyEmail } from '../auth.service.js'
 import type { FeatureRouter } from '../../../shared/types/app.js'
 
 const verifyEmailSchema = z.object({
-  token: z.string().uuid(),
+  token: z.guid(),
 })
 
 export type VerifyEmailInput = z.infer<typeof verifyEmailSchema>

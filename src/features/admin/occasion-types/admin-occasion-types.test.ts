@@ -38,15 +38,15 @@ const OCCASION_TYPE_TRANSLATIONS = [
 const ACCESS_TOKEN_ENTRY = makeAccessTokenEntry(ADMIN_USER.id)
 
 function mockAdminAuth(): void {
-  vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
-  vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER as never)
+  vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
+  vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
 }
 
 function mockNonAdminAuth(): void {
   vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(
-    makeAccessTokenEntry(NON_ADMIN_USER.id) as never,
+    makeAccessTokenEntry(NON_ADMIN_USER.id),
   )
-  vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(NON_ADMIN_USER as never)
+  vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(NON_ADMIN_USER)
 }
 
 function mockInsertTransaction(returnRow: unknown): void {
@@ -87,7 +87,7 @@ function mockCountChain(total: number): void {
 describe('POST /v1/admin/occasion-types', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
   })
 
   it('returns 201 with created occasion type when payload is valid', async () => {
@@ -263,7 +263,7 @@ describe('POST /v1/admin/occasion-types', () => {
 describe('GET /v1/admin/occasion-types', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
   })
 
   it('returns 200 with paginated occasion types including inactive rows', async () => {
@@ -347,7 +347,7 @@ describe('GET /v1/admin/occasion-types', () => {
 describe('PATCH /v1/admin/occasion-types/:id', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
   })
 
   it('returns 200 with updated occasion type when patching sortOrder', async () => {
@@ -507,7 +507,7 @@ describe('PATCH /v1/admin/occasion-types/:id', () => {
 describe('DELETE /v1/admin/occasion-types/:id', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
   })
 
   it('returns 204 and deletes the occasion type', async () => {

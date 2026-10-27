@@ -51,7 +51,7 @@ function mockFetchResponse(body: string, ok = true, status = 200): void {
     ok,
     status,
     text: () => Promise.resolve(body),
-  } as Response)
+  })
   vi.stubGlobal('fetch', fetchMock)
 }
 

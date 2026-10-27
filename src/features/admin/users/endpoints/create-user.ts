@@ -12,7 +12,7 @@ import { createUser } from '../admin-users.service.js'
 
 const adminCreateUserSchema = z
   .object({
-    email: z.string().email().transform((value) => value.toLowerCase().trim()),
+    email: z.email().transform((value) => value.toLowerCase().trim()),
     username: usernameSchema.nullish().transform((value) => value ?? null),
     role: z.enum(USER_ROLE_VALUES),
   })

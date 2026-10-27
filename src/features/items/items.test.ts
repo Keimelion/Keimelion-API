@@ -173,7 +173,7 @@ describe('GET /v1/items/:id', () => {
   })
 
   it('returns 200 with item and embedded sources', async () => {
-    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(itemWith([SOURCE_ROW]) as never)
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(itemWith([SOURCE_ROW]))
 
     const response = await apiRequest(`/v1/items/${ITEM_ROW.id}`)
 
@@ -186,7 +186,7 @@ describe('GET /v1/items/:id', () => {
   })
 
   it('embeds shop on sources that reference one', async () => {
-    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(itemWith([SOURCE_WITH_SHOP_ROW]) as never)
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(itemWith([SOURCE_WITH_SHOP_ROW]))
 
     const response = await apiRequest(`/v1/items/${ITEM_ROW.id}`)
 
@@ -210,7 +210,7 @@ describe('GET /v1/items/:id', () => {
   })
 
   it('does not require authentication', async () => {
-    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(itemWith([]) as never)
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(itemWith([]))
 
     const response = await apiRequest(`/v1/items/${ITEM_ROW.id}`)
     expect(response.status).toBe(200)
@@ -276,7 +276,7 @@ const CATEGORY_TWO = {
 const OWNER_ACCESS_TOKEN_ENTRY = makeAccessTokenEntry(OWNER_USER.id)
 
 function mockOwnerAuth(): void {
-  vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(OWNER_ACCESS_TOKEN_ENTRY as never)
+  vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(OWNER_ACCESS_TOKEN_ENTRY)
   vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(OWNER_USER as never)
 }
 
@@ -316,7 +316,7 @@ function mockUpdateItemTagsTransaction(tagsReturned: (typeof TAG_GAMING_ROW)[]):
       }),
       query: { tags: { findMany: tagsFindMany } },
     }
-    return callback(tx as never) as never
+    return callback(tx as never)
   })
 }
 
@@ -332,7 +332,7 @@ function itemWithTagLinks(tags: (typeof TAG_GAMING_ROW)[]): object {
 describe('POST /v1/items', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(OWNER_ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(OWNER_ACCESS_TOKEN_ENTRY)
   })
 
   function mockCreateItemTransaction(
@@ -351,7 +351,7 @@ describe('POST /v1/items', () => {
         delete: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
         query: { tags: { findMany: tagsFindMany } },
       }
-      return callback(tx as never) as never
+      return callback(tx as never)
     })
   }
 
@@ -567,7 +567,7 @@ describe('POST /v1/items', () => {
         delete: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
         query: { tags: { findMany: vi.fn().mockResolvedValue([]) } },
       }
-      return (await callback(tx as never)) as never
+      return (await callback(tx as never))
     })
 
     const response = await apiRequest('/v1/items', {
@@ -584,14 +584,14 @@ describe('POST /v1/items', () => {
 describe('PATCH /v1/items/:id', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(OWNER_ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(OWNER_ACCESS_TOKEN_ENTRY)
   })
 
   it('replaces tags and returns item with hydrated tags when the user owns the item', async () => {
     const token = await generateTestToken(OWNER_USER.id)
     mockOwnerAuth()
     vi.mocked(db.query.items.findFirst)
-      .mockResolvedValueOnce(OWNED_ITEM_ROW as never)
+      .mockResolvedValueOnce(OWNED_ITEM_ROW)
       .mockResolvedValueOnce(itemWithTagLinks([TAG_GAMING_ROW, TAG_READING_ROW]) as never)
     mockUpdateItemTagsTransaction([TAG_GAMING_ROW, TAG_READING_ROW])
 
@@ -610,7 +610,7 @@ describe('PATCH /v1/items/:id', () => {
     const token = await generateTestToken(OWNER_USER.id)
     mockOwnerAuth()
     vi.mocked(db.query.items.findFirst)
-      .mockResolvedValueOnce(OWNED_ITEM_ROW as never)
+      .mockResolvedValueOnce(OWNED_ITEM_ROW)
       .mockResolvedValueOnce(itemWithTagLinks([]) as never)
     mockUpdateItemTagsTransaction([])
 
@@ -627,9 +627,9 @@ describe('PATCH /v1/items/:id', () => {
 
   it('returns 403 FORBIDDEN when the user does not own the item', async () => {
     const token = await generateTestToken(OTHER_USER_ID)
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(makeAccessTokenEntry(OTHER_USER_ID) as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(makeAccessTokenEntry(OTHER_USER_ID))
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce({ ...OWNER_USER, id: OTHER_USER_ID } as never)
-    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(OWNED_ITEM_ROW as never)
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(OWNED_ITEM_ROW)
 
     const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}`, {
       method: 'PATCH',
@@ -657,7 +657,7 @@ describe('PATCH /v1/items/:id', () => {
   it('returns 422 TAG_INVALID_NAME when a tag name normalizes to an empty slug', async () => {
     const token = await generateTestToken(OWNER_USER.id)
     mockOwnerAuth()
-    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(OWNED_ITEM_ROW as never)
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(OWNED_ITEM_ROW)
 
     const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}`, {
       method: 'PATCH',
@@ -709,7 +709,7 @@ describe('PATCH /v1/items/:id', () => {
     const token = await generateTestToken(OWNER_USER.id)
     mockOwnerAuth()
     vi.mocked(db.query.items.findFirst)
-      .mockResolvedValueOnce(OWNED_ITEM_ROW as never)
+      .mockResolvedValueOnce(OWNED_ITEM_ROW)
       .mockResolvedValueOnce({
         ...OWNED_ITEM_ROW,
         sources: [],
@@ -735,7 +735,7 @@ describe('PATCH /v1/items/:id', () => {
   it('returns 404 CATEGORY_NOT_FOUND when a categoryId does not exist', async () => {
     const token = await generateTestToken(OWNER_USER.id)
     mockOwnerAuth()
-    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(OWNED_ITEM_ROW as never)
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(OWNED_ITEM_ROW)
     vi.mocked(db.query.categories.findMany).mockResolvedValueOnce([CATEGORY_ONE] as never)
 
     const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}`, {
@@ -753,7 +753,7 @@ describe('PATCH /v1/items/:id', () => {
     const token = await generateTestToken(OWNER_USER.id)
     mockOwnerAuth()
     vi.mocked(db.query.items.findFirst)
-      .mockResolvedValueOnce(OWNED_ITEM_ROW as never)
+      .mockResolvedValueOnce(OWNED_ITEM_ROW)
       .mockResolvedValueOnce({
         ...OWNED_ITEM_ROW,
         sources: [],
@@ -784,7 +784,7 @@ describe('PATCH /v1/items/:id', () => {
     mockOwnerAuth()
     const renamed = { ...OWNED_ITEM_ROW, name: 'Renamed Item' }
     vi.mocked(db.query.items.findFirst)
-      .mockResolvedValueOnce(OWNED_ITEM_ROW as never)
+      .mockResolvedValueOnce(OWNED_ITEM_ROW)
       .mockResolvedValueOnce({ ...renamed, sources: [], itemCategories: [], itemTags: [] } as never)
     mockUpdateItemTagsTransaction([])
 
@@ -806,7 +806,7 @@ describe('PATCH /v1/items/:id', () => {
     mockOwnerAuth()
     const updated = { ...OWNED_ITEM_ROW, description: 'A new description' }
     vi.mocked(db.query.items.findFirst)
-      .mockResolvedValueOnce(OWNED_ITEM_ROW as never)
+      .mockResolvedValueOnce(OWNED_ITEM_ROW)
       .mockResolvedValueOnce({ ...updated, sources: [], itemCategories: [], itemTags: [] } as never)
     mockUpdateItemTagsTransaction([])
 
@@ -825,7 +825,7 @@ describe('PATCH /v1/items/:id', () => {
     const token = await generateTestToken(OWNER_USER.id)
     mockOwnerAuth()
     vi.mocked(db.query.items.findFirst)
-      .mockResolvedValueOnce(OWNED_ITEM_ROW as never)
+      .mockResolvedValueOnce(OWNED_ITEM_ROW)
       .mockResolvedValueOnce({ ...OWNED_ITEM_ROW, description: null, sources: [], itemCategories: [], itemTags: [] } as never)
     mockUpdateItemTagsTransaction([])
 
@@ -845,7 +845,7 @@ describe('PATCH /v1/items/:id', () => {
     mockOwnerAuth()
     const newUrl = 'https://example.com/img.jpg'
     vi.mocked(db.query.items.findFirst)
-      .mockResolvedValueOnce(OWNED_ITEM_ROW as never)
+      .mockResolvedValueOnce(OWNED_ITEM_ROW)
       .mockResolvedValueOnce({ ...OWNED_ITEM_ROW, imageUrl: newUrl, sources: [], itemCategories: [], itemTags: [] } as never)
     mockUpdateItemTagsTransaction([])
 
@@ -864,7 +864,7 @@ describe('PATCH /v1/items/:id', () => {
     const token = await generateTestToken(OWNER_USER.id)
     mockOwnerAuth()
     vi.mocked(db.query.items.findFirst)
-      .mockResolvedValueOnce(OWNED_ITEM_ROW as never)
+      .mockResolvedValueOnce(OWNED_ITEM_ROW)
       .mockResolvedValueOnce({
         ...OWNED_ITEM_ROW,
         name: 'Renamed',

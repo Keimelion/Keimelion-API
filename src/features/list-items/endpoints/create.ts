@@ -20,16 +20,16 @@ type AppContext = Context<{ Variables: AppVariables }>
 
 const jsonCreateListItemSchema = z
   .object({
-    listId: z.string().uuid(),
-    itemId: z.string().uuid(),
+    listId: z.guid(),
+    itemId: z.guid(),
     quantityDesired: quantityDesiredSchema.optional(),
     creatorNote: creatorNoteSchema.optional(),
   })
   .strict()
 
 const multipartCreateListItemSchema = z.object({
-  listId: z.string().uuid(),
-  itemId: z.string().uuid(),
+  listId: z.guid(),
+  itemId: z.guid(),
   quantityDesired: z.coerce.number().int().min(1).max(100).optional(),
   creatorNote: creatorNoteSchema.optional(),
 })

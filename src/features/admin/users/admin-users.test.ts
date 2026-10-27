@@ -57,7 +57,7 @@ function mockReservationCountForUser(total = 0): void {
 describe('GET /v1/admin/users', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
   })
 
   it('returns 200 with paginated users list when admin is authenticated', async () => {
@@ -495,7 +495,7 @@ describe('GET /v1/admin/users', () => {
 describe('GET /v1/admin/users/:id', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
   })
 
   it('returns 200 with admin user when id is valid', async () => {
@@ -571,7 +571,7 @@ describe('GET /v1/admin/users/:id', () => {
 describe('PATCH /v1/admin/users/:id', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
   })
 
   it('returns 200 with updated user when body is valid', async () => {
@@ -842,7 +842,7 @@ describe('PATCH /v1/admin/users/:id', () => {
 describe('DELETE /v1/admin/users/:id', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
   })
 
   it('returns 200 and soft-deletes the user', async () => {
@@ -906,7 +906,7 @@ describe('DELETE /v1/admin/users/:id', () => {
 describe('POST /v1/admin/users', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
   })
 
   function mockInsertUser(): void {

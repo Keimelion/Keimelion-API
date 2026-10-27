@@ -5,7 +5,7 @@ import type { FilterInput } from './filter-parser.js'
 const defaultScalarSchema = z.string()
 const booleanStringSchema = z.enum(['true', 'false'])
 const numericStringSchema = z.string().regex(/^-?\d+(?:\.\d+)?$/, 'must be a numeric string')
-const isoDateStringSchema = z.string().datetime({ offset: true })
+const isoDateStringSchema = z.iso.datetime({ offset: true })
 
 export function buildFilterSchema<TEntity>(config: FilterConfig<TEntity>): z.ZodType<FilterInput[]> {
   const entrySchemas = Object.entries(config).flatMap(([field, fieldConfig]) => {
@@ -46,7 +46,7 @@ function buildEntrySchema(
     field:    z.literal(field),
     operator: z.literal(operator),
     value:    resolveValueSchema(operator, scalarSchema),
-  }) as z.ZodType<FilterInput>
+  })
 }
 
 function resolveValueSchema(

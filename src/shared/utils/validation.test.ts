@@ -39,7 +39,7 @@ describe('validationErrorHandler', () => {
     expect(body.metadata.issues[0]).toEqual({
       path: 'slug',
       message: 'slug must be lowercase',
-      code: 'invalid_string',
+      code: 'invalid_format',
     })
   })
 

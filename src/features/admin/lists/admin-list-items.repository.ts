@@ -42,7 +42,7 @@ export function findListItemsByListIdPaged(
         },
       },
     },
-  }) as Promise<AdminListItemRow[]>
+  })
 }
 
 export async function countListItemsByListId(listId: string): Promise<number> {

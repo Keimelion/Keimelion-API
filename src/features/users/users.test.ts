@@ -35,7 +35,7 @@ const ACCESS_TOKEN_ENTRY = makeAccessTokenEntry(SAFE_USER.id)
 describe('GET /v1/users/me', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
   })
 
   it('returns 200 with user profile when authenticated', async () => {
@@ -97,7 +97,7 @@ describe('GET /v1/users/me', () => {
 describe('PATCH /v1/users/me', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
   })
 
   it('returns 200 with updated profile when body is valid', async () => {
@@ -227,7 +227,7 @@ describe('PATCH /v1/users/me', () => {
 describe('POST /v1/users/me/change-password', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
   })
 
   it('returns 200 with message and revokes all tokens when current password is correct', async () => {
@@ -353,14 +353,14 @@ function buildDeletionTx() {
 describe('DELETE /v1/users/me', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
   })
 
   it('returns 200 and runs the full RGPD deletion transaction', async () => {
     const token = await generateTestToken(SAFE_USER.id)
 
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
-    vi.mocked(db.transaction).mockImplementationOnce((callback) => callback(buildDeletionTx() as never) as never)
+    vi.mocked(db.transaction).mockImplementationOnce((callback) => callback(buildDeletionTx() as never))
 
     const response = await apiRequest('/v1/users/me', { method: 'DELETE', token })
 
@@ -376,7 +376,7 @@ describe('DELETE /v1/users/me', () => {
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
 
     const tx = buildDeletionTx()
-    vi.mocked(db.transaction).mockImplementationOnce((callback) => callback(tx as never) as never)
+    vi.mocked(db.transaction).mockImplementationOnce((callback) => callback(tx as never))
 
     await apiRequest('/v1/users/me', { method: 'DELETE', token })
 
@@ -406,7 +406,7 @@ describe('DELETE /v1/users/me', () => {
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
 
     const tx = buildDeletionTx()
-    vi.mocked(db.transaction).mockImplementationOnce((callback) => callback(tx as never) as never)
+    vi.mocked(db.transaction).mockImplementationOnce((callback) => callback(tx as never))
 
     await apiRequest('/v1/users/me', { method: 'DELETE', token })
 
@@ -422,7 +422,7 @@ describe('DELETE /v1/users/me', () => {
 describe('GET /v1/users/me/export', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
   })
 
   it('returns 200 with JSON export when format=json', async () => {
@@ -1071,7 +1071,7 @@ describe('GET /v1/users/me/export', () => {
       },
     ]
 
-    vi.mocked(db.query.reservations.findMany).mockResolvedValueOnce(rows as never)
+    vi.mocked(db.query.reservations.findMany).mockResolvedValueOnce(rows)
 
     const response = await apiRequest('/v1/users/me/export?format=json', { token })
 
@@ -1203,7 +1203,7 @@ function mockMyReservationsCountChain(total: number): void {
 describe('GET /v1/users/me/reservations', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
   })
 
   it('returns 200 with an empty page when the caller has no reservations', async () => {

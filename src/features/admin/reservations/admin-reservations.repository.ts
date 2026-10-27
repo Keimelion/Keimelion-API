@@ -96,7 +96,7 @@ export async function findReservationsPaged(
     offset,
     with: RESERVATION_HYDRATION,
   })
-  return rows as AdminReservationRow[]
+  return rows
 }
 
 export async function countReservations(filters: AdminReservationsScopedFilters): Promise<number> {
@@ -114,6 +114,6 @@ export async function findReservationByIdHydrated(
     where: eq(reservations.id, id),
     with: RESERVATION_HYDRATION,
   })
-  return row as AdminReservationRow | undefined
+  return row
 }
 

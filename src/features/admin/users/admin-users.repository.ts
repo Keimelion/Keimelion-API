@@ -79,7 +79,7 @@ export function findAllUsers(
     limit: input.limit,
     offset,
     with: { avatarImage: true },
-  }) as Promise<UserRowWithAvatar[]>
+  })
 }
 
 export async function adminUpdateUser(

@@ -58,23 +58,23 @@ function buildFeedbackRow(overrides: Partial<FeedbackRow> = {}): FeedbackRow {
 const ACCESS_TOKEN_ENTRY = makeAccessTokenEntry(ADMIN_USER.id)
 
 function mockAdminAuth(): void {
-  vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
-  vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER as never)
+  vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
+  vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
 }
 
 function mockNonAdminAuth(): void {
   vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(
-    makeAccessTokenEntry(NON_ADMIN_USER.id) as never,
+    makeAccessTokenEntry(NON_ADMIN_USER.id),
   )
-  vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(NON_ADMIN_USER as never)
+  vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(NON_ADMIN_USER)
 }
 
 function mockFindManyFeedback(rows: FeedbackRow[]): void {
-  vi.mocked(db.query.feedback.findMany).mockResolvedValueOnce(rows as never)
+  vi.mocked(db.query.feedback.findMany).mockResolvedValueOnce(rows)
 }
 
 function mockFindFirstFeedback(row: FeedbackRow | undefined): void {
-  vi.mocked(db.query.feedback.findFirst).mockResolvedValueOnce(row as never)
+  vi.mocked(db.query.feedback.findFirst).mockResolvedValueOnce(row)
 }
 
 function mockCountChain(total: number): void {
@@ -98,7 +98,7 @@ function mockUpdateFeedback(row: FeedbackRow): void {
 describe('GET /v1/admin/feedback', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
   })
 
   it('returns 200 with paginated feedback', async () => {
@@ -259,7 +259,7 @@ describe('GET /v1/admin/feedback', () => {
 describe('PATCH /v1/admin/feedback/:id', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
   })
 
   it('returns 200 with the updated feedback when transitioning status', async () => {

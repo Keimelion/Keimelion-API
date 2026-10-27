@@ -40,7 +40,7 @@ export function findListItemByIdWithImage(
   return db.query.listItems.findFirst({
     where: eq(listItems.id, id),
     with: { image: true },
-  }) as Promise<ListItemRowWithImage | undefined>
+  })
 }
 
 export async function findListItemByIdForUpdate(id: string, tx: DbOrTx): Promise<ListItem | undefined> {

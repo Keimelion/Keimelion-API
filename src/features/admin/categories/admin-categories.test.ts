@@ -73,15 +73,15 @@ const GRANDCHILD_CATEGORY_WITH_TRANSLATIONS = {
 const ACCESS_TOKEN_ENTRY = makeAccessTokenEntry(ADMIN_USER.id)
 
 function mockAdminAuth(): void {
-  vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
-  vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER as never)
+  vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
+  vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
 }
 
 function mockNonAdminAuth(): void {
   vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(
-    makeAccessTokenEntry(NON_ADMIN_USER.id) as never,
+    makeAccessTokenEntry(NON_ADMIN_USER.id),
   )
-  vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(NON_ADMIN_USER as never)
+  vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(NON_ADMIN_USER)
 }
 
 function mockFindCategoryById(row: unknown): void {
@@ -207,7 +207,7 @@ function mockFindCategoryByIdWithTranslations(row: unknown): void {
 describe('POST /v1/admin/categories', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
   })
 
   it('returns 201 with created root category including translations dict', async () => {
@@ -424,7 +424,7 @@ describe('POST /v1/admin/categories', () => {
 describe('GET /v1/admin/categories', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
   })
 
   it('returns 200 with every category and their translations dict in a flat list', async () => {
@@ -482,7 +482,7 @@ describe('GET /v1/admin/categories', () => {
 describe('GET /v1/admin/categories/:id', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
   })
 
   it('returns 200 with category and full translations dict when found', async () => {
@@ -529,7 +529,7 @@ describe('GET /v1/admin/categories/:id', () => {
 describe('PATCH /v1/admin/categories/:id', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
   })
 
   it('returns 200 when patching only the French translation', async () => {
@@ -725,7 +725,7 @@ describe('PATCH /v1/admin/categories/:id', () => {
 describe('DELETE /v1/admin/categories/:id', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
   })
 
   it('returns 204 and deletes the category (translations cascade via FK)', async () => {

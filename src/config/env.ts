@@ -15,7 +15,7 @@ const envSchema = z.object({
   JWT_EXPIRES_IN: z.string().default('7d'),
   EMAIL_VERIFY_TOKEN_TTL_HOURS: z.coerce.number().int().positive().default(24),
   BCRYPT_ROUNDS: z.coerce.number().int().positive().default(12),
-  APP_URL: z.string().url().default('http://localhost:3000'),
+  APP_URL: z.url().default('http://localhost:3000'),
   EMAIL_API_KEY: z.string().optional(),
   EMAIL_FROM: z.string().optional(),
   JWT_CLEANUP_INTERVAL_MS: z.coerce.number().int().min(60_000).default(3_600_000),
@@ -29,14 +29,13 @@ const envSchema = z.object({
     .transform((value) => value === 'true'),
   FX_REFRESH_INTERVAL_MS: z.coerce.number().int().min(60_000).default(86_400_000),
   FX_PROVIDER_URL: z
-    .string()
     .url()
     .default('https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml'),
   FEEDBACK_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(5),
   FEEDBACK_RATE_LIMIT_PER_HOUR: z.coerce.number().int().positive().default(20),
   UPLOADS_DIR: z.string().min(1).default('./uploads'),
   UPLOADS_MAX_SIZE_BYTES: z.coerce.number().int().positive().default(10_000_000),
-  UPLOADS_PUBLIC_BASE_URL: z.string().url().default('http://localhost:3000/uploads'),
+  UPLOADS_PUBLIC_BASE_URL: z.url().default('http://localhost:3000/uploads'),
 })
 
 const parsed = envSchema.safeParse(process.env)

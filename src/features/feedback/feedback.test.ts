@@ -104,8 +104,8 @@ describe('POST /v1/feedback', () => {
 
   it('returns 201 and attaches userId for an authenticated submission', async () => {
     const token = await generateTestToken(AUTH_USER.id)
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(AUTH_ACCESS_TOKEN_ENTRY as never)
-    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(AUTH_USER as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(AUTH_ACCESS_TOKEN_ENTRY)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(AUTH_USER)
     const row = buildFeedbackRow({ userId: AUTH_USER.id })
     const valuesSpy = mockInsertReturning(row)
 

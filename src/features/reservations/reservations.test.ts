@@ -80,12 +80,12 @@ const MOCK_LIST_ITEM: ListItem = {
 const ACCESS_TOKEN_ENTRY = makeAccessTokenEntry(AUTH_USER.id)
 
 function mockAuth(): void {
-  vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+  vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
   vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(AUTH_USER)
 }
 
 function mockListItemLookup(listItem: typeof MOCK_LIST_ITEM = MOCK_LIST_ITEM): void {
-  vi.mocked(db.query.listItems.findFirst).mockResolvedValueOnce(listItem as never)
+  vi.mocked(db.query.listItems.findFirst).mockResolvedValueOnce(listItem)
 }
 
 function mockListWithOwnerLookup(options: { deleted?: boolean; ownerUserId?: string } = {}): void {
@@ -95,7 +95,7 @@ function mockListWithOwnerLookup(options: { deleted?: boolean; ownerUserId?: str
     collaborators: [{ ...OWNER_COLLABORATOR, userId: options.ownerUserId ?? OWNER_USER_ID }],
     listTags: [],
   }
-  vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(list as never)
+  vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(list)
 }
 
 /**

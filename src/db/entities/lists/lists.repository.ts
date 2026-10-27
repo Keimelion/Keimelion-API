@@ -86,7 +86,7 @@ export function findListBySlug(
         },
       },
     },
-  }) as Promise<PublicListRow | undefined>
+  })
 }
 
 export type InsertList = Pick<

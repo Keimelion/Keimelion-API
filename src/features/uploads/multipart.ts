@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import type { Context } from 'hono'
-import type { ZodIssue, ZodTypeAny, infer as zInfer } from 'zod'
+import type { ZodType, infer as zInfer } from 'zod'
+import type { $ZodIssue } from 'zod/v4/core'
 import { ErrorCode } from '../../shared/enums/error-code.js'
 import { logger } from '../../shared/utils/logger.js'
 
@@ -39,7 +40,7 @@ export async function parseMultipartFields(
 ): Promise<MultipartParseResult> {
   let body: Record<string, unknown>
   try {
-    body = (await context.req.parseBody()) as Record<string, unknown>
+    body = (await context.req.parseBody())
   } catch (error: unknown) {
     logger.warn({ error }, 'Malformed multipart body')
     return { errorCode: ErrorCode.BAD_REQUEST }
@@ -81,20 +82,20 @@ function isFileLike(value: unknown): value is Blob {
   )
 }
 
-interface ParseJsonOrMultipartOptions<JsonSchema extends ZodTypeAny, MultipartSchema extends ZodTypeAny> {
+interface ParseJsonOrMultipartOptions<JsonSchema extends ZodType, MultipartSchema extends ZodType> {
   jsonSchema: JsonSchema
   multipartSchema: MultipartSchema
   imageField?: string
 }
 
-export type ParsedJsonOrMultipart<JsonSchema extends ZodTypeAny, MultipartSchema extends ZodTypeAny> =
+export type ParsedJsonOrMultipart<JsonSchema extends ZodType, MultipartSchema extends ZodType> =
   | { ok: true; kind: 'json'; data: zInfer<JsonSchema>; imageBuffer: null }
   | { ok: true; kind: 'multipart'; data: zInfer<MultipartSchema>; imageBuffer: Buffer | null }
-  | { ok: false; errorCode: ErrorCode; issues?: ZodIssue[] }
+  | { ok: false; errorCode: ErrorCode; issues?: $ZodIssue[] }
 
 export async function parseJsonOrMultipart<
-  JsonSchema extends ZodTypeAny,
-  MultipartSchema extends ZodTypeAny,
+  JsonSchema extends ZodType,
+  MultipartSchema extends ZodType,
 >(
   context: Context,
   options: ParseJsonOrMultipartOptions<JsonSchema, MultipartSchema>,
@@ -109,7 +110,7 @@ export async function parseJsonOrMultipart<
     return {
       ok: true,
       kind: 'multipart',
-      data: result.data as zInfer<MultipartSchema>,
+      data: result.data,
       imageBuffer: parsed.imageBuffer,
     }
   }
@@ -127,7 +128,7 @@ export async function parseJsonOrMultipart<
   return {
     ok: true,
     kind: 'json',
-    data: result.data as zInfer<JsonSchema>,
+    data: result.data,
     imageBuffer: null,
   }
 }

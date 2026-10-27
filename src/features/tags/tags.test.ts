@@ -47,7 +47,7 @@ const TAG_READING = {
 }
 
 function mockUserAuth(): void {
-  vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+  vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
   vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(USER as never)
 }
 
@@ -62,7 +62,7 @@ function mockCountChain(total: number): void {
 describe('GET /v1/tags', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
   })
 
   it('returns 200 with paginated public tags when authenticated', async () => {

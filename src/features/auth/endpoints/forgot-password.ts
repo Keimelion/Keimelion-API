@@ -7,7 +7,7 @@ import { requestPasswordReset } from '../auth.service.js'
 import type { FeatureRouter } from '../../../shared/types/app.js'
 
 const forgotPasswordSchema = z.object({
-  email: z.string().email().transform(v => v.toLowerCase().trim()),
+  email: z.email().transform(v => v.toLowerCase().trim()),
 })
 
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>

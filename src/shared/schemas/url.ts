@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 export function urlSchema(fieldName: string) {
-  return z.string().url(`${fieldName} must be a valid URL`)
+  return z.url(`${fieldName} must be a valid URL`)
 }
 
 export function httpsUrlSchema(fieldName: string, maxLength: number) {

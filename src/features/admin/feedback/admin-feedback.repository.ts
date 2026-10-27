@@ -13,7 +13,7 @@ import type { FilterInput } from '../../../shared/db/filter-parser.js'
 import type { FeedbackRowWithUser } from './admin-feedback.mapper.js'
 
 const feedbackStatusSchema = z.enum(FEEDBACK_STATUS_VALUES)
-const userIdSchema = z.string().uuid()
+const userIdSchema = z.guid()
 
 export const feedbackEntity = defineEntity({
   sortable: {

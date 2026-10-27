@@ -30,7 +30,7 @@ export function findUserByIdWithAvatar(id: string): Promise<UserRowWithAvatar | 
   return db.query.users.findFirst({
     where: eq(users.id, id),
     with: { avatarImage: true },
-  }) as Promise<UserRowWithAvatar | undefined>
+  })
 }
 
 export function findUserByUsername(username: string): Promise<User | undefined> {

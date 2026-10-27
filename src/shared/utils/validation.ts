@@ -1,5 +1,5 @@
 import type { Context } from 'hono'
-import type { ZodError } from 'zod'
+import type { $ZodError } from 'zod/v4/core'
 import { ErrorCode } from '../enums/error-code.js'
 import { errorMap } from './response.js'
 
@@ -11,7 +11,7 @@ interface ValidationIssue {
   code: string
 }
 
-type ValidationResult = { success: true } | { success: false; error: ZodError }
+type ValidationResult = { success: true } | { success: false; error: $ZodError }
 
 export function validationErrorHandler(result: ValidationResult, c: Context): Response | undefined {
   if (!result.success) {
@@ -25,7 +25,7 @@ export function validationErrorHandler(result: ValidationResult, c: Context): Re
   return undefined
 }
 
-function mapZodIssues(error: ZodError): ValidationIssue[] {
+function mapZodIssues(error: $ZodError): ValidationIssue[] {
   return error.issues.map((issue) => ({
     path: formatIssuePath(issue.path),
     message: issue.message,
@@ -33,7 +33,7 @@ function mapZodIssues(error: ZodError): ValidationIssue[] {
   }))
 }
 
-function formatIssuePath(path: readonly (string | number)[]): string {
+function formatIssuePath(path: readonly PropertyKey[]): string {
   if (path.length === 0) return ROOT_PATH
   return path.map(String).join('.')
 }
