@@ -119,7 +119,7 @@ const MOCK_ITEM = {
 }
 
 function mockAuthChain(): void {
-  vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+  vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
   vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(AUTH_USER)
 }
 
@@ -145,7 +145,7 @@ describe('POST /v1/list-items', () => {
       { ...MOCK_LIST, collaborators: [{ userId: AUTH_USER.id, user: AUTH_USER }] } as never,
     )
     vi.mocked(db.query.listCollaborators.findFirst).mockResolvedValueOnce(MOCK_COLLABORATOR as never)
-    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(MOCK_ITEM as never)
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(MOCK_ITEM)
     vi.mocked(db.insert).mockReturnValueOnce({
       values: vi.fn().mockReturnValueOnce({
         returning: vi.fn().mockResolvedValueOnce([MOCK_LIST_ITEM]),
@@ -230,7 +230,7 @@ describe('POST /v1/list-items', () => {
       { ...MOCK_LIST, collaborators: [{ userId: AUTH_USER.id, user: AUTH_USER }] } as never,
     )
     vi.mocked(db.query.listCollaborators.findFirst).mockResolvedValueOnce(MOCK_COLLABORATOR as never)
-    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(MOCK_ITEM as never)
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(MOCK_ITEM)
     mockProcessOptionalImage.mockResolvedValueOnce({ image: MOCK_IMAGE_ROW })
     vi.mocked(db.insert).mockReturnValueOnce({
       values: vi.fn().mockReturnValueOnce({
@@ -264,7 +264,7 @@ describe('POST /v1/list-items', () => {
       { ...MOCK_LIST, collaborators: [{ userId: AUTH_USER.id, user: AUTH_USER }] } as never,
     )
     vi.mocked(db.query.listCollaborators.findFirst).mockResolvedValueOnce(MOCK_COLLABORATOR as never)
-    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(MOCK_ITEM as never)
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(MOCK_ITEM)
     const { ErrorCode } = await import('../../shared/enums/error-code.js')
     mockProcessOptionalImage.mockResolvedValueOnce({ errorCode: ErrorCode.INVALID_IMAGE_TYPE })
 
@@ -482,7 +482,7 @@ describe('PATCH /v1/list-items/:id', () => {
 
   it('returns 422 when id param is not a uuid', async () => {
     const token = await generateTestToken(AUTH_USER.id)
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(AUTH_USER)
 
     const response = await apiRequest('/v1/list-items/not-a-uuid', {
@@ -582,7 +582,7 @@ describe('DELETE /v1/list-items/:id', () => {
 
   it('returns 422 when id param is not a uuid', async () => {
     const token = await generateTestToken(AUTH_USER.id)
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(AUTH_USER)
 
     const response = await apiRequest('/v1/list-items/not-a-uuid', {

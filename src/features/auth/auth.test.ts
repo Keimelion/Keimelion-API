@@ -346,7 +346,7 @@ describe('POST /v1/auth/logout', () => {
   it('returns 200 with message and runs transaction when logout is successful', async () => {
     const token = await generateTestToken(VALID_USER.id)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(VALID_USER)
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValueOnce(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValueOnce(ACCESS_TOKEN_ENTRY)
 
     const response = await apiRequest('/v1/auth/logout', { method: 'POST', token })
 
@@ -390,7 +390,7 @@ describe('POST /v1/auth/logout', () => {
   it('returns 500 when the logout transaction fails', async () => {
     const token = await generateTestToken(VALID_USER.id)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(VALID_USER)
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValueOnce(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValueOnce(ACCESS_TOKEN_ENTRY)
     vi.mocked(db.transaction).mockRejectedValueOnce(new Error('DB error'))
 
     const response = await apiRequest('/v1/auth/logout', { method: 'POST', token })
@@ -401,7 +401,7 @@ describe('POST /v1/auth/logout', () => {
   it('revokes the refresh token when refreshToken is provided in the body', async () => {
     const token = await generateTestToken(VALID_USER.id)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(VALID_USER)
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValueOnce(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValueOnce(ACCESS_TOKEN_ENTRY)
 
     const txUpdate = vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn(() => Promise.resolve([])) })) }))
     const txDelete = vi.fn(() => ({ where: vi.fn(() => Promise.resolve([])) }))
@@ -423,7 +423,7 @@ describe('POST /v1/auth/logout', () => {
   it('does not touch refresh_tokens when the body has no refreshToken', async () => {
     const token = await generateTestToken(VALID_USER.id)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(VALID_USER)
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValueOnce(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValueOnce(ACCESS_TOKEN_ENTRY)
 
     const txUpdate = vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn(() => Promise.resolve([])) })) }))
     const txDelete = vi.fn(() => ({ where: vi.fn(() => Promise.resolve([])) }))
@@ -441,7 +441,7 @@ describe('POST /v1/auth/logout', () => {
   it('returns 422 when refreshToken is an empty string', async () => {
     const token = await generateTestToken(VALID_USER.id)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(VALID_USER)
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValueOnce(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValueOnce(ACCESS_TOKEN_ENTRY)
 
     const response = await apiRequest('/v1/auth/logout', {
       method: 'POST',
@@ -664,7 +664,7 @@ describe('POST /v1/auth/refresh', () => {
 
   it('returns 200 with a new accessToken and a rotated refreshToken inside a single transaction', async () => {
     const submittedRefreshToken = 'some-valid-raw-token'
-    vi.mocked(db.query.refreshTokens.findFirst).mockResolvedValueOnce(VALID_REFRESH_TOKEN_ROW as never)
+    vi.mocked(db.query.refreshTokens.findFirst).mockResolvedValueOnce(VALID_REFRESH_TOKEN_ROW)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(VALID_USER)
 
     const response = await apiRequest('/v1/auth/refresh', {
@@ -694,7 +694,7 @@ describe('POST /v1/auth/refresh', () => {
 
   it('returns 401 when refreshToken is revoked', async () => {
     const revokedToken = { ...VALID_REFRESH_TOKEN_ROW, revokedAt: new Date('2024-01-01') }
-    vi.mocked(db.query.refreshTokens.findFirst).mockResolvedValueOnce(revokedToken as never)
+    vi.mocked(db.query.refreshTokens.findFirst).mockResolvedValueOnce(revokedToken)
 
     const response = await apiRequest('/v1/auth/refresh', {
       method: 'POST',
@@ -706,7 +706,7 @@ describe('POST /v1/auth/refresh', () => {
 
   it('returns 401 when refreshToken is expired', async () => {
     const expiredToken = { ...VALID_REFRESH_TOKEN_ROW, expiresAt: new Date(Date.now() - 1000) }
-    vi.mocked(db.query.refreshTokens.findFirst).mockResolvedValueOnce(expiredToken as never)
+    vi.mocked(db.query.refreshTokens.findFirst).mockResolvedValueOnce(expiredToken)
 
     const response = await apiRequest('/v1/auth/refresh', {
       method: 'POST',
@@ -717,7 +717,7 @@ describe('POST /v1/auth/refresh', () => {
   })
 
   it('returns 401 when user is soft-deleted', async () => {
-    vi.mocked(db.query.refreshTokens.findFirst).mockResolvedValueOnce(VALID_REFRESH_TOKEN_ROW as never)
+    vi.mocked(db.query.refreshTokens.findFirst).mockResolvedValueOnce(VALID_REFRESH_TOKEN_ROW)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce({ ...VALID_USER, deletedAt: new Date('2024-01-01') })
 
     const response = await apiRequest('/v1/auth/refresh', {
@@ -729,7 +729,7 @@ describe('POST /v1/auth/refresh', () => {
   })
 
   it('returns 403 when user is banned', async () => {
-    vi.mocked(db.query.refreshTokens.findFirst).mockResolvedValueOnce(VALID_REFRESH_TOKEN_ROW as never)
+    vi.mocked(db.query.refreshTokens.findFirst).mockResolvedValueOnce(VALID_REFRESH_TOKEN_ROW)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce({ ...VALID_USER, bannedAt: new Date('2024-01-01') })
 
     const response = await apiRequest('/v1/auth/refresh', {

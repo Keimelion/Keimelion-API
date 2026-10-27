@@ -25,7 +25,7 @@ import type { SortInput } from '../../../shared/schemas/sort.js'
 import type { FilterInput } from '../../../shared/db/filter-parser.js'
 
 const listStatusSchema = z.enum(LIST_STATUS_VALUES)
-const occasionTypeIdSchema = z.string().uuid()
+const occasionTypeIdSchema = z.guid()
 
 export const listsEntity = defineEntity({
   sortable: LIST_SORTABLE_FIELDS,

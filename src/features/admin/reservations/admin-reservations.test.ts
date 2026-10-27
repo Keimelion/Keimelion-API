@@ -101,15 +101,15 @@ const RESERVATION_ROW = {
 const ACCESS_TOKEN_ENTRY = makeAccessTokenEntry(ADMIN_USER.id)
 
 function mockAdminAuth(): void {
-  vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
-  vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER as never)
+  vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
+  vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
 }
 
 function mockNonAdminAuth(): void {
   vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(
-    makeAccessTokenEntry(NON_ADMIN_USER.id) as never,
+    makeAccessTokenEntry(NON_ADMIN_USER.id),
   )
-  vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(NON_ADMIN_USER as never)
+  vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(NON_ADMIN_USER)
 }
 
 function mockListReservations(rows: unknown[]): void {
@@ -192,7 +192,7 @@ function mockAdminCancelTransaction(options: MockAdminCancelOptions = {}): void 
 describe('GET /v1/admin/reservations', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
   })
 
   it('returns 200 with a paginated AdminReservation list hydrating reserver + listItem + list + owner', async () => {
@@ -327,7 +327,7 @@ describe('GET /v1/admin/reservations', () => {
 describe('GET /v1/admin/reservations/:id', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
   })
 
   it('returns 200 with a fully hydrated AdminReservation', async () => {
@@ -387,7 +387,7 @@ describe('GET /v1/admin/reservations/:id', () => {
 describe('DELETE /v1/admin/reservations/:id', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
   })
 
   it('returns 204 and reconciles list_items.quantity_reserved_total via the shared primitive', async () => {

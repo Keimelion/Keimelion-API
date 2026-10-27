@@ -17,7 +17,7 @@ const adminUpdateCategorySchema = z
   .object({
     name: categoryTranslationsUpdateSchema.optional(),
     slug: categorySlugSchema.optional(),
-    parentId: z.string().uuid().nullable().optional(),
+    parentId: z.guid().nullable().optional(),
   })
   .strict()
 

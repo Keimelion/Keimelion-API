@@ -18,11 +18,11 @@ export const priceSchema = z
 
 export const currencySchema = supportedCurrencyEnum
 
-export const shopIdSchema = z.string().uuid().nullable()
+export const shopIdSchema = z.guid().nullable()
 
 export const itemSourceParamSchema = z.object({
-  id: z.string().uuid(),
-  sourceId: z.string().uuid(),
+  id: z.guid(),
+  sourceId: z.guid(),
 })
 
 interface SourceWithShopId {
@@ -51,7 +51,7 @@ export function reportDuplicateSourceShopIds(
     if (indices.length < 2) continue
     for (const index of indices) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: 'custom',
         path: ['sources', index, 'shopId'],
         message: DUPLICATE_SHOP_IN_SOURCES_MESSAGE,
       })

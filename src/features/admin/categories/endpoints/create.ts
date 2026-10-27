@@ -17,8 +17,7 @@ const adminCreateCategorySchema = z
     name: categoryTranslationsCreateSchema,
     slug: categorySlugSchema,
     parentId: z
-      .string()
-      .uuid()
+      .guid()
       .nullable()
       .optional()
       .transform((value) => value ?? null),

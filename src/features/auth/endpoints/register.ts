@@ -11,7 +11,7 @@ import { passwordSchema } from '../../../shared/schemas/password.js'
 import { supportedCurrencyEnum } from '../../../shared/schemas/currency.js'
 import type { FeatureRouter } from '../../../shared/types/app.js'
 
-const emailSchema = z.string().email().transform((v) => v.toLowerCase().trim())
+const emailSchema = z.email().transform((v) => v.toLowerCase().trim())
 const optionalUsernameSchema = usernameSchema
   .nullable()
   .optional()

@@ -10,10 +10,10 @@ import { adminReservationsEntity } from '../admin-reservations.repository.js'
 
 const listAdminReservationsQuerySchema = paginationQuerySchema.extend({
   sort: adminReservationsEntity.buildListQuerySchema(),
-  userId: z.string().uuid().optional(),
-  listItemId: z.string().uuid().optional(),
-  listId: z.string().uuid().optional(),
-  itemId: z.string().uuid().optional(),
+  userId: z.guid().optional(),
+  listItemId: z.guid().optional(),
+  listId: z.guid().optional(),
+  itemId: z.guid().optional(),
 })
 
 export type ListAdminReservationsInput = z.infer<typeof listAdminReservationsQuerySchema>

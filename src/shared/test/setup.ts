@@ -47,6 +47,37 @@ const buildSelectChain = (resolvedValue: unknown[] = []) => {
   return chain
 }
 
+const applyDbMockDefaults = (db: Record<string, unknown>): void => {
+  vi.mocked(db.select as ReturnType<typeof vi.fn>).mockImplementation(() => buildSelectChain())
+  vi.mocked(db.insert as ReturnType<typeof vi.fn>).mockImplementation(() => ({
+    values: vi.fn(() => ({
+      returning: vi.fn(),
+      onConflictDoNothing: vi.fn(() => ({
+        returning: vi.fn(),
+      })),
+    })),
+  }))
+  vi.mocked(db.update as ReturnType<typeof vi.fn>).mockImplementation(() => ({
+    set: vi.fn(() => ({
+      where: vi.fn(() => ({
+        returning: vi.fn(),
+      })),
+    })),
+  }))
+  vi.mocked(db.delete as ReturnType<typeof vi.fn>).mockImplementation(() => ({
+    where: vi.fn(() => ({
+      returning: vi.fn(),
+    })),
+  }))
+  const passThrough = (async (callback: (tx: unknown) => Promise<unknown>) => callback(db)) as never
+  vi.mocked(db.transaction as ReturnType<typeof vi.fn>).mockImplementation(passThrough)
+  const emptyFindMany = ['lists', 'listCollaborators', 'items', 'itemSources', 'listItems', 'shops', 'categories', 'itemCategories', 'tags', 'itemTags', 'listTags', 'feedback', 'images', 'reservations']
+  for (const table of emptyFindMany) {
+    const q = (db.query as Record<string, { findMany: ReturnType<typeof vi.fn> }>)[table]
+    if (q !== undefined) q.findMany.mockResolvedValue([])
+  }
+}
+
 vi.mock('../../db/client.js', () => {
   const db: Record<string, unknown> = {
     execute: vi.fn(),
@@ -158,7 +189,7 @@ vi.mock('hono-rate-limiter', () => ({
 }))
 
 beforeEach(async () => {
+  vi.resetAllMocks()
   const { db } = await import('../../db/client.js')
-  const passThrough = (async (callback: (tx: unknown) => Promise<unknown>) => callback(db)) as never
-  vi.mocked(db).transaction.mockImplementation(passThrough)
+  applyDbMockDefaults(db as unknown as Record<string, unknown>)
 })

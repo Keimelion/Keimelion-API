@@ -59,22 +59,22 @@ const DELETED_LIST_ROW = {
 const ACCESS_TOKEN_ENTRY = makeAccessTokenEntry(ADMIN_USER.id)
 
 function mockAdminAuth(user: typeof ADMIN_USER = ADMIN_USER): void {
-  vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
-  vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(user as never)
+  vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
+  vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(user)
 }
 
 function mockNonAdminAuth(): void {
   vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(
-    makeAccessTokenEntry(NON_ADMIN_USER.id) as never,
+    makeAccessTokenEntry(NON_ADMIN_USER.id),
   )
-  vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(NON_ADMIN_USER as never)
+  vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(NON_ADMIN_USER)
 }
 
 function mockModeratorAuth(): void {
   vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(
-    makeAccessTokenEntry(MODERATOR_USER.id) as never,
+    makeAccessTokenEntry(MODERATOR_USER.id),
   )
-  vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(MODERATOR_USER as never)
+  vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(MODERATOR_USER)
 }
 
 function mockFindListById(row: unknown): void {
@@ -85,7 +85,7 @@ function mockFindListByIdWithOwner(row: unknown, owner: unknown): void {
   const rowOut =
     row === undefined || row === null
       ? undefined
-      : { ...(row as object), collaborators: buildCollaborators(owner), listTags: [] }
+      : { ...(row), collaborators: buildCollaborators(owner), listTags: [] }
   vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(rowOut as never)
 }
 
@@ -141,7 +141,7 @@ function mockUpdateList(returnRow: unknown): void {
 describe('GET /v1/admin/lists', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
     vi.mocked(db.execute).mockResolvedValue([] as never)
   })
 
@@ -464,7 +464,7 @@ describe('GET /v1/admin/lists', () => {
 describe('GET /v1/admin/lists/:id', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
     vi.mocked(db.execute).mockResolvedValue([] as never)
   })
 
@@ -590,7 +590,7 @@ describe('GET /v1/admin/lists/:id', () => {
 describe('PATCH /v1/admin/lists/:id', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
     vi.mocked(db.execute).mockResolvedValue([] as never)
   })
 
@@ -831,7 +831,7 @@ describe('PATCH /v1/admin/lists/:id', () => {
 describe('DELETE /v1/admin/lists/:id (soft delete)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
     vi.mocked(db.execute).mockResolvedValue([] as never)
   })
 
@@ -921,7 +921,7 @@ describe('DELETE /v1/admin/lists/:id (soft delete)', () => {
 describe('POST /v1/admin/lists/:id/restore', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
     vi.mocked(db.execute).mockResolvedValue([] as never)
   })
 

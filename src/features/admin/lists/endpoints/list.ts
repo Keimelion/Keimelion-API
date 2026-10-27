@@ -15,10 +15,10 @@ import { listsEntity } from '../admin-lists.repository.js'
 import { resolveDisplayCurrency } from '../display-currency.js'
 
 const listListsQuerySchema = paginationQuerySchema
-  .merge(displayCurrencyQuerySchema)
+  .extend(displayCurrencyQuerySchema.shape)
   .extend({
     sort: listsEntity.buildListQuerySchema(),
-    ownerUserId: z.string().uuid().optional(),
+    ownerUserId: z.guid().optional(),
   })
 
 export type ListListsQueryInput = z.infer<typeof listListsQuerySchema>

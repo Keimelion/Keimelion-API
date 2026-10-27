@@ -16,10 +16,8 @@ export const DEFAULT_DISPLAY_CURRENCY: SupportedCurrency = SupportedCurrencies.U
  * `item_sources.currency` input validator and the FX-normalized endpoints'
  * `?currency=` query validator so the error message stays in one place.
  */
-export const supportedCurrencyEnum = z.enum(SUPPORTED_CURRENCY_VALUES, {
-  errorMap: () => ({
-    message: `currency must be one of: ${SUPPORTED_CURRENCY_VALUES.join(', ')}`,
-  }),
+export const supportedCurrencyEnum = z.enum(SupportedCurrencies, {
+  error: () => `currency must be one of: ${SUPPORTED_CURRENCY_VALUES.join(', ')}`,
 })
 
 /**

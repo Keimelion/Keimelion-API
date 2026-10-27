@@ -117,15 +117,15 @@ const TAG_TWO = {
 const ACCESS_TOKEN_ENTRY = makeAccessTokenEntry(ADMIN_USER.id)
 
 function mockAdminAuth(): void {
-  vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
-  vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER as never)
+  vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
+  vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
 }
 
 function mockNonAdminAuth(): void {
   vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(
-    makeAccessTokenEntry(NON_ADMIN_USER.id) as never,
+    makeAccessTokenEntry(NON_ADMIN_USER.id),
   )
-  vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(NON_ADMIN_USER as never)
+  vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(NON_ADMIN_USER)
 }
 
 function mockFindItemById(row: unknown): void {
@@ -140,7 +140,7 @@ function mockFindItemSourceByIdWithShop(row: unknown, shop: unknown): void {
   const rowOut =
     row === undefined || row === null
       ? undefined
-      : { ...(row as object), shop }
+      : { ...(row), shop }
   vi.mocked(db.query.itemSources.findFirst).mockResolvedValueOnce(rowOut as never)
 }
 
@@ -242,7 +242,7 @@ function mockPatchTagsTransaction(tagRows: (typeof TAG_ONE)[]): void {
       select: vi.fn(),
       query: { tags: { findMany: vi.fn().mockResolvedValue(tagRows) } },
     }
-    return callback(tx as never) as never
+    return callback(tx as never)
   })
 }
 
@@ -278,7 +278,7 @@ function mockCreateItemTransaction(
       select: vi.fn(),
       query: { tags: { findMany: vi.fn().mockResolvedValue(tagRows) } },
     }
-    return callback(tx as never) as never
+    return callback(tx as never)
   })
 }
 
@@ -353,7 +353,7 @@ function mockHardDeleteTransaction(refCount: number, deletedRow: unknown): void 
       insert: vi.fn(),
       delete: vi.fn().mockReturnValueOnce(txDeleteChain),
     }
-    return callback(tx as never) as never
+    return callback(tx as never)
   })
 }
 
@@ -378,7 +378,7 @@ function mockDeleteSourceTransaction(sourceCount: number, returnRow: unknown): D
       insert: vi.fn(),
       delete: deleteCall,
     }
-    return callback(tx as never) as never
+    return callback(tx as never)
   })
   return { deleteCall }
 }
@@ -386,7 +386,7 @@ function mockDeleteSourceTransaction(sourceCount: number, returnRow: unknown): D
 describe('POST /v1/admin/items', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
   })
 
   it('returns 201 with created item and sources when payload is valid', async () => {
@@ -697,7 +697,7 @@ describe('POST /v1/admin/items', () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
     mockCreateItemTransaction(ITEM_ROW, [SOURCE_ROW], [TAG_ONE, TAG_TWO])
-    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(itemWithTagLinks([TAG_ONE, TAG_TWO]) as never)
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(itemWithTagLinks([TAG_ONE, TAG_TWO]))
 
     const response = await apiRequest('/v1/admin/items', {
       method: 'POST',
@@ -756,7 +756,7 @@ describe('POST /v1/admin/items', () => {
 describe('GET /v1/admin/items', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
   })
 
   it('returns 200 with paginated items including sources array on each item', async () => {
@@ -959,7 +959,7 @@ describe('GET /v1/admin/items', () => {
 describe('GET /v1/admin/items/:id', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
   })
 
   it('returns 200 with item, sources and reservationCount', async () => {
@@ -1031,7 +1031,7 @@ describe('GET /v1/admin/items/:id', () => {
 describe('PATCH /v1/admin/items/:id', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
   })
 
   it('returns 200 with updated item (with sources) when patching name', async () => {
@@ -1169,7 +1169,7 @@ describe('PATCH /v1/admin/items/:id', () => {
     mockFindItemById(ITEM_ROW)
     vi.mocked(db.query.categories.findMany).mockResolvedValueOnce([CATEGORY_ONE, CATEGORY_TWO] as never)
     vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(
-      itemWithCategoryLinks([CATEGORY_ONE, CATEGORY_TWO]) as never,
+      itemWithCategoryLinks([CATEGORY_ONE, CATEGORY_TWO]),
     )
 
     const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}`, {
@@ -1189,7 +1189,7 @@ describe('PATCH /v1/admin/items/:id', () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
     mockFindItemById(ITEM_ROW)
-    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(itemWithCategoryLinks([]) as never)
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(itemWithCategoryLinks([]))
 
     const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}`, {
       method: 'PATCH',
@@ -1225,7 +1225,7 @@ describe('PATCH /v1/admin/items/:id', () => {
     mockFindItemById(ITEM_ROW)
     vi.mocked(db.query.categories.findMany).mockResolvedValueOnce([CATEGORY_ONE] as never)
     vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(
-      itemWithCategoryLinks([CATEGORY_ONE]) as never,
+      itemWithCategoryLinks([CATEGORY_ONE]),
     )
 
     const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}`, {
@@ -1261,7 +1261,7 @@ describe('PATCH /v1/admin/items/:id', () => {
     mockAdminAuth()
     mockFindItemById(ITEM_ROW)
     mockPatchTagsTransaction([TAG_ONE, TAG_TWO])
-    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(itemWithTagLinks([TAG_ONE, TAG_TWO]) as never)
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(itemWithTagLinks([TAG_ONE, TAG_TWO]))
 
     const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}`, {
       method: 'PATCH',
@@ -1281,7 +1281,7 @@ describe('PATCH /v1/admin/items/:id', () => {
     mockAdminAuth()
     mockFindItemById(ITEM_ROW)
     mockPatchTagsTransaction([])
-    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(itemWithTagLinks([]) as never)
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(itemWithTagLinks([]))
 
     const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}`, {
       method: 'PATCH',
@@ -1299,7 +1299,7 @@ describe('PATCH /v1/admin/items/:id', () => {
     mockAdminAuth()
     mockFindItemById(ITEM_ROW)
     mockPatchTagsTransaction([TAG_ONE])
-    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(itemWithTagLinks([TAG_ONE]) as never)
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(itemWithTagLinks([TAG_ONE]))
 
     const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}`, {
       method: 'PATCH',
@@ -1345,7 +1345,7 @@ describe('PATCH /v1/admin/items/:id', () => {
 describe('DELETE /v1/admin/items/:id (hard delete)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
   })
 
   it('returns 200 with success message when no list_items reference it', async () => {
@@ -1442,7 +1442,7 @@ describe('DELETE /v1/admin/items/:id (hard delete)', () => {
 describe('POST /v1/admin/items/:id/restore (removed)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
   })
 
   it('returns 404 because the endpoint no longer exists', async () => {
@@ -1459,7 +1459,7 @@ describe('POST /v1/admin/items/:id/restore (removed)', () => {
 describe('GET /v1/admin/items/:id/sources (removed)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
   })
 
   // No auth mock — GET on this path is not mounted, so no middleware runs.
@@ -1475,7 +1475,7 @@ describe('GET /v1/admin/items/:id/sources (removed)', () => {
 describe('POST /v1/admin/items/:id/sources', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
   })
 
   it('returns 201 with created source', async () => {
@@ -1707,7 +1707,7 @@ describe('POST /v1/admin/items/:id/sources', () => {
 describe('PATCH /v1/admin/items/:id/sources/:sourceId', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
   })
 
   it('returns 200 with updated source', async () => {
@@ -1923,7 +1923,7 @@ describe('PATCH /v1/admin/items/:id/sources/:sourceId', () => {
 describe('DELETE /v1/admin/items/:id/sources/:sourceId', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY as never)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
   })
 
   it('returns 200 with success message when the item has other sources', async () => {

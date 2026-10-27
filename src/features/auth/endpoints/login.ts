@@ -7,7 +7,7 @@ import { loginUser } from '../auth.service.js'
 import type { FeatureRouter } from '../../../shared/types/app.js'
 
 const loginSchema = z.object({
-  email: z.string().email().transform(v => v.toLowerCase().trim()),
+  email: z.email().transform(v => v.toLowerCase().trim()),
   password: z.string().min(1),
 })
 

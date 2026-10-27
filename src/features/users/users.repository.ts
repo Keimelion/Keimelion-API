@@ -140,7 +140,7 @@ export async function findMyReservationsPaged(
     offset,
     with: MY_RESERVATIONS_HYDRATION,
   })
-  return rows as ReservationProfileRow[]
+  return rows
 }
 
 export async function countMyReservations(userId: string): Promise<number> {

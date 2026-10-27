@@ -110,7 +110,7 @@ describe('GET /v1/public/lists/:slug', () => {
   })
 
   it('returns 200 with the public list payload when the slug exists', async () => {
-    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(PUBLIC_LIST_ROW as never)
+    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(PUBLIC_LIST_ROW)
 
     const response = await apiRequest(`/v1/public/lists/${LIST_SLUG}`)
     const body = await response.json() as PublicListResponse
@@ -136,7 +136,7 @@ describe('GET /v1/public/lists/:slug', () => {
         },
       ],
     }
-    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(reservedRow as never)
+    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(reservedRow)
 
     const response = await apiRequest(`/v1/public/lists/${LIST_SLUG}`)
     const body = await response.json() as PublicListResponse
@@ -168,7 +168,7 @@ describe('GET /v1/public/lists/:slug', () => {
   })
 
   it('does not expose owner email, password hash, or any raw user fields', async () => {
-    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(PUBLIC_LIST_ROW as never)
+    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(PUBLIC_LIST_ROW)
 
     const response = await apiRequest(`/v1/public/lists/${LIST_SLUG}`)
     const raw = await response.text()
@@ -186,7 +186,7 @@ describe('GET /v1/public/lists/:slug', () => {
   })
 
   it('does not expose reservation records on list items', async () => {
-    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(PUBLIC_LIST_ROW as never)
+    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(PUBLIC_LIST_ROW)
 
     const response = await apiRequest(`/v1/public/lists/${LIST_SLUG}`)
     const body = await response.json() as { list: { items: Record<string, unknown>[] } }
@@ -199,7 +199,7 @@ describe('GET /v1/public/lists/:slug', () => {
   })
 
   it('is reachable without an Authorization header (no auth middleware)', async () => {
-    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(PUBLIC_LIST_ROW as never)
+    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(PUBLIC_LIST_ROW)
 
     const response = await apiRequest(`/v1/public/lists/${LIST_SLUG}`)
 
@@ -208,7 +208,7 @@ describe('GET /v1/public/lists/:slug', () => {
   })
 
   it('is reachable even when the caller sends a stale bearer token (no auth evaluated)', async () => {
-    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(PUBLIC_LIST_ROW as never)
+    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(PUBLIC_LIST_ROW)
 
     const response = await apiRequest(`/v1/public/lists/${LIST_SLUG}`, {
       token: 'any-stale-token',
