@@ -1,0 +1,2 @@
+CREATE INDEX "idx_list_collaborators_user_role" ON "list_collaborators" USING btree ("user_id","collab_role");--> statement-breakpoint
+CREATE INDEX "idx_list_collaborators_list_role" ON "list_collaborators" USING btree ("list_id","collab_role");

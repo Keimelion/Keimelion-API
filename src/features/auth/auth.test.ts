@@ -1,0 +1,751 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { db } from '../../db/client.js'
+import { env } from '../../config/env.js'
+import { NodeEnvs } from '../../shared/enums/node-env.js'
+import { apiRequest } from '../../shared/test/api-request.js'
+import { generateTestToken, makeAccessTokenEntry } from '../../shared/test/auth.js'
+
+const TEST_REFRESH_TOKEN_HASH = 'a'.repeat(64)
+
+const VALID_USER = {
+  id: '00000000-0000-0000-0000-000000000001',
+  email: 'user@example.com',
+  username: 'testuser',
+  passwordHash: '$2a$04$somevalidhashvalue.thatislong.enoughfortest',
+  authProvider: 'email' as const,
+  role: 'user' as const,
+  avatarUrl: null,
+  avatarImageId: null,
+  isCgvAccepted: true,
+  cgvAcceptedAt: new Date('2024-01-01'),
+  isMarketingOptedIn: false,
+  defaultCurrencyCode: 'EUR',
+  emailVerifyToken: null,
+  emailVerifyTokenExpiresAt: null,
+  emailVerifiedAt: new Date('2024-01-02'),
+  passwordResetToken: null,
+  passwordResetTokenExpiresAt: null,
+  lastActiveAt: null,
+  deletedAt: null,
+  bannedAt: null,
+  banReason: null,
+  createdAt: new Date('2024-01-01'),
+  updatedAt: new Date('2024-01-01'),
+}
+
+const ACCESS_TOKEN_ENTRY = makeAccessTokenEntry(VALID_USER.id)
+
+const VALID_REFRESH_TOKEN_ROW = {
+  id: '00000000-0000-0000-0000-000000000010',
+  userId: VALID_USER.id,
+  tokenHash: TEST_REFRESH_TOKEN_HASH,
+  expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+  createdAt: new Date('2024-01-01'),
+  revokedAt: null,
+}
+
+function mockInsertReturning(returnValue: unknown): void {
+  vi.mocked(db.insert).mockReturnValueOnce({
+    values: vi.fn().mockReturnValueOnce({
+      returning: vi.fn().mockResolvedValueOnce([returnValue]),
+    }),
+  } as never)
+}
+
+function mockInsertNoReturning(): void {
+  vi.mocked(db.insert).mockReturnValueOnce({
+    values: vi.fn().mockResolvedValueOnce(undefined),
+  } as never)
+}
+
+describe('POST /v1/auth/register', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('returns 201 with user and refreshToken when registration is successful', async () => {
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(undefined)
+    mockInsertReturning(VALID_USER)
+    mockInsertNoReturning()
+
+    const response = await apiRequest('/v1/auth/register', {
+      method: 'POST',
+      body: {
+        email: 'user@example.com',
+        password: 'securepassword123',
+        isCgvAccepted: true,
+      },
+    })
+
+    const body = await response.json() as { user: { id: string; email: string }; refreshToken: string }
+    expect(response.status).toBe(201)
+    expect(body.user.email).toBe('user@example.com')
+    expect(typeof body.refreshToken).toBe('string')
+    expect(body.refreshToken.length).toBeGreaterThan(0)
+  })
+
+  it('persists defaultCurrencyCode when defaultCurrency is provided', async () => {
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(undefined)
+    const valuesSpy = vi.fn().mockReturnValueOnce({
+      returning: vi.fn().mockResolvedValueOnce([{ ...VALID_USER, defaultCurrencyCode: 'EUR' }]),
+    })
+    vi.mocked(db.insert).mockReturnValueOnce({ values: valuesSpy } as never)
+    mockInsertNoReturning()
+
+    const response = await apiRequest('/v1/auth/register', {
+      method: 'POST',
+      body: {
+        email: 'user@example.com',
+        password: 'securepassword123',
+        defaultCurrency: 'EUR',
+      },
+    })
+
+    const body = await response.json() as { user: { defaultCurrency: string } }
+    expect(response.status).toBe(201)
+    expect(body.user.defaultCurrency).toBe('EUR')
+    const insertedRow = valuesSpy.mock.calls[0]?.[0] as { defaultCurrencyCode?: string }
+    expect(insertedRow.defaultCurrencyCode).toBe('EUR')
+  })
+
+  it('falls back to the DB default (EUR) when defaultCurrency is omitted', async () => {
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(undefined)
+    const valuesSpy = vi.fn().mockReturnValueOnce({
+      returning: vi.fn().mockResolvedValueOnce([VALID_USER]),
+    })
+    vi.mocked(db.insert).mockReturnValueOnce({ values: valuesSpy } as never)
+    mockInsertNoReturning()
+
+    const response = await apiRequest('/v1/auth/register', {
+      method: 'POST',
+      body: {
+        email: 'user@example.com',
+        password: 'securepassword123',
+      },
+    })
+
+    expect(response.status).toBe(201)
+    const insertedRow = valuesSpy.mock.calls[0]?.[0] as { defaultCurrencyCode?: string }
+    expect(insertedRow).not.toHaveProperty('defaultCurrencyCode')
+    const body = await response.json() as { user: { defaultCurrency: string } }
+    expect(body.user.defaultCurrency).toBe('EUR')
+  })
+
+  it('returns 422 when defaultCurrency is not a supported ISO code', async () => {
+    const response = await apiRequest('/v1/auth/register', {
+      method: 'POST',
+      body: {
+        email: 'user@example.com',
+        password: 'securepassword123',
+        defaultCurrency: 'XYZ',
+      },
+    })
+
+    expect(response.status).toBe(422)
+  })
+
+  it('returns 409 when email already exists', async () => {
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(VALID_USER)
+
+    const response = await apiRequest('/v1/auth/register', {
+      method: 'POST',
+      body: {
+        email: 'user@example.com',
+        password: 'securepassword123',
+        isCgvAccepted: true,
+      },
+    })
+
+    expect(response.status).toBe(409)
+  })
+
+  it('returns 422 when username contains invalid characters', async () => {
+    const response = await apiRequest('/v1/auth/register', {
+      method: 'POST',
+      body: {
+        email: 'user@example.com',
+        password: 'securepassword123',
+        isCgvAccepted: true,
+        username: 'invalid username with spaces',
+      },
+    })
+
+    expect(response.status).toBe(422)
+  })
+
+  it('returns 422 when password is too short', async () => {
+    const response = await apiRequest('/v1/auth/register', {
+      method: 'POST',
+      body: {
+        email: 'user@example.com',
+        password: 'short',
+        isCgvAccepted: true,
+      },
+    })
+
+    expect(response.status).toBe(422)
+  })
+})
+
+describe('POST /v1/auth/verify-email', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('returns 200 when token is valid', async () => {
+    const validToken = '00000000-0000-0000-0000-000000000099'
+    const userWithToken = {
+      ...VALID_USER,
+      emailVerifiedAt: null,
+      emailVerifyToken: validToken,
+      emailVerifyTokenExpiresAt: new Date(Date.now() + 60 * 60 * 1000),
+    }
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(userWithToken)
+    vi.mocked(db.update).mockReturnValueOnce({
+      set: vi.fn().mockReturnValueOnce({
+        where: vi.fn().mockReturnValueOnce({
+          returning: vi.fn().mockResolvedValueOnce([VALID_USER]),
+        }),
+      }),
+    } as never)
+
+    const response = await apiRequest('/v1/auth/verify-email', {
+      method: 'POST',
+      body: { token: validToken },
+    })
+
+    const body = await response.json() as { message: string }
+    expect(response.status).toBe(200)
+    expect(body.message).toBe('Email verified successfully')
+  })
+
+  it('returns 400 when token is invalid', async () => {
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(undefined)
+
+    const response = await apiRequest('/v1/auth/verify-email', {
+      method: 'POST',
+      body: { token: '00000000-0000-0000-0000-000000000000' },
+    })
+
+    expect(response.status).toBe(400)
+  })
+
+  it('returns 400 when token is expired', async () => {
+    const expiredToken = '00000000-0000-0000-0000-000000000099'
+    const userWithExpiredToken = {
+      ...VALID_USER,
+      emailVerifiedAt: null,
+      emailVerifyToken: expiredToken,
+      emailVerifyTokenExpiresAt: new Date(Date.now() - 60 * 60 * 1000),
+    }
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(userWithExpiredToken)
+
+    const response = await apiRequest('/v1/auth/verify-email', {
+      method: 'POST',
+      body: { token: expiredToken },
+    })
+
+    expect(response.status).toBe(400)
+  })
+
+  it('returns 422 when token is not a valid uuid', async () => {
+    const response = await apiRequest('/v1/auth/verify-email', {
+      method: 'POST',
+      body: { token: 'not-a-uuid' },
+    })
+
+    expect(response.status).toBe(422)
+  })
+})
+
+describe('POST /v1/auth/login', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('returns 200 with accessToken, refreshToken, and user when credentials are valid', async () => {
+    const bcrypt = await import('bcryptjs')
+    const hash = await bcrypt.default.hash('securepassword123', 4)
+    const userWithHash = { ...VALID_USER, passwordHash: hash }
+
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(userWithHash)
+    mockInsertNoReturning()
+
+    const response = await apiRequest('/v1/auth/login', {
+      method: 'POST',
+      body: { email: 'user@example.com', password: 'securepassword123' },
+    })
+
+    const body = await response.json() as { accessToken: string; refreshToken: string; user: { email: string } }
+    expect(response.status).toBe(200)
+    expect(typeof body.accessToken).toBe('string')
+    expect(typeof body.refreshToken).toBe('string')
+    expect(body.refreshToken.length).toBeGreaterThan(0)
+    expect(body.user.email).toBe('user@example.com')
+  })
+
+  it('returns 401 when email is unknown', async () => {
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(undefined)
+
+    const response = await apiRequest('/v1/auth/login', {
+      method: 'POST',
+      body: { email: 'unknown@example.com', password: 'somepassword' },
+    })
+
+    expect(response.status).toBe(401)
+  })
+
+  it('returns 401 when password is incorrect', async () => {
+    const bcrypt = await import('bcryptjs')
+    const hash = await bcrypt.default.hash('correctpassword', 4)
+    const userWithHash = { ...VALID_USER, passwordHash: hash }
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(userWithHash)
+
+    const response = await apiRequest('/v1/auth/login', {
+      method: 'POST',
+      body: { email: 'user@example.com', password: 'wrongpassword' },
+    })
+
+    expect(response.status).toBe(401)
+  })
+
+  it('returns 403 when email is not verified', async () => {
+    const bcrypt = await import('bcryptjs')
+    const hash = await bcrypt.default.hash('securepassword123', 4)
+    const unverifiedUser = { ...VALID_USER, passwordHash: hash, emailVerifiedAt: null }
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(unverifiedUser)
+
+    const response = await apiRequest('/v1/auth/login', {
+      method: 'POST',
+      body: { email: 'user@example.com', password: 'securepassword123' },
+    })
+
+    expect(response.status).toBe(403)
+  })
+
+  it('returns 403 when account is banned', async () => {
+    const bcrypt = await import('bcryptjs')
+    const hash = await bcrypt.default.hash('securepassword123', 4)
+    const bannedUser = { ...VALID_USER, passwordHash: hash, bannedAt: new Date('2024-01-01') }
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(bannedUser)
+
+    const response = await apiRequest('/v1/auth/login', {
+      method: 'POST',
+      body: { email: 'user@example.com', password: 'securepassword123' },
+    })
+
+    expect(response.status).toBe(403)
+  })
+})
+
+describe('POST /v1/auth/logout', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('returns 200 with message and runs transaction when logout is successful', async () => {
+    const token = await generateTestToken(VALID_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(VALID_USER)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValueOnce(ACCESS_TOKEN_ENTRY)
+
+    const response = await apiRequest('/v1/auth/logout', { method: 'POST', token })
+
+    const body = await response.json() as { message: string }
+    expect(response.status).toBe(200)
+    expect(body.message).toBe('Logged out successfully')
+    expect(vi.mocked(db.transaction)).toHaveBeenCalledOnce()
+  })
+
+  it('returns 401 when no authorization header is provided', async () => {
+    const response = await apiRequest('/v1/auth/logout', { method: 'POST' })
+    expect(response.status).toBe(401)
+  })
+
+  it('returns 401 when JWT is expired', async () => {
+    const token = await generateTestToken(VALID_USER.id, { expired: true })
+
+    const response = await apiRequest('/v1/auth/logout', { method: 'POST', token })
+
+    expect(response.status).toBe(401)
+  })
+
+  it('returns 401 when JWT has no jti claim', async () => {
+    const token = await generateTestToken(VALID_USER.id, { includeJti: false })
+
+    const response = await apiRequest('/v1/auth/logout', { method: 'POST', token })
+
+    expect(response.status).toBe(401)
+  })
+
+  it('returns 401 when token is not active', async () => {
+    const token = await generateTestToken(VALID_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(VALID_USER)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValueOnce(undefined)
+
+    const response = await apiRequest('/v1/auth/logout', { method: 'POST', token })
+
+    expect(response.status).toBe(401)
+  })
+
+  it('returns 500 when the logout transaction fails', async () => {
+    const token = await generateTestToken(VALID_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(VALID_USER)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValueOnce(ACCESS_TOKEN_ENTRY)
+    vi.mocked(db.transaction).mockRejectedValueOnce(new Error('DB error'))
+
+    const response = await apiRequest('/v1/auth/logout', { method: 'POST', token })
+
+    expect(response.status).toBe(500)
+  })
+
+  it('revokes the refresh token when refreshToken is provided in the body', async () => {
+    const token = await generateTestToken(VALID_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(VALID_USER)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValueOnce(ACCESS_TOKEN_ENTRY)
+
+    const txUpdate = vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn(() => Promise.resolve([])) })) }))
+    const txDelete = vi.fn(() => ({ where: vi.fn(() => Promise.resolve([])) }))
+    vi.mocked(db.transaction).mockImplementationOnce((async (callback: (tx: unknown) => Promise<unknown>) => {
+      return callback({ delete: txDelete, update: txUpdate, insert: vi.fn() })
+    }) as never)
+
+    const response = await apiRequest('/v1/auth/logout', {
+      method: 'POST',
+      token,
+      body: { refreshToken: 'some-refresh-token' },
+    })
+
+    expect(response.status).toBe(200)
+    expect(txDelete).toHaveBeenCalledTimes(1)
+    expect(txUpdate).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not touch refresh_tokens when the body has no refreshToken', async () => {
+    const token = await generateTestToken(VALID_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(VALID_USER)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValueOnce(ACCESS_TOKEN_ENTRY)
+
+    const txUpdate = vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn(() => Promise.resolve([])) })) }))
+    const txDelete = vi.fn(() => ({ where: vi.fn(() => Promise.resolve([])) }))
+    vi.mocked(db.transaction).mockImplementationOnce((async (callback: (tx: unknown) => Promise<unknown>) => {
+      return callback({ delete: txDelete, update: txUpdate, insert: vi.fn() })
+    }) as never)
+
+    const response = await apiRequest('/v1/auth/logout', { method: 'POST', token })
+
+    expect(response.status).toBe(200)
+    expect(txDelete).toHaveBeenCalledTimes(1)
+    expect(txUpdate).toHaveBeenCalledTimes(1)
+  })
+
+  it('returns 422 when refreshToken is an empty string', async () => {
+    const token = await generateTestToken(VALID_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(VALID_USER)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValueOnce(ACCESS_TOKEN_ENTRY)
+
+    const response = await apiRequest('/v1/auth/logout', {
+      method: 'POST',
+      token,
+      body: { refreshToken: '' },
+    })
+
+    expect(response.status).toBe(422)
+  })
+})
+
+describe('POST /v1/auth/forgot-password', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('returns 200 with generic message for a registered email user', async () => {
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(VALID_USER)
+    vi.mocked(db.update).mockReturnValueOnce({
+      set: vi.fn().mockReturnValueOnce({
+        where: vi.fn().mockResolvedValueOnce(undefined),
+      }),
+    } as never)
+
+    const response = await apiRequest('/v1/auth/forgot-password', {
+      method: 'POST',
+      body: { email: 'user@example.com' },
+    })
+
+    const body = await response.json() as { message: string; passwordResetToken?: string }
+    expect(response.status).toBe(200)
+    expect(body.message).toBe('If this email is registered, a reset link has been sent')
+    expect(body.passwordResetToken).toMatch(/^[a-f0-9]{64}$/)
+  })
+
+  it('does not include passwordResetToken when the email is unknown', async () => {
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(undefined)
+
+    const response = await apiRequest('/v1/auth/forgot-password', {
+      method: 'POST',
+      body: { email: 'unknown@example.com' },
+    })
+
+    const body = await response.json() as { message: string; passwordResetToken?: string }
+    expect(response.status).toBe(200)
+    expect(body.passwordResetToken).toBeUndefined()
+  })
+
+  it('does not leak passwordResetToken in production', async () => {
+    const originalEnv = env.NODE_ENV
+    env.NODE_ENV = NodeEnvs.PRODUCTION
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(VALID_USER)
+    vi.mocked(db.update).mockReturnValueOnce({
+      set: vi.fn().mockReturnValueOnce({
+        where: vi.fn().mockResolvedValueOnce(undefined),
+      }),
+    } as never)
+
+    try {
+      const response = await apiRequest('/v1/auth/forgot-password', {
+        method: 'POST',
+        body: { email: 'user@example.com' },
+      })
+
+      const body = await response.json() as { message: string; passwordResetToken?: string }
+      expect(response.status).toBe(200)
+      expect(body.passwordResetToken).toBeUndefined()
+    } finally {
+      env.NODE_ENV = originalEnv
+    }
+  })
+
+  it('returns 200 with generic message when email is unknown', async () => {
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(undefined)
+
+    const response = await apiRequest('/v1/auth/forgot-password', {
+      method: 'POST',
+      body: { email: 'unknown@example.com' },
+    })
+
+    const body = await response.json() as { message: string }
+    expect(response.status).toBe(200)
+    expect(body.message).toBe('If this email is registered, a reset link has been sent')
+  })
+
+  it('returns 200 silently for an OAuth user with no password', async () => {
+    const oauthUser = { ...VALID_USER, passwordHash: null }
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(oauthUser)
+
+    const response = await apiRequest('/v1/auth/forgot-password', {
+      method: 'POST',
+      body: { email: 'user@example.com' },
+    })
+
+    expect(response.status).toBe(200)
+    expect(vi.mocked(db.update)).not.toHaveBeenCalled()
+  })
+
+  it('returns 422 when email is malformed', async () => {
+    const response = await apiRequest('/v1/auth/forgot-password', {
+      method: 'POST',
+      body: { email: 'not-an-email' },
+    })
+
+    expect(response.status).toBe(422)
+  })
+
+  it('returns 422 when email is missing', async () => {
+    const response = await apiRequest('/v1/auth/forgot-password', {
+      method: 'POST',
+      body: {},
+    })
+
+    expect(response.status).toBe(422)
+  })
+})
+
+describe('POST /v1/auth/reset-password', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('returns 200 and resets password when token is valid', async () => {
+    const userWithResetToken = {
+      ...VALID_USER,
+      passwordResetToken: 'some-hash',
+      passwordResetTokenExpiresAt: new Date(Date.now() + 30 * 60 * 1000),
+    }
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(userWithResetToken)
+    vi.mocked(db.update).mockReturnValue({
+      set: vi.fn().mockReturnValue({
+        where: vi.fn().mockResolvedValue(undefined),
+      }),
+    } as never)
+    vi.mocked(db.delete).mockReturnValue({
+      where: vi.fn().mockResolvedValue(undefined),
+    } as never)
+
+    const response = await apiRequest('/v1/auth/reset-password', {
+      method: 'POST',
+      body: { passwordResetToken: 'valid-raw-token-64-chars-long-at-least-to-pass', password: 'newpassword123' },
+    })
+
+    const body = await response.json() as { message: string }
+    expect(response.status).toBe(200)
+    expect(body.message).toBe('Password reset successfully')
+  })
+
+  it('returns 400 when token does not match any user', async () => {
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(undefined)
+
+    const response = await apiRequest('/v1/auth/reset-password', {
+      method: 'POST',
+      body: { passwordResetToken: 'invalid-token', password: 'newpassword123' },
+    })
+
+    expect(response.status).toBe(400)
+  })
+
+  it('returns 400 when token is expired', async () => {
+    const userWithExpiredToken = {
+      ...VALID_USER,
+      passwordResetToken: 'some-hash',
+      passwordResetTokenExpiresAt: new Date(Date.now() - 60 * 60 * 1000),
+    }
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(userWithExpiredToken)
+
+    const response = await apiRequest('/v1/auth/reset-password', {
+      method: 'POST',
+      body: { passwordResetToken: 'expired-token', password: 'newpassword123' },
+    })
+
+    expect(response.status).toBe(400)
+  })
+
+  it('returns 400 when user has no reset token set', async () => {
+    const userWithNoToken = { ...VALID_USER, passwordResetToken: null, passwordResetTokenExpiresAt: null }
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(userWithNoToken)
+
+    const response = await apiRequest('/v1/auth/reset-password', {
+      method: 'POST',
+      body: { passwordResetToken: 'some-token', password: 'newpassword123' },
+    })
+
+    expect(response.status).toBe(400)
+  })
+
+  it('returns 422 when password is too short', async () => {
+    const response = await apiRequest('/v1/auth/reset-password', {
+      method: 'POST',
+      body: { passwordResetToken: 'some-token', password: 'short' },
+    })
+
+    expect(response.status).toBe(422)
+  })
+
+  it('returns 422 when password is missing', async () => {
+    const response = await apiRequest('/v1/auth/reset-password', {
+      method: 'POST',
+      body: { passwordResetToken: 'some-token' },
+    })
+
+    expect(response.status).toBe(422)
+  })
+
+  it('returns 422 when passwordResetToken is missing', async () => {
+    const response = await apiRequest('/v1/auth/reset-password', {
+      method: 'POST',
+      body: { password: 'newpassword123' },
+    })
+
+    expect(response.status).toBe(422)
+  })
+})
+
+describe('POST /v1/auth/refresh', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('returns 200 with a new accessToken and a rotated refreshToken inside a single transaction', async () => {
+    const submittedRefreshToken = 'some-valid-raw-token'
+    vi.mocked(db.query.refreshTokens.findFirst).mockResolvedValueOnce(VALID_REFRESH_TOKEN_ROW)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(VALID_USER)
+
+    const response = await apiRequest('/v1/auth/refresh', {
+      method: 'POST',
+      body: { refreshToken: submittedRefreshToken },
+    })
+
+    const body = await response.json() as { accessToken: string; refreshToken: string }
+    expect(response.status).toBe(200)
+    expect(typeof body.accessToken).toBe('string')
+    expect(body.accessToken.length).toBeGreaterThan(0)
+    expect(body.refreshToken).not.toBe(submittedRefreshToken)
+    expect(body.refreshToken).toMatch(/^[a-f0-9]{64}$/)
+    expect(vi.mocked(db.transaction)).toHaveBeenCalledOnce()
+  })
+
+  it('returns 401 when refreshToken is not found', async () => {
+    vi.mocked(db.query.refreshTokens.findFirst).mockResolvedValueOnce(undefined)
+
+    const response = await apiRequest('/v1/auth/refresh', {
+      method: 'POST',
+      body: { refreshToken: 'unknown-token' },
+    })
+
+    expect(response.status).toBe(401)
+  })
+
+  it('returns 401 when refreshToken is revoked', async () => {
+    const revokedToken = { ...VALID_REFRESH_TOKEN_ROW, revokedAt: new Date('2024-01-01') }
+    vi.mocked(db.query.refreshTokens.findFirst).mockResolvedValueOnce(revokedToken)
+
+    const response = await apiRequest('/v1/auth/refresh', {
+      method: 'POST',
+      body: { refreshToken: 'revoked-token' },
+    })
+
+    expect(response.status).toBe(401)
+  })
+
+  it('returns 401 when refreshToken is expired', async () => {
+    const expiredToken = { ...VALID_REFRESH_TOKEN_ROW, expiresAt: new Date(Date.now() - 1000) }
+    vi.mocked(db.query.refreshTokens.findFirst).mockResolvedValueOnce(expiredToken)
+
+    const response = await apiRequest('/v1/auth/refresh', {
+      method: 'POST',
+      body: { refreshToken: 'expired-token' },
+    })
+
+    expect(response.status).toBe(401)
+  })
+
+  it('returns 401 when user is soft-deleted', async () => {
+    vi.mocked(db.query.refreshTokens.findFirst).mockResolvedValueOnce(VALID_REFRESH_TOKEN_ROW)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce({ ...VALID_USER, deletedAt: new Date('2024-01-01') })
+
+    const response = await apiRequest('/v1/auth/refresh', {
+      method: 'POST',
+      body: { refreshToken: 'some-token' },
+    })
+
+    expect(response.status).toBe(401)
+  })
+
+  it('returns 403 when user is banned', async () => {
+    vi.mocked(db.query.refreshTokens.findFirst).mockResolvedValueOnce(VALID_REFRESH_TOKEN_ROW)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce({ ...VALID_USER, bannedAt: new Date('2024-01-01') })
+
+    const response = await apiRequest('/v1/auth/refresh', {
+      method: 'POST',
+      body: { refreshToken: 'some-token' },
+    })
+
+    expect(response.status).toBe(403)
+  })
+
+  it('returns 422 when refreshToken field is missing', async () => {
+    const response = await apiRequest('/v1/auth/refresh', {
+      method: 'POST',
+      body: {},
+    })
+
+    expect(response.status).toBe(422)
+  })
+})

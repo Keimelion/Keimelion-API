@@ -1,0 +1,10 @@
+node_modules
+dist
+.git
+.github
+.husky
+.claude
+.env
+.env.*
+uploads
+*.log

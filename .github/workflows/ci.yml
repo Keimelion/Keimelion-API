@@ -1,32 +1,32 @@
 name: CI
 
 on:
-  push:
-    branches:
-      - main
   pull_request:
-    branches:
-      - main
+    branches: [dev, main]
+  push:
+    branches: [dev]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
 
 jobs:
-  test:
-    name: Lint & Test
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+  ci:
+    uses: Keimelion/Keimelion-Infra/.github/workflows/node-ci.yml@main
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 'lts/*'
-          cache: 'npm'
+  pr-title:
+    if: github.event_name == 'pull_request'
+    uses: Keimelion/Keimelion-Infra/.github/workflows/pr-title.yml@main
 
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Lint
-        run: npm run lint
-
-      - name: Test
-        run: npm test -- --run
+  # Patch/minor Dependabot bumps merge themselves once ci and pr-title are green.
+  dependabot-automerge:
+    needs: [ci, pr-title]
+    if: github.event_name == 'pull_request' && github.event.pull_request.user.login == 'dependabot[bot]'
+    permissions:
+      contents: write
+      pull-requests: write
+    uses: Keimelion/Keimelion-Infra/.github/workflows/dependabot-automerge.yml@main

@@ -26,5 +26,6 @@ Thumbs.db
 *.swp
 *.swo
 
-# Drizzle
-drizzle/
+
+# Uploads directory (local dev image storage)
+/uploads/

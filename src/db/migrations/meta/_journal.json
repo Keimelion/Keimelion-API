@@ -1,0 +1,174 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1775319744032,
+      "tag": "0000_init",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1775338001909,
+      "tag": "0001_add-auth-fields",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1775988456409,
+      "tag": "0002_add-access-tokens",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1776075936164,
+      "tag": "0003_hard-delete-inactive-users",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1776187967136,
+      "tag": "0004_add-password-reset-token",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1788360105151,
+      "tag": "0005_refresh_tokens",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1789213533683,
+      "tag": "0006_add-occasion-types",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1789300179508,
+      "tag": "0007_add_occasion_type_translations",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1791383245774,
+      "tag": "0008_add-items-lists-shops-item-sources",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1791540341887,
+      "tag": "0009_add-categories-and-item-categories",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791554668683,
+      "tag": "0010_add-tags-and-item-tags",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1791754204499,
+      "tag": "0011_add-list-tags",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1791908727022,
+      "tag": "0012_add-category-translations",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1792579761255,
+      "tag": "0013_add-currencies-and-fk",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1792588499707,
+      "tag": "0014_add-user-default-currency",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1792663364646,
+      "tag": "0015_switch-user-default-currency-to-eur",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1792664265481,
+      "tag": "0016_add-feedback-table",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1792764036244,
+      "tag": "0017_add_images_and_image_fks",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1792792961216,
+      "tag": "0018_index_list_collaborators_owner_joins",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1792802005889,
+      "tag": "0019_pgenum_item_invite_reason",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1792802019406,
+      "tag": "0020_check_constraints",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1792835291676,
+      "tag": "0021_add-reservations-table",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1793617922246,
+      "tag": "0022_add_items_image_id_fk",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1793633177572,
+      "tag": "0023_drop_list_items_image_id",
+      "breakpoints": true
+    }
+  ]
+}

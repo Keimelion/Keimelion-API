@@ -1,0 +1,1037 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { db } from '../../../db/client.js'
+import { apiRequest } from '../../../shared/test/api-request.js'
+import { generateTestToken, makeAccessTokenEntry } from '../../../shared/test/auth.js'
+import { makeAdminUser } from '../../../shared/test/fixtures/users.js'
+import { logger } from '../../../shared/utils/logger.js'
+
+vi.mock('../../../shared/utils/logger.js', () => ({
+  logger: {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+}))
+
+// This suite asserts on `displayCurrency: 'USD'` as the admin's default — override
+// `defaultCurrencyCode` on every variant so the fixture change does not alter behaviour.
+const ADMIN_USER = makeAdminUser({ defaultCurrencyCode: 'USD' })
+
+const NON_ADMIN_USER = makeAdminUser({
+  id: '00000000-0000-0000-0000-000000000002',
+  email: 'user@example.com',
+  role: 'user',
+  defaultCurrencyCode: 'USD',
+})
+
+const MODERATOR_USER = makeAdminUser({
+  id: '00000000-0000-0000-0000-000000000003',
+  email: 'moderator@example.com',
+  role: 'moderator',
+  defaultCurrencyCode: 'USD',
+})
+
+const OWNER_USER = makeAdminUser({
+  id: '00000000-0000-0000-0000-000000000004',
+  email: 'owner@example.com',
+  username: 'owneruser',
+  role: 'user',
+  defaultCurrencyCode: 'USD',
+})
+
+const LIST_ROW = {
+  id: '00000000-0000-0000-0000-000000000010',
+  occasionTypeId: null,
+  title: 'Birthday wishlist',
+  description: 'Things I want',
+  listStatus: 'active' as const,
+  deletedAt: null,
+  createdAt: new Date('2024-01-01'),
+  updatedAt: new Date('2024-01-01'),
+}
+
+const DELETED_LIST_ROW = {
+  ...LIST_ROW,
+  id: '00000000-0000-0000-0000-000000000011',
+  deletedAt: new Date('2024-06-01'),
+}
+
+const ACCESS_TOKEN_ENTRY = makeAccessTokenEntry(ADMIN_USER.id)
+
+function mockAdminAuth(user: typeof ADMIN_USER = ADMIN_USER): void {
+  vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
+  vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(user)
+}
+
+function mockNonAdminAuth(): void {
+  vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(
+    makeAccessTokenEntry(NON_ADMIN_USER.id),
+  )
+  vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(NON_ADMIN_USER)
+}
+
+function mockModeratorAuth(): void {
+  vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(
+    makeAccessTokenEntry(MODERATOR_USER.id),
+  )
+  vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(MODERATOR_USER)
+}
+
+function mockFindListById(row: unknown): void {
+  vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(row as never)
+}
+
+function mockFindListByIdWithOwner(row: unknown, owner: unknown): void {
+  const rowOut =
+    row === undefined || row === null
+      ? undefined
+      : { ...(row), collaborators: buildCollaborators(owner), listTags: [] }
+  vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(rowOut as never)
+}
+
+function rowWithOwner(row: object, owner: unknown): object {
+  return { ...row, collaborators: buildCollaborators(owner), listTags: [] }
+}
+
+function buildCollaborators(owner: unknown): { userId: string; user: unknown }[] {
+  if (owner === null) return []
+  return [{ userId: (owner as { id: string }).id, user: owner }]
+}
+
+function mockCountChain(total: number): void {
+  const chain = {
+    from: vi.fn().mockReturnThis(),
+    where: vi.fn().mockResolvedValueOnce([{ count: total }]),
+  }
+  vi.mocked(db.select).mockReturnValueOnce(chain as never)
+}
+
+function mockOwnerListIdsChain(listIds: string[]): void {
+  const chain = {
+    from: vi.fn().mockReturnThis(),
+    where: vi.fn().mockResolvedValueOnce(listIds.map((listId) => ({ listId }))),
+  }
+  vi.mocked(db.select).mockReturnValueOnce(chain as never)
+}
+
+interface AggregateRawRow {
+  list_id: string
+  item_count: number
+  total_estimated_price: string | null
+}
+
+function mockListAggregatesEmpty(): void {
+  vi.mocked(db.execute).mockResolvedValueOnce([] as never)
+}
+
+function mockListAggregates(rows: AggregateRawRow[]): void {
+  vi.mocked(db.execute).mockResolvedValueOnce(rows as never)
+}
+
+function mockUpdateList(returnRow: unknown): void {
+  vi.mocked(db.update).mockReturnValueOnce({
+    set: vi.fn().mockReturnValueOnce({
+      where: vi.fn().mockReturnValueOnce({
+        returning: vi.fn().mockResolvedValueOnce([returnRow]),
+      }),
+    }),
+  } as never)
+}
+
+describe('GET /v1/admin/lists', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
+    vi.mocked(db.execute).mockResolvedValue([] as never)
+  })
+
+  it('returns 200 with paginated lists including owner', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    vi.mocked(db.query.lists.findMany).mockResolvedValueOnce([rowWithOwner(LIST_ROW, OWNER_USER)] as never)
+    mockCountChain(1)
+
+    const response = await apiRequest('/v1/admin/lists', { token })
+
+    const body = await response.json() as {
+      items: { id: string; owner: { id: string } | null }[]
+      pagination: { total: number }
+    }
+    expect(response.status).toBe(200)
+    expect(body.items).toHaveLength(1)
+    expect(body.pagination.total).toBe(1)
+    expect(body.items[0]?.owner?.id).toBe(OWNER_USER.id)
+  })
+
+  it('returns itemCount=0 and null totalEstimatedPrice when the list has no items', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    vi.mocked(db.query.lists.findMany).mockResolvedValueOnce([rowWithOwner(LIST_ROW, OWNER_USER)] as never)
+    mockCountChain(1)
+    mockListAggregatesEmpty()
+
+    const response = await apiRequest('/v1/admin/lists', { token })
+
+    const body = await response.json() as {
+      items: { itemCount: number; totalEstimatedPrice: string | null; displayCurrency: string }[]
+    }
+    expect(response.status).toBe(200)
+    expect(body.items[0]?.itemCount).toBe(0)
+    expect(body.items[0]?.totalEstimatedPrice).toBeNull()
+    expect(body.items[0]?.displayCurrency).toBe('USD')
+  })
+
+  it('returns itemCount>0 and null totalEstimatedPrice when items exist but none have priced sources', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    vi.mocked(db.query.lists.findMany).mockResolvedValueOnce([rowWithOwner(LIST_ROW, OWNER_USER)] as never)
+    mockCountChain(1)
+    mockListAggregates([
+      { list_id: LIST_ROW.id, item_count: 3, total_estimated_price: null },
+    ])
+
+    const response = await apiRequest('/v1/admin/lists', { token })
+
+    const body = await response.json() as {
+      items: { itemCount: number; totalEstimatedPrice: string | null; displayCurrency: string }[]
+    }
+    expect(response.status).toBe(200)
+    expect(body.items[0]?.itemCount).toBe(3)
+    expect(body.items[0]?.totalEstimatedPrice).toBeNull()
+    expect(body.items[0]?.displayCurrency).toBe('USD')
+  })
+
+  it('returns totalEstimatedPrice as a USD scalar when ?currency is omitted', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    vi.mocked(db.query.lists.findMany).mockResolvedValueOnce([rowWithOwner(LIST_ROW, OWNER_USER)] as never)
+    mockCountChain(1)
+    mockListAggregates([
+      { list_id: LIST_ROW.id, item_count: 2, total_estimated_price: '36.30' },
+    ])
+
+    const response = await apiRequest('/v1/admin/lists', { token })
+
+    const body = await response.json() as {
+      items: { itemCount: number; totalEstimatedPrice: string | null; displayCurrency: string }[]
+    }
+    expect(response.status).toBe(200)
+    expect(body.items[0]?.itemCount).toBe(2)
+    expect(body.items[0]?.totalEstimatedPrice).toBe('36.30')
+    expect(body.items[0]?.displayCurrency).toBe('USD')
+  })
+
+  it('echoes the requested displayCurrency and returns a single scalar total', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    vi.mocked(db.query.lists.findMany).mockResolvedValueOnce([rowWithOwner(LIST_ROW, OWNER_USER)] as never)
+    mockCountChain(1)
+    mockListAggregates([
+      { list_id: LIST_ROW.id, item_count: 1, total_estimated_price: '13.80' },
+    ])
+
+    const response = await apiRequest('/v1/admin/lists?currency=EUR', { token })
+
+    const body = await response.json() as {
+      items: { totalEstimatedPrice: string | null; displayCurrency: string }[]
+    }
+    expect(response.status).toBe(200)
+    expect(body.items[0]?.totalEstimatedPrice).toBe('13.80')
+    expect(body.items[0]?.displayCurrency).toBe('EUR')
+  })
+
+  it('falls back to the caller default_currency_code when ?currency is omitted', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth({ ...ADMIN_USER, defaultCurrencyCode: 'EUR' })
+
+    vi.mocked(db.query.lists.findMany).mockResolvedValueOnce([rowWithOwner(LIST_ROW, OWNER_USER)] as never)
+    mockCountChain(1)
+    mockListAggregates([
+      { list_id: LIST_ROW.id, item_count: 1, total_estimated_price: '13.80' },
+    ])
+
+    const response = await apiRequest('/v1/admin/lists', { token })
+
+    const body = await response.json() as {
+      items: { totalEstimatedPrice: string | null; displayCurrency: string }[]
+    }
+    expect(response.status).toBe(200)
+    expect(body.items[0]?.totalEstimatedPrice).toBe('13.80')
+    expect(body.items[0]?.displayCurrency).toBe('EUR')
+  })
+
+  it('honours an explicit ?currency override even when the caller has a different default', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth({ ...ADMIN_USER, defaultCurrencyCode: 'EUR' })
+
+    vi.mocked(db.query.lists.findMany).mockResolvedValueOnce([rowWithOwner(LIST_ROW, OWNER_USER)] as never)
+    mockCountChain(1)
+    mockListAggregates([
+      { list_id: LIST_ROW.id, item_count: 1, total_estimated_price: '20.00' },
+    ])
+
+    const response = await apiRequest('/v1/admin/lists?currency=GBP', { token })
+
+    const body = await response.json() as {
+      items: { displayCurrency: string }[]
+    }
+    expect(response.status).toBe(200)
+    expect(body.items[0]?.displayCurrency).toBe('GBP')
+  })
+
+  it('returns 422 when ?currency is unsupported', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    const response = await apiRequest('/v1/admin/lists?currency=XYZ', { token })
+    expect(response.status).toBe(422)
+  })
+
+  it('returns owner=null when the owner user is soft-deleted (collaborator FK set null)', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    vi.mocked(db.query.lists.findMany).mockResolvedValueOnce([rowWithOwner(LIST_ROW, null)] as never)
+    mockCountChain(1)
+
+    const response = await apiRequest('/v1/admin/lists', { token })
+
+    const body = await response.json() as { items: { owner: null }[] }
+    expect(response.status).toBe(200)
+    expect(body.items[0]?.owner).toBeNull()
+  })
+
+  it('returns empty list when no lists exist', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    vi.mocked(db.query.lists.findMany).mockResolvedValueOnce([] as never)
+    mockCountChain(0)
+
+    const response = await apiRequest('/v1/admin/lists', { token })
+
+    const body = await response.json() as { items: unknown[]; pagination: { total: number } }
+    expect(response.status).toBe(200)
+    expect(body.items).toHaveLength(0)
+    expect(body.pagination.total).toBe(0)
+  })
+
+  it('sorts by title:asc', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    vi.mocked(db.query.lists.findMany).mockResolvedValueOnce([rowWithOwner(LIST_ROW, OWNER_USER)] as never)
+    mockCountChain(1)
+
+    const response = await apiRequest('/v1/admin/lists?sort=title:asc', { token })
+    expect(response.status).toBe(200)
+  })
+
+  it('returns 422 when sort field is invalid', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    const response = await apiRequest('/v1/admin/lists?sort=unknown:asc', { token })
+    expect(response.status).toBe(422)
+  })
+
+  it('filters by id[eq]', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    vi.mocked(db.query.lists.findMany).mockResolvedValueOnce([rowWithOwner(LIST_ROW, OWNER_USER)] as never)
+    mockCountChain(1)
+
+    const response = await apiRequest(`/v1/admin/lists?id%5Beq%5D=${LIST_ROW.id}`, { token })
+    expect(response.status).toBe(200)
+    const body = await response.json() as { items: { id: string }[] }
+    expect(body.items[0]?.id).toBe(LIST_ROW.id)
+  })
+
+  it('filters by listStatus[eq]', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    vi.mocked(db.query.lists.findMany).mockResolvedValueOnce([rowWithOwner(LIST_ROW, OWNER_USER)] as never)
+    mockCountChain(1)
+
+    const response = await apiRequest('/v1/admin/lists?listStatus%5Beq%5D=active', { token })
+    expect(response.status).toBe(200)
+  })
+
+  it('filters by title[ilike]', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    vi.mocked(db.query.lists.findMany).mockResolvedValueOnce([rowWithOwner(LIST_ROW, OWNER_USER)] as never)
+    mockCountChain(1)
+
+    const response = await apiRequest('/v1/admin/lists?title%5Bilike%5D=birthday', { token })
+    expect(response.status).toBe(200)
+  })
+
+  it('excludes soft-deleted lists by default', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    vi.mocked(db.query.lists.findMany).mockResolvedValueOnce([rowWithOwner(LIST_ROW, OWNER_USER)] as never)
+    mockCountChain(1)
+
+    const response = await apiRequest('/v1/admin/lists', { token })
+    const body = await response.json() as { items: { id: string }[] }
+    expect(body.items.every((item) => item.id !== DELETED_LIST_ROW.id)).toBe(true)
+  })
+
+  it('includes soft-deleted lists when deletedAt filter is explicit', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    vi.mocked(db.query.lists.findMany).mockResolvedValueOnce([rowWithOwner(DELETED_LIST_ROW, OWNER_USER)] as never)
+    mockCountChain(1)
+
+    const response = await apiRequest('/v1/admin/lists?deletedAt%5BisNull%5D=false', { token })
+    const body = await response.json() as { items: { deletedAt: string | null }[] }
+    expect(response.status).toBe(200)
+    expect(body.items[0]?.deletedAt).not.toBeNull()
+  })
+
+  it('filters by ownerUserId and returns only matching lists', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    mockOwnerListIdsChain([LIST_ROW.id])
+    vi.mocked(db.query.lists.findMany).mockResolvedValueOnce([rowWithOwner(LIST_ROW, OWNER_USER)] as never)
+    mockCountChain(1)
+
+    const response = await apiRequest(`/v1/admin/lists?ownerUserId=${OWNER_USER.id}`, { token })
+
+    const body = await response.json() as { items: { id: string }[] }
+    expect(response.status).toBe(200)
+    expect(body.items).toHaveLength(1)
+    expect(body.items[0]?.id).toBe(LIST_ROW.id)
+  })
+
+  it('returns empty result when ownerUserId matches no lists (pre-query short-circuit)', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    mockOwnerListIdsChain([])
+
+    const response = await apiRequest(`/v1/admin/lists?ownerUserId=${OWNER_USER.id}`, { token })
+
+    const body = await response.json() as { items: unknown[]; pagination: { total: number } }
+    expect(response.status).toBe(200)
+    expect(body.items).toHaveLength(0)
+    expect(body.pagination.total).toBe(0)
+    expect(vi.mocked(db.query.lists.findMany)).not.toHaveBeenCalled()
+  })
+
+  it('returns 422 when ownerUserId is not a UUID', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    const response = await apiRequest('/v1/admin/lists?ownerUserId=not-a-uuid', { token })
+    expect(response.status).toBe(422)
+  })
+
+  it('returns 403 when caller is a moderator (admin only, not moderator)', async () => {
+    const token = await generateTestToken(MODERATOR_USER.id, { role: 'moderator' })
+    mockModeratorAuth()
+
+    const response = await apiRequest('/v1/admin/lists', { token })
+    expect(response.status).toBe(403)
+  })
+
+  it('returns 403 when user is not admin', async () => {
+    const token = await generateTestToken(NON_ADMIN_USER.id)
+    mockNonAdminAuth()
+
+    const response = await apiRequest('/v1/admin/lists', { token })
+    expect(response.status).toBe(403)
+  })
+
+  it('returns 401 when no token is provided', async () => {
+    const response = await apiRequest('/v1/admin/lists')
+    expect(response.status).toBe(401)
+  })
+})
+
+describe('GET /v1/admin/lists/:id', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
+    vi.mocked(db.execute).mockResolvedValue([] as never)
+  })
+
+  it('returns 200 with list and owner', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindListByIdWithOwner(LIST_ROW, OWNER_USER)
+
+    const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}`, { token })
+
+    const body = await response.json() as { list: { title: string; owner: { id: string } } }
+    expect(response.status).toBe(200)
+    expect(body.list.title).toBe(LIST_ROW.title)
+    expect(body.list.owner.id).toBe(OWNER_USER.id)
+  })
+
+  it('returns itemCount and a USD scalar totalEstimatedPrice by default', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindListByIdWithOwner(LIST_ROW, OWNER_USER)
+    mockListAggregates([
+      { list_id: LIST_ROW.id, item_count: 4, total_estimated_price: '129.95' },
+    ])
+
+    const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}`, { token })
+
+    const body = await response.json() as {
+      list: { itemCount: number; totalEstimatedPrice: string | null; displayCurrency: string }
+    }
+    expect(response.status).toBe(200)
+    expect(body.list.itemCount).toBe(4)
+    expect(body.list.totalEstimatedPrice).toBe('129.95')
+    expect(body.list.displayCurrency).toBe('USD')
+  })
+
+  it('echoes the requested displayCurrency and returns a single scalar total', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindListByIdWithOwner(LIST_ROW, OWNER_USER)
+    mockListAggregates([
+      { list_id: LIST_ROW.id, item_count: 3, total_estimated_price: '45.00' },
+    ])
+
+    const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}?currency=EUR`, { token })
+
+    const body = await response.json() as {
+      list: { itemCount: number; totalEstimatedPrice: string | null; displayCurrency: string }
+    }
+    expect(response.status).toBe(200)
+    expect(body.list.itemCount).toBe(3)
+    expect(body.list.totalEstimatedPrice).toBe('45.00')
+    expect(body.list.displayCurrency).toBe('EUR')
+  })
+
+  it('defaults itemCount=0 and null totalEstimatedPrice when the list has no items', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindListByIdWithOwner(LIST_ROW, OWNER_USER)
+    mockListAggregatesEmpty()
+
+    const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}`, { token })
+
+    const body = await response.json() as {
+      list: { itemCount: number; totalEstimatedPrice: string | null; displayCurrency: string }
+    }
+    expect(response.status).toBe(200)
+    expect(body.list.itemCount).toBe(0)
+    expect(body.list.totalEstimatedPrice).toBeNull()
+    expect(body.list.displayCurrency).toBe('USD')
+  })
+
+  it('returns 422 when ?currency is unsupported', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}?currency=XYZ`, { token })
+    expect(response.status).toBe(422)
+  })
+
+  it('returns 200 with deletedAt populated for soft-deleted lists (admins see everything)', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindListByIdWithOwner(DELETED_LIST_ROW, OWNER_USER)
+
+    const response = await apiRequest(`/v1/admin/lists/${DELETED_LIST_ROW.id}`, { token })
+
+    const body = await response.json() as { list: { deletedAt: string | null } }
+    expect(response.status).toBe(200)
+    expect(body.list.deletedAt).not.toBeNull()
+  })
+
+  it('returns 404 when list does not exist', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindListById(undefined)
+
+    const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}`, { token })
+    expect(response.status).toBe(404)
+  })
+
+  it('returns 422 when id is not a UUID', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    const response = await apiRequest('/v1/admin/lists/not-a-uuid', { token })
+    expect(response.status).toBe(422)
+  })
+
+  it('returns 403 when user is not admin', async () => {
+    const token = await generateTestToken(NON_ADMIN_USER.id)
+    mockNonAdminAuth()
+
+    const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}`, { token })
+    expect(response.status).toBe(403)
+  })
+
+  it('returns 401 when no token is provided', async () => {
+    const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}`)
+    expect(response.status).toBe(401)
+  })
+})
+
+describe('PATCH /v1/admin/lists/:id', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
+    vi.mocked(db.execute).mockResolvedValue([] as never)
+  })
+
+  it('returns 200 with updated list when patching title', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindListByIdWithOwner(LIST_ROW, OWNER_USER)
+    mockUpdateList({ ...LIST_ROW, title: 'Updated title' })
+
+    const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}`, {
+      method: 'PATCH',
+      token,
+      body: { title: 'Updated title' },
+    })
+
+    const body = await response.json() as { list: { title: string } }
+    expect(response.status).toBe(200)
+    expect(body.list.title).toBe('Updated title')
+  })
+
+  it('returns 200 when patching listStatus', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindListByIdWithOwner(LIST_ROW, OWNER_USER)
+    mockUpdateList({ ...LIST_ROW, listStatus: 'archived' })
+
+    const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}`, {
+      method: 'PATCH',
+      token,
+      body: { listStatus: 'archived' },
+    })
+
+    const body = await response.json() as { list: { listStatus: string } }
+    expect(response.status).toBe(200)
+    expect(body.list.listStatus).toBe('archived')
+  })
+
+  it('logs with title/description redacted and only change keys recorded', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindListByIdWithOwner(LIST_ROW, OWNER_USER)
+    mockUpdateList({ ...LIST_ROW, title: 'New title', description: 'New description' })
+
+    await apiRequest(`/v1/admin/lists/${LIST_ROW.id}`, {
+      method: 'PATCH',
+      token,
+      body: { title: 'New title', description: 'New description' },
+    })
+
+    expect(vi.mocked(logger.info)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'admin_update_list',
+        listId: LIST_ROW.id,
+        changes: {
+          title: { from: '<redacted>', to: '<redacted>' },
+          description: { from: '<redacted>', to: '<redacted>' },
+        },
+      }),
+    )
+  })
+
+  it('returns 422 when body is empty (no fields)', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindListByIdWithOwner(LIST_ROW, OWNER_USER)
+
+    const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}`, {
+      method: 'PATCH',
+      token,
+      body: {},
+    })
+
+    expect(response.status).toBe(422)
+  })
+
+  it('returns 422 when unknown field is provided (strict schema)', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}`, {
+      method: 'PATCH',
+      token,
+      body: { unknownField: 'value' },
+    })
+
+    expect(response.status).toBe(422)
+  })
+
+  it('returns 422 when listStatus is an invalid enum value', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}`, {
+      method: 'PATCH',
+      token,
+      body: { listStatus: 'banned' },
+    })
+
+    expect(response.status).toBe(422)
+  })
+
+  it('returns 422 when title is empty', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}`, {
+      method: 'PATCH',
+      token,
+      body: { title: '' },
+    })
+
+    expect(response.status).toBe(422)
+  })
+
+  it('returns 422 when occasionTypeId does not exist (FK violation surfaced as friendly error)', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindListByIdWithOwner(LIST_ROW, OWNER_USER)
+    vi.mocked(db.update).mockReturnValueOnce({
+      set: vi.fn().mockReturnValueOnce({
+        where: vi.fn().mockReturnValueOnce({
+          returning: vi.fn().mockRejectedValueOnce({ code: '23503' }),
+        }),
+      }),
+    } as never)
+
+    const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}`, {
+      method: 'PATCH',
+      token,
+      body: { occasionTypeId: '00000000-0000-0000-0000-000000000099' },
+    })
+
+    expect(response.status).toBe(422)
+  })
+
+  it('returns 404 when list does not exist', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindListByIdWithOwner(undefined, OWNER_USER)
+
+    const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}`, {
+      method: 'PATCH',
+      token,
+      body: { title: 'Updated' },
+    })
+
+    expect(response.status).toBe(404)
+  })
+
+  it('returns 404 when list is soft-deleted (cannot update without restoring first)', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindListByIdWithOwner(DELETED_LIST_ROW, OWNER_USER)
+
+    const response = await apiRequest(`/v1/admin/lists/${DELETED_LIST_ROW.id}`, {
+      method: 'PATCH',
+      token,
+      body: { title: 'Updated' },
+    })
+
+    expect(response.status).toBe(404)
+  })
+
+  it('returns 422 when id is not a UUID', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    const response = await apiRequest('/v1/admin/lists/not-a-uuid', {
+      method: 'PATCH',
+      token,
+      body: { title: 'Test' },
+    })
+
+    expect(response.status).toBe(422)
+  })
+
+  it('returns 403 when user is not admin', async () => {
+    const token = await generateTestToken(NON_ADMIN_USER.id)
+    mockNonAdminAuth()
+
+    const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}`, {
+      method: 'PATCH',
+      token,
+      body: { title: 'Test' },
+    })
+
+    expect(response.status).toBe(403)
+  })
+
+  it('returns 401 when no token is provided', async () => {
+    const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}`, {
+      method: 'PATCH',
+      body: { title: 'Test' },
+    })
+
+    expect(response.status).toBe(401)
+  })
+
+  it('replaces tags and refetches hydrated list when tags are provided', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindListByIdWithOwner(LIST_ROW, OWNER_USER)
+    vi.mocked(db.query.tags.findMany).mockResolvedValueOnce([TAG_GAMING_ROW] as never)
+    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce({
+      ...LIST_ROW,
+      collaborators: [{ userId: OWNER_USER.id, user: OWNER_USER }],
+      listTags: [listTagLink(TAG_GAMING_ROW)],
+    } as never)
+
+    const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}`, {
+      method: 'PATCH',
+      token,
+      body: { tags: ['Gaming'] },
+    })
+
+    const body = await response.json() as { list: { tags: { slug: string }[] } }
+    expect(response.status).toBe(200)
+    expect(body.list.tags.map((tag) => tag.slug)).toEqual(['gaming'])
+  })
+
+  it('returns 422 TAG_INVALID_NAME when a tag name normalizes to an empty slug', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindListByIdWithOwner(LIST_ROW, OWNER_USER)
+
+    const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}`, {
+      method: 'PATCH',
+      token,
+      body: { tags: ['!!!'] },
+    })
+
+    const body = await response.json() as { code: string }
+    expect(response.status).toBe(422)
+    expect(body.code).toBe('TAG_INVALID_NAME')
+  })
+})
+
+describe('DELETE /v1/admin/lists/:id (soft delete)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
+    vi.mocked(db.execute).mockResolvedValue([] as never)
+  })
+
+  it('returns 204 and soft-deletes an active list', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindListById(LIST_ROW)
+    mockUpdateList({ ...LIST_ROW, deletedAt: new Date() })
+
+    const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}`, {
+      method: 'DELETE',
+      token,
+    })
+
+    expect(response.status).toBe(204)
+  })
+
+  it('logs at warn level on successful soft-delete', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindListById(LIST_ROW)
+    mockUpdateList({ ...LIST_ROW, deletedAt: new Date() })
+
+    await apiRequest(`/v1/admin/lists/${LIST_ROW.id}`, { method: 'DELETE', token })
+
+    expect(vi.mocked(logger.warn)).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'admin_delete_list', listId: LIST_ROW.id }),
+    )
+  })
+
+  it('returns 404 when list is already soft-deleted', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindListById(DELETED_LIST_ROW)
+
+    const response = await apiRequest(`/v1/admin/lists/${DELETED_LIST_ROW.id}`, {
+      method: 'DELETE',
+      token,
+    })
+
+    expect(response.status).toBe(404)
+  })
+
+  it('returns 404 when list does not exist', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindListById(undefined)
+
+    const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}`, {
+      method: 'DELETE',
+      token,
+    })
+
+    expect(response.status).toBe(404)
+  })
+
+  it('returns 422 when id is not a UUID', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    const response = await apiRequest('/v1/admin/lists/not-a-uuid', {
+      method: 'DELETE',
+      token,
+    })
+
+    expect(response.status).toBe(422)
+  })
+
+  it('returns 403 when user is not admin', async () => {
+    const token = await generateTestToken(NON_ADMIN_USER.id)
+    mockNonAdminAuth()
+
+    const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}`, {
+      method: 'DELETE',
+      token,
+    })
+
+    expect(response.status).toBe(403)
+  })
+
+  it('returns 401 when no token is provided', async () => {
+    const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}`, { method: 'DELETE' })
+    expect(response.status).toBe(401)
+  })
+})
+
+describe('POST /v1/admin/lists/:id/restore', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
+    vi.mocked(db.execute).mockResolvedValue([] as never)
+  })
+
+  it('returns 200 with restored list', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindListByIdWithOwner(DELETED_LIST_ROW, OWNER_USER)
+    mockUpdateList({ ...DELETED_LIST_ROW, deletedAt: null })
+
+    const response = await apiRequest(`/v1/admin/lists/${DELETED_LIST_ROW.id}/restore`, {
+      method: 'POST',
+      token,
+    })
+
+    const body = await response.json() as { list: { deletedAt: null } }
+    expect(response.status).toBe(200)
+    expect(body.list.deletedAt).toBeNull()
+  })
+
+  it('is idempotent-safe: restoring twice fails the second time with 404', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindListByIdWithOwner({ ...DELETED_LIST_ROW, deletedAt: null }, OWNER_USER)
+
+    const response = await apiRequest(`/v1/admin/lists/${DELETED_LIST_ROW.id}/restore`, {
+      method: 'POST',
+      token,
+    })
+
+    expect(response.status).toBe(404)
+  })
+
+  it('returns 404 when list is not soft-deleted (active list)', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindListByIdWithOwner(LIST_ROW, OWNER_USER)
+
+    const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}/restore`, {
+      method: 'POST',
+      token,
+    })
+
+    expect(response.status).toBe(404)
+  })
+
+  it('returns 404 when list does not exist', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindListByIdWithOwner(undefined, OWNER_USER)
+
+    const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}/restore`, {
+      method: 'POST',
+      token,
+    })
+
+    expect(response.status).toBe(404)
+  })
+
+  it('logs at info level on successful restore', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindListByIdWithOwner(DELETED_LIST_ROW, OWNER_USER)
+    mockUpdateList({ ...DELETED_LIST_ROW, deletedAt: null })
+
+    await apiRequest(`/v1/admin/lists/${DELETED_LIST_ROW.id}/restore`, {
+      method: 'POST',
+      token,
+    })
+
+    expect(vi.mocked(logger.info)).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'admin_restore_list' }),
+    )
+  })
+
+  it('returns 403 when user is not admin', async () => {
+    const token = await generateTestToken(NON_ADMIN_USER.id)
+    mockNonAdminAuth()
+
+    const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}/restore`, {
+      method: 'POST',
+      token,
+    })
+
+    expect(response.status).toBe(403)
+  })
+
+  it('returns 401 when no token is provided', async () => {
+    const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}/restore`, {
+      method: 'POST',
+    })
+
+    expect(response.status).toBe(401)
+  })
+})
+
+const TAG_GAMING_ROW = {
+  id: '00000000-0000-0000-0000-000000000080',
+  name: 'gaming',
+  slug: 'gaming',
+  createdByUserId: null,
+  createdAt: new Date('2024-01-01'),
+  updatedAt: new Date('2024-01-01'),
+}
+
+function listTagLink(tag: typeof TAG_GAMING_ROW): {
+  listId: string
+  tagId: string
+  assignedAt: Date
+  tag: typeof TAG_GAMING_ROW
+} {
+  return { listId: LIST_ROW.id, tagId: tag.id, assignedAt: new Date('2024-02-01'), tag }
+}
+

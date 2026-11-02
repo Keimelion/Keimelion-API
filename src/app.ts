@@ -1,15 +1,18 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { secureHeaders } from 'hono/secure-headers'
+import { serveStatic } from '@hono/node-server/serve-static'
 import { env } from './config/env.js'
-import { requestIdMiddleware } from './middlewares/request-id.js'
-import { rateLimitMiddleware } from './middlewares/rate-limit.js'
-import { loggerMiddleware } from './middlewares/logger.js'
-import { mountRoutes } from './routes/index.js'
-import { ErrorCode } from './types/errors.js'
-import { HttpMethod, HttpHeader } from './types/http.js'
-import { sendError } from './utils/response.js'
-import { logger } from './utils/logger.js'
+import { requestIdMiddleware } from './shared/middlewares/request-id.js'
+import { rateLimitMiddleware } from './shared/middlewares/rate-limit.js'
+import { loggerMiddleware } from './shared/middlewares/logger.js'
+import { resolveLocaleMiddleware } from './shared/middlewares/resolve-locale.js'
+import { mountRoutes } from './features/index.js'
+import { ErrorCode } from './shared/enums/error-code.js'
+import { HttpMethod, HttpHeader } from './shared/enums/http.js'
+import { NodeEnvs } from './shared/enums/node-env.js'
+import { sendError } from './shared/utils/response.js'
+import { logger } from './shared/utils/logger.js'
 
 const CORS_ALLOW_METHODS = [HttpMethod.GET, HttpMethod.POST, HttpMethod.PUT, HttpMethod.PATCH, HttpMethod.DELETE, HttpMethod.OPTIONS]
 const CORS_ALLOW_HEADERS = [HttpHeader.CONTENT_TYPE, HttpHeader.AUTHORIZATION]
@@ -18,6 +21,19 @@ export const app = new Hono()
 
 // 1. Request ID — must be first so all subsequent logs include the ID
 app.use('*', requestIdMiddleware)
+
+// 1b. CORP override for dev-only /uploads/* — secureHeaders sets
+// Cross-Origin-Resource-Policy: same-origin on every response AFTER next(),
+// which would prevent the BackOffice (:3001) from loading images from the
+// API (:3000) via <img>. Registering this middleware BEFORE secureHeaders
+// means on the response ascent it runs LAST, overwriting secureHeaders' value.
+// Dev-only: in production nginx serves /uploads/* without this header.
+if (env.NODE_ENV !== NodeEnvs.PRODUCTION) {
+  app.use('/uploads/*', async (c, next) => {
+    await next()
+    c.res.headers.set('Cross-Origin-Resource-Policy', 'cross-origin')
+  })
+}
 
 // 2. Secure HTTP headers
 app.use('*', secureHeaders())
@@ -28,7 +44,10 @@ app.use('*', rateLimitMiddleware)
 // 4. Structured request logger
 app.use('*', loggerMiddleware)
 
-// 5. CORS
+// 5. Locale resolution — sets locale on context for all request handlers
+app.use('*', resolveLocaleMiddleware)
+
+// 6. CORS
 app.use(
   '*',
   cors({
@@ -38,6 +57,19 @@ app.use(
     credentials: true,
   }),
 )
+
+// 7. Dev-only static mount for uploaded image variants. In production, nginx
+// serves /uploads/* directly before Hono (see KEI-123 tech notes), so this
+// middleware stays gated to avoid shadowing it.
+if (env.NODE_ENV !== NodeEnvs.PRODUCTION) {
+  app.use(
+    '/uploads/*',
+    serveStatic({
+      root: env.UPLOADS_DIR,
+      rewriteRequestPath: (path) => path.replace(/^\/uploads/, ''),
+    }),
+  )
+}
 
 // Routes
 mountRoutes(app)

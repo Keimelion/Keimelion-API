@@ -1,0 +1,13 @@
+name: Deploy
+
+# Manual (re)deploy of main; releases deploy automatically from release.yml.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    uses: Keimelion/Keimelion-Infra/.github/workflows/deploy.yml@main
