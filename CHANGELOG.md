@@ -1,4 +1,4 @@
-## [2.0.0](https://github.com/Keimelion/Keimelion-API/compare/v1.0.0...v2.0.0) (2026-11-02)
+## [0.1.0](https://github.com/Keimelion/Keimelion-API/compare/v0.0.1...v0.1.0) (2026-11-02)
 
 ### ⚠ BREAKING CHANGES
 
@@ -63,7 +63,7 @@
 * app override CORP to cross-origin on /uploads/* (KEI-124) ([#69](https://github.com/Keimelion/Keimelion-API/issues/69)) ([9e675c5](https://github.com/Keimelion/Keimelion-API/commit/9e675c59af5526eb883b9ce1073e0e84ce4306e1)), closes [#68](https://github.com/Keimelion/Keimelion-API/issues/68)
 * db/migrations remove explicit transactions rejected by postgres.js ([#51](https://github.com/Keimelion/Keimelion-API/issues/51)) ([d96ff9d](https://github.com/Keimelion/Keimelion-API/commit/d96ff9d04d2df90ab513bad628e8b4a94915df4d))
 
-# 1.0.0 (2026-04-03)
+## 0.0.1 (2026-04-03)
 
 
 ### Bug Fixes
