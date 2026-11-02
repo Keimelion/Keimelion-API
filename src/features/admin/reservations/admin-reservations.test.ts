@@ -208,7 +208,7 @@ describe('GET /v1/admin/reservations', () => {
         id: string
         quantityBooked: number
         user: { id: string; email: string }
-        listItem: { id: string; itemId: string; name: string; quantityDesired: number }
+        listItem: { id: string; quantityDesired: number; item: { id: string; name: string } }
         list: { id: string; slug: string; title: string; owner: { id: string; email: string } | null }
       }[]
       pagination: { total: number }
@@ -218,8 +218,8 @@ describe('GET /v1/admin/reservations', () => {
     expect(body.items[0]?.id).toBe(RESERVATION_ID)
     expect(body.items[0]?.quantityBooked).toBe(2)
     expect(body.items[0]?.user.id).toBe(RESERVER_USER.id)
-    expect(body.items[0]?.listItem.itemId).toBe(ITEM_ID)
-    expect(body.items[0]?.listItem.name).toBe('Catalog Item')
+    expect(body.items[0]?.listItem.item.id).toBe(ITEM_ID)
+    expect(body.items[0]?.listItem.item.name).toBe('Catalog Item')
     expect(body.items[0]?.list.slug).toBe('wishlist')
     expect(body.items[0]?.list.owner?.id).toBe(OWNER_USER.id)
   })
@@ -342,14 +342,14 @@ describe('GET /v1/admin/reservations/:id', () => {
         id: string
         quantityBooked: number
         user: { id: string }
-        listItem: { id: string; name: string }
+        listItem: { id: string; item: { id: string; name: string } }
         list: { owner: { id: string } | null }
       }
     }
     expect(response.status).toBe(200)
     expect(body.reservation.id).toBe(RESERVATION_ID)
     expect(body.reservation.user.id).toBe(RESERVER_USER.id)
-    expect(body.reservation.listItem.name).toBe('Catalog Item')
+    expect(body.reservation.listItem.item.name).toBe('Catalog Item')
     expect(body.reservation.list.owner?.id).toBe(OWNER_USER.id)
   })
 
