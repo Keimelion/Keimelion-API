@@ -11,6 +11,10 @@ updates:
       # still need TS 6. Revisit when typescript-eslint supports TS 7.
       - dependency-name: typescript
         update-types: ['version-update:semver-major']
+      # v10 needs conventional-changelog-writer@9, but @semantic-release/release-notes-generator
+      # still ships writer@8 (release fails in generateNotes). Revisit when it moves to writer@9.
+      - dependency-name: conventional-changelog-conventionalcommits
+        update-types: ['version-update:semver-major']
     commit-message:
       prefix: chore
       include: scope
