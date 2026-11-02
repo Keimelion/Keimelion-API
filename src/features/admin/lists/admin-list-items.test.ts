@@ -38,6 +38,7 @@ const ITEM_ROW = {
   name: 'My Item',
   description: null,
   imageUrl: null,
+  imageId: null,
   createdByUserId: null,
   createdAt: new Date('2024-01-01'),
   updatedAt: new Date('2024-01-01'),

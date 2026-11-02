@@ -4,20 +4,17 @@ import { eq } from 'drizzle-orm'
 import type { db as Db } from '../client.js'
 import { processImage } from '../../features/uploads/image.pipeline.js'
 import { users } from '../entities/users/users.schema.js'
+import { items } from '../entities/items/items.schema.js'
+import { ITEM_IDS } from '../entities/items/items.fixture.js'
 import { listItems } from '../entities/list-items/list-items.schema.js'
 import { images } from '../entities/images/images.schema.js'
 
-/**
- * Fixture images bundled with the repo and run through the real {@link processImage}
- * pipeline at seed time, so the dev DB has a real avatar + a real list_item image
- * after `npm run db:seed` — otherwise the Backoffice thumbnails and avatars all
- * fall back to the placeholder.
- */
 export const SEED_AVATAR_FIXTURE_PATH = 'src/db/seed/fixtures/sample-avatar.jpg'
 export const SEED_PRODUCT_FIXTURE_PATH = 'src/db/seed/fixtures/sample-product.jpg'
 
 const SEED_AVATAR_USER_EMAIL = 'user@example.com'
 const SEED_LIST_ITEM_ID = '7d3f0b40-0005-4b60-8000-000000000001'
+const SEED_ITEM_ID = ITEM_IDS.BIRTHDAY_HEADPHONES
 
 async function hashFixture(path: string): Promise<string> {
   const buffer = await readFile(path)
@@ -67,14 +64,6 @@ async function upsertFixtureImage(
   return { id: result.image.id, inserted: true }
 }
 
-/**
- * Attaches the bundled fixtures to one seed user (avatar) and one seed list_item
- * (product image). Idempotent at both layers: pre-existing images rows are reused
- * by content hash (insertImage has no unique constraint on `hash`), and both FK
- * updates are no-ops when the target already points at the same image.
- *
- * Must run after seedUsers and seedListItems (needs both FKs resolved).
- */
 export async function seedImages(db: typeof Db): Promise<void> {
   const user = await db.query.users.findFirst({
     columns: { id: true, avatarImageId: true },
@@ -94,6 +83,15 @@ export async function seedImages(db: typeof Db): Promise<void> {
     return
   }
 
+  const item = await db.query.items.findFirst({
+    columns: { id: true, imageId: true },
+    where: eq(items.id, SEED_ITEM_ID),
+  })
+  if (!item) {
+    console.log('  images           0 rows (seed item missing)')
+    return
+  }
+
   const avatar = await upsertFixtureImage(db, SEED_AVATAR_FIXTURE_PATH, user.id)
   if (!avatar) {
     console.log('  images           0 rows (avatar pipeline error)')
@@ -110,6 +108,9 @@ export async function seedImages(db: typeof Db): Promise<void> {
   }
   if (listItem.imageId !== product.id) {
     await db.update(listItems).set({ imageId: product.id }).where(eq(listItems.id, listItem.id))
+  }
+  if (item.imageId !== product.id) {
+    await db.update(items).set({ imageId: product.id }).where(eq(items.id, item.id))
   }
 
   const avatarAction = avatar.inserted ? 'inserted' : 'reused'

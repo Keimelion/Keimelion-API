@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ErrorCode } from '../../shared/enums/error-code.js'
 import { users } from '../entities/users/users.schema.js'
 import { listItems } from '../entities/list-items/list-items.schema.js'
+import { items } from '../entities/items/items.schema.js'
+import { ITEM_IDS } from '../entities/items/items.fixture.js'
 
 const AVATAR_FIXTURE_PATH = 'src/db/seed/fixtures/sample-avatar.jpg'
 const PRODUCT_FIXTURE_PATH = 'src/db/seed/fixtures/sample-product.jpg'
@@ -13,6 +15,7 @@ const USER_ID = '00000000-0000-0000-0000-00000000a001'
 const AVATAR_IMAGE_ID = '00000000-0000-0000-0000-00000000b001'
 const PRODUCT_IMAGE_ID = '00000000-0000-0000-0000-00000000b002'
 const LIST_ITEM_ID = '7d3f0b40-0005-4b60-8000-000000000001'
+const ITEM_ID = ITEM_IDS.BIRTHDAY_HEADPHONES
 
 const mockReadFile = vi.fn()
 const mockProcessImage = vi.fn()
@@ -30,6 +33,11 @@ interface SeedListItemRow {
   imageId: string | null
 }
 
+interface SeedItemRow {
+  id: string
+  imageId: string | null
+}
+
 interface UpdateCall {
   table: unknown
   set: Record<string, unknown>
@@ -38,6 +46,7 @@ interface UpdateCall {
 interface StubOptions {
   user: SeedUserRow | undefined
   listItem: SeedListItemRow | undefined
+  item?: SeedItemRow | undefined
   existingAvatarImage?: { id: string } | undefined
   existingProductImage?: { id: string } | undefined
 }
@@ -48,6 +57,8 @@ function stubDb(options: StubOptions): {
 } {
   const updateCalls: UpdateCall[] = []
   const imagesFindFirst = vi.fn().mockImplementation(() => Promise.resolve(undefined))
+  const defaultItemRow: SeedItemRow = { id: ITEM_ID, imageId: null }
+  const itemRow = 'item' in options ? options.item : defaultItemRow
   const db = {
     query: {
       users: {
@@ -55,6 +66,9 @@ function stubDb(options: StubOptions): {
       },
       listItems: {
         findFirst: vi.fn().mockResolvedValue(options.listItem),
+      },
+      items: {
+        findFirst: vi.fn().mockResolvedValue(itemRow),
       },
       images: {
         findFirst: imagesFindFirst,
@@ -114,6 +128,7 @@ describe('seedImages', () => {
     const { db, updateCalls } = stubDb({
       user: { id: USER_ID, avatarImageId: null },
       listItem: { id: LIST_ITEM_ID, imageId: null },
+      item: { id: ITEM_ID, imageId: null },
     })
     const { seedImages } = await import('./seed-images.js')
 
@@ -124,15 +139,17 @@ describe('seedImages', () => {
     expect(mockProcessImage).toHaveBeenCalledTimes(2)
     expect(mockProcessImage).toHaveBeenCalledWith(AVATAR_BYTES, USER_ID)
     expect(mockProcessImage).toHaveBeenCalledWith(PRODUCT_BYTES, USER_ID)
-    expect(updateCalls).toHaveLength(2)
+    expect(updateCalls).toHaveLength(3)
     expect(updateCalls[0]).toEqual({ table: users, set: { avatarImageId: AVATAR_IMAGE_ID } })
     expect(updateCalls[1]).toEqual({ table: listItems, set: { imageId: PRODUCT_IMAGE_ID } })
+    expect(updateCalls[2]).toEqual({ table: items, set: { imageId: PRODUCT_IMAGE_ID } })
   })
 
   it('reuses existing images rows by hash and skips processImage on a repeat seed', async () => {
     const { db, updateCalls } = stubDb({
       user: { id: USER_ID, avatarImageId: AVATAR_IMAGE_ID },
       listItem: { id: LIST_ITEM_ID, imageId: PRODUCT_IMAGE_ID },
+      item: { id: ITEM_ID, imageId: PRODUCT_IMAGE_ID },
       existingAvatarImage: { id: AVATAR_IMAGE_ID },
       existingProductImage: { id: PRODUCT_IMAGE_ID },
     })
@@ -148,6 +165,7 @@ describe('seedImages', () => {
     const { db, updateCalls } = stubDb({
       user: { id: USER_ID, avatarImageId: null },
       listItem: { id: LIST_ITEM_ID, imageId: null },
+      item: { id: ITEM_ID, imageId: null },
       existingAvatarImage: { id: AVATAR_IMAGE_ID },
       existingProductImage: { id: PRODUCT_IMAGE_ID },
     })
@@ -156,9 +174,10 @@ describe('seedImages', () => {
     await seedImages(db as never)
 
     expect(mockProcessImage).not.toHaveBeenCalled()
-    expect(updateCalls).toHaveLength(2)
+    expect(updateCalls).toHaveLength(3)
     expect(updateCalls[0]).toEqual({ table: users, set: { avatarImageId: AVATAR_IMAGE_ID } })
     expect(updateCalls[1]).toEqual({ table: listItems, set: { imageId: PRODUCT_IMAGE_ID } })
+    expect(updateCalls[2]).toEqual({ table: items, set: { imageId: PRODUCT_IMAGE_ID } })
   })
 
   it('returns silently without calling processImage when the seed user is missing', async () => {
@@ -178,6 +197,20 @@ describe('seedImages', () => {
     const { db, updateCalls } = stubDb({
       user: { id: USER_ID, avatarImageId: null },
       listItem: undefined,
+    })
+    const { seedImages } = await import('./seed-images.js')
+
+    await seedImages(db as never)
+
+    expect(mockProcessImage).not.toHaveBeenCalled()
+    expect(updateCalls).toEqual([])
+  })
+
+  it('returns silently without calling processImage when the seed item is missing', async () => {
+    const { db, updateCalls } = stubDb({
+      user: { id: USER_ID, avatarImageId: null },
+      listItem: { id: LIST_ITEM_ID, imageId: null },
+      item: undefined,
     })
     const { seedImages } = await import('./seed-images.js')
 

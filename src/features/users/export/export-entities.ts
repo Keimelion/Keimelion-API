@@ -100,6 +100,7 @@ const itemsEntityDescriptor: ExportEntityDescriptor = {
     'name',
     'description',
     'imageUrl',
+    'imageId',
     'createdAt',
     'updatedAt',
   ],

@@ -19,6 +19,7 @@ interface InsertItemInput {
 type UpdateItemFields = Partial<Pick<typeof items.$inferInsert, 'name' | 'description' | 'imageUrl'>>
 
 const ITEM_WITH_SOURCES_WITH = {
+  image: true,
   sources: { with: { shop: true } },
   itemCategories: { with: { category: { with: { translations: true } } } },
   itemTags: { with: { tag: true } },

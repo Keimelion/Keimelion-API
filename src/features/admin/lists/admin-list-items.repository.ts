@@ -36,6 +36,7 @@ export function findListItemsByListIdPaged(
       image: true,
       item: {
         with: {
+          image: true,
           sources: { with: { shop: true } },
           itemCategories: { with: { category: { with: { translations: true } } } },
           itemTags: { with: { tag: true } },

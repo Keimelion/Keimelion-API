@@ -1,0 +1,2 @@
+ALTER TABLE "items" ADD COLUMN "image_id" uuid;--> statement-breakpoint
+ALTER TABLE "items" ADD CONSTRAINT "items_image_id_images_id_fk" FOREIGN KEY ("image_id") REFERENCES "public"."images"("id") ON DELETE set null ON UPDATE no action;

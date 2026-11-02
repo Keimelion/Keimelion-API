@@ -66,6 +66,7 @@ const MOCK_ITEM = {
   name: 'My Item',
   description: null,
   imageUrl: null,
+  imageId: null,
   createdByUserId: AUTH_USER.id,
   deletedAt: null,
   createdAt: new Date('2024-01-01'),

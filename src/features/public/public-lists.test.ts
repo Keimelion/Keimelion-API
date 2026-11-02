@@ -80,6 +80,7 @@ const PUBLIC_LIST_ROW = {
         name: 'A nice item',
         description: null,
         imageUrl: null,
+        imageId: null,
         createdByUserId: OWNER_USER.id,
         createdAt: new Date('2024-01-01'),
         updatedAt: new Date('2024-01-01'),
