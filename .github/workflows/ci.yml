@@ -21,3 +21,12 @@ jobs:
   pr-title:
     if: github.event_name == 'pull_request'
     uses: Keimelion/Keimelion-Infra/.github/workflows/pr-title.yml@main
+
+  # Patch/minor Dependabot bumps merge themselves once ci and pr-title are green.
+  dependabot-automerge:
+    needs: [ci, pr-title]
+    if: github.event_name == 'pull_request' && github.event.pull_request.user.login == 'dependabot[bot]'
+    permissions:
+      contents: write
+      pull-requests: write
+    uses: Keimelion/Keimelion-Infra/.github/workflows/dependabot-automerge.yml@main
