@@ -55,7 +55,6 @@ const RESERVATION_ROW = {
     itemStatus: ItemStatuses.AVAILABLE,
     sortOrder: null,
     creatorNote: null,
-    imageId: null,
     createdAt: new Date('2024-01-01'),
     updatedAt: new Date('2024-01-01'),
     item: {
@@ -64,11 +63,11 @@ const RESERVATION_ROW = {
       description: null,
       imageUrl: null,
       imageId: null,
+      image: null,
       createdByUserId: null,
       createdAt: new Date('2024-01-01'),
       updatedAt: new Date('2024-01-01'),
     },
-    image: null,
     list: {
       id: LIST_ID,
       occasionTypeId: null,
@@ -410,7 +409,6 @@ describe('DELETE /v1/admin/reservations/:id', () => {
       itemStatus: ItemStatuses.AVAILABLE,
       sortOrder: null,
       creatorNote: null,
-      imageId: null,
       createdAt: new Date('2024-01-01'),
       updatedAt: new Date('2024-01-01'),
     }

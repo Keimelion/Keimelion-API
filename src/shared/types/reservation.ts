@@ -1,10 +1,9 @@
 import type { Reservation } from '../../db/entities/reservations/reservations.schema.js'
 import type { ListItem } from '../../db/entities/list-items/list-items.schema.js'
 import type { List } from '../../db/entities/lists/lists.schema.js'
-import type { Item } from '../../db/entities/items/items.schema.js'
-import type { Image } from '../../db/entities/images/images.schema.js'
 import type { ListCollaborator } from '../../db/entities/list-collaborators/list-collaborators.schema.js'
 import type { User } from '../../db/entities/users/users.schema.js'
+import type { ItemRowWithImage } from './item.js'
 import { toUserDetail } from './user.js'
 import type { UserDetail } from './user.js'
 import { toImageDetail } from '../../features/uploads/images.mapper.js'
@@ -19,8 +18,7 @@ export interface ReservationListRow extends List {
 }
 
 export interface ReservationListItemRow extends ListItem {
-  item: Item
-  image: Image | null
+  item: ItemRowWithImage
   list: ReservationListRow
 }
 
@@ -62,7 +60,7 @@ export function toReservationDetail(row: ReservationRowHydrated): ReservationDet
       itemId: row.listItem.item.id,
       name: row.listItem.item.name,
       quantityDesired: row.listItem.quantityDesired,
-      image: row.listItem.image ? toImageDetail(row.listItem.image) : null,
+      image: row.listItem.item.image ? toImageDetail(row.listItem.item.image) : null,
     },
     list: {
       id: row.listItem.list.id,

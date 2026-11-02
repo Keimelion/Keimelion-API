@@ -108,6 +108,19 @@ interface TagLinkRow {
   tag: { id: string; slug: string; name: string }
 }
 
+interface ItemImageRow {
+  id: string
+  hash: string
+  fileKey: string
+  mime: string
+  sizeBytes: number
+  width: number
+  height: number
+  uploadedBy: string
+  createdAt: Date
+  updatedAt: Date
+}
+
 interface ListItemRow {
   id: string
   listId: string
@@ -119,7 +132,9 @@ interface ListItemRow {
   creatorNote: string | null
   createdAt: Date
   updatedAt: Date
-  item: typeof ITEM_ROW & {
+  item: Omit<typeof ITEM_ROW, 'imageId'> & {
+    imageId: string | null
+    image?: ItemImageRow | null
     sources: SourceRow[]
     itemCategories: CategoryLinkRow[]
     itemTags: TagLinkRow[]
@@ -267,7 +282,7 @@ describe('GET /v1/admin/lists/:id/items', () => {
     expect(body.items[1]?.sources.map((source) => source.price)).toEqual(['19.99', null])
   })
 
-  it('populates image.urls on list_items whose image JOIN is attached', async () => {
+  it('populates item.image.urls on list_items whose underlying item has an image attached', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     const imageRow = {
       id: '00000000-0000-0000-0000-0000000000c1',
@@ -281,22 +296,33 @@ describe('GET /v1/admin/lists/:id/items', () => {
       createdAt: new Date('2024-02-01'),
       updatedAt: new Date('2024-02-01'),
     }
-    const listItemWithImage = { ...LIST_ITEM_WITH_PRICED, imageId: imageRow.id, image: imageRow }
+    const listItemWithItemImage = {
+      ...LIST_ITEM_WITH_PRICED,
+      item: {
+        ...LIST_ITEM_WITH_PRICED.item,
+        imageId: imageRow.id,
+        image: imageRow,
+      },
+    }
     mockAdminAuth()
     mockFindListById(LIST_ROW)
-    mockFindListItems([listItemWithImage])
+    mockFindListItems([listItemWithItemImage])
     mockCountChain(1)
 
     const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}/items`, { token })
 
     const body = await response.json() as {
-      items: { image: { urls: { sm: string; md: string; lg: string } } | null }[]
+      items: {
+        image?: unknown
+        item: { image: { urls: { sm: string; md: string; lg: string } } | null }
+      }[]
     }
     expect(response.status).toBe(200)
-    expect(body.items[0]?.image).not.toBeNull()
-    expect(body.items[0]?.image?.urls.sm).toContain('c0/ff/c0ffee-300.webp')
-    expect(body.items[0]?.image?.urls.md).toContain('c0/ff/c0ffee-800.webp')
-    expect(body.items[0]?.image?.urls.lg).toContain('c0/ff/c0ffee-1600.webp')
+    expect(body.items[0]).not.toHaveProperty('image')
+    expect(body.items[0]?.item.image).not.toBeNull()
+    expect(body.items[0]?.item.image?.urls.sm).toContain('c0/ff/c0ffee-300.webp')
+    expect(body.items[0]?.item.image?.urls.md).toContain('c0/ff/c0ffee-800.webp')
+    expect(body.items[0]?.item.image?.urls.lg).toContain('c0/ff/c0ffee-1600.webp')
   })
 
   it('returns averagePrice as a USD scalar by default', async () => {

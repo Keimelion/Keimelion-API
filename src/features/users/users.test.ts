@@ -1138,7 +1138,6 @@ const RESERVATION_PROFILE_ROW = {
     itemStatus: 'available',
     sortOrder: null,
     creatorNote: null,
-    imageId: '00000000-0000-0000-0000-00000001b200',
     createdAt: new Date('2024-04-01'),
     updatedAt: new Date('2024-04-01'),
     item: {
@@ -1146,7 +1145,7 @@ const RESERVATION_PROFILE_ROW = {
       name: 'Fancy vase',
       description: null,
       imageUrl: null,
-      imageId: null,
+      imageId: '00000000-0000-0000-0000-00000001b200',
       createdByUserId: null,
       createdAt: new Date('2024-04-01'),
       updatedAt: new Date('2024-04-01'),
@@ -1266,8 +1265,11 @@ describe('GET /v1/users/me/reservations', () => {
       listItem: {
         ...RESERVATION_PROFILE_ROW.listItem,
         id: '00000000-0000-0000-0000-00000001b002',
-        imageId: null,
-        item: { ...RESERVATION_PROFILE_ROW.listItem.item, name: 'Other item' },
+        item: {
+          ...RESERVATION_PROFILE_ROW.listItem.item,
+          name: 'Other item',
+          imageId: null,
+        },
         list: {
           ...RESERVATION_PROFILE_ROW.listItem.list,
           id: '00000000-0000-0000-0000-00000001a002',

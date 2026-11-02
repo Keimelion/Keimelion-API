@@ -139,7 +139,6 @@ const listItemsEntityDescriptor: ExportEntityDescriptor = {
     'itemStatus',
     'sortOrder',
     'creatorNote',
-    'imageId',
     'createdAt',
     'updatedAt',
   ],

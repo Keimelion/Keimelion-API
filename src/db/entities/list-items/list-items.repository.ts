@@ -2,7 +2,6 @@ import { eq } from 'drizzle-orm'
 import { db } from '../../client.js'
 import { listItems } from './list-items.schema.js'
 import type { ListItem } from './list-items.schema.js'
-import type { ListItemRowWithImage } from '../../../shared/types/item.js'
 import type { ItemStatus } from '../../../shared/enums/item-status.js'
 
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
@@ -14,10 +13,9 @@ interface InsertListItemInput {
   quantityDesired: number
   creatorNote: string | null
   itemStatus: ItemStatus
-  imageId?: string | null
 }
 
-type UpdateListItemFields = Partial<Pick<typeof listItems.$inferInsert, 'quantityDesired' | 'creatorNote' | 'sortOrder' | 'imageId'>>
+type UpdateListItemFields = Partial<Pick<typeof listItems.$inferInsert, 'quantityDesired' | 'creatorNote' | 'sortOrder'>>
 
 interface UpdateReservationStateInput {
   quantityReservedTotal: number
@@ -32,15 +30,6 @@ export async function insertListItem(input: InsertListItemInput, tx?: DbTransact
 
 export function findListItemById(id: string): Promise<ListItem | undefined> {
   return db.query.listItems.findFirst({ where: eq(listItems.id, id) })
-}
-
-export function findListItemByIdWithImage(
-  id: string,
-): Promise<ListItemRowWithImage | undefined> {
-  return db.query.listItems.findFirst({
-    where: eq(listItems.id, id),
-    with: { image: true },
-  })
 }
 
 export async function findListItemByIdForUpdate(id: string, tx: DbOrTx): Promise<ListItem | undefined> {

@@ -71,8 +71,6 @@ const PUBLIC_LIST_ROW = {
       itemStatus: 'available' as const,
       sortOrder: null,
       creatorNote: null,
-      imageId: null,
-      image: null,
       createdAt: new Date('2024-01-01'),
       updatedAt: new Date('2024-01-01'),
       item: {
@@ -81,6 +79,7 @@ const PUBLIC_LIST_ROW = {
         description: null,
         imageUrl: null,
         imageId: null,
+        image: null,
         createdByUserId: OWNER_USER.id,
         createdAt: new Date('2024-01-01'),
         updatedAt: new Date('2024-01-01'),
