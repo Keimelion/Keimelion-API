@@ -1,35 +1,28 @@
 name: Release
 
+# main only moves through release PRs (dev → main, merge commit): CI → semantic-release → deploy.
+
 on:
   push:
-    branches:
-      - main
+    branches: [main]
 
 permissions:
-  contents: write
-  issues: write
-  pull-requests: write
+  contents: read
 
 jobs:
+  ci:
+    uses: Keimelion/Keimelion-Infra/.github/workflows/node-ci.yml@main
+
   release:
-    name: Release
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+    needs: ci
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    uses: Keimelion/Keimelion-Infra/.github/workflows/release.yml@main
+    secrets: inherit
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 'lts/*'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Release
-        run: npx semantic-release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  deploy:
+    needs: release
+    if: needs.release.outputs.published == 'true'
+    uses: Keimelion/Keimelion-Infra/.github/workflows/deploy.yml@main
