@@ -1,6 +1,7 @@
 import type { List } from '../../db/entities/lists/lists.schema.js'
 import type { ListCollaborator } from '../../db/entities/list-collaborators/list-collaborators.schema.js'
 import type { ListTagWithTag } from '../../db/entities/list-tags/list-tags.schema.js'
+import type { ListItem } from '../../db/entities/list-items/list-items.schema.js'
 import type { User } from '../../db/entities/users/users.schema.js'
 import type { Image } from '../../db/entities/images/images.schema.js'
 import type { ItemStatus } from '../enums/item-status.js'
@@ -8,7 +9,7 @@ import type { Locale } from '../enums/locale.js'
 import { toUserDetail } from './user.js'
 import { toTagPublic } from './tag.js'
 import { toItemSourceDetail } from './item.js'
-import type { ItemRowWithSources, ItemSourceDetail, ListItemRowWithImage } from './item.js'
+import type { ItemRowWithSources, ItemSourceDetail } from './item.js'
 import { resolveCategoryName, toCategoryPublic } from './category.js'
 import type { CategoryPublic } from './category.js'
 import { toImageDetail } from '../../features/uploads/images.mapper.js'
@@ -74,7 +75,6 @@ export interface PublicListItemDetail {
   itemStatus: ItemStatus
   sortOrder: number | null
   creatorNote: string | null
-  image: ImageDetail | null
   item: PublicItemDetail
   createdAt: Date
   updatedAt: Date
@@ -85,6 +85,8 @@ export interface PublicItemDetail {
   name: string
   description: string | null
   imageUrl: string | null
+  imageId: string | null
+  image: ImageDetail | null
   sources: ItemSourceDetail[]
   categories: CategoryPublic[]
   tags: TagPublic[]
@@ -110,7 +112,7 @@ export interface PublicCollaboratorRow extends ListCollaborator {
   user: (User & { avatarImage: Image | null }) | null
 }
 
-export interface PublicListItemRow extends ListItemRowWithImage {
+export interface PublicListItemRow extends ListItem {
   item: ItemRowWithSources
 }
 
@@ -156,7 +158,6 @@ function toPublicListItem(row: PublicListItemRow, locale: Locale): PublicListIte
     itemStatus: row.itemStatus,
     sortOrder: row.sortOrder ?? null,
     creatorNote: row.creatorNote ?? null,
-    image: row.image ? toImageDetail(row.image) : null,
     item: toPublicItemDetail(row.item, locale),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -169,6 +170,8 @@ function toPublicItemDetail(item: ItemRowWithSources, locale: Locale): PublicIte
     name: item.name,
     description: item.description ?? null,
     imageUrl: item.imageUrl ?? null,
+    imageId: item.imageId ?? null,
+    image: item.image ? toImageDetail(item.image) : null,
     sources: item.sources.map((source) => toItemSourceDetail(source)),
     categories: item.itemCategories.map((link) =>
       toCategoryPublic({

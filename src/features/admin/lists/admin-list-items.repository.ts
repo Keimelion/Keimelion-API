@@ -3,12 +3,13 @@ import { db } from '../../../db/client.js'
 import { listItems } from '../../../db/entities/list-items/list-items.schema.js'
 import { itemSources } from '../../../db/entities/item-sources/item-sources.schema.js'
 import { currencies } from '../../../db/entities/currencies/currencies.schema.js'
-import type { ItemRowWithSources, ListItemRowWithImage } from '../../../shared/types/item.js'
+import type { ListItem } from '../../../db/entities/list-items/list-items.schema.js'
+import type { ItemRowWithSources } from '../../../shared/types/item.js'
 import { getOffset } from '../../../shared/schemas/pagination.js'
 import type { PaginationInput } from '../../../shared/schemas/pagination.js'
 import type { SupportedCurrency } from '../../../shared/enums/currency.js'
 
-export interface AdminListItemRow extends ListItemRowWithImage {
+export interface AdminListItemRow extends ListItem {
   item: ItemRowWithSources
 }
 
@@ -33,7 +34,6 @@ export function findListItemsByListIdPaged(
     limit: pagination.limit,
     offset,
     with: {
-      image: true,
       item: {
         with: {
           image: true,

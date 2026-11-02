@@ -84,7 +84,7 @@ export function toReservationProfileEntry(row: ReservationProfileRow): Reservati
       id: row.listItem.id,
       name: row.listItem.item.name,
       quantityDesired: row.listItem.quantityDesired,
-      imageId: row.listItem.imageId ?? null,
+      imageId: row.listItem.item.imageId ?? null,
     },
     list: {
       id: row.listItem.list.id,

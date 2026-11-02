@@ -91,8 +91,6 @@ export interface ListItemDetail {
   itemStatus: string
   sortOrder: number | null
   creatorNote: string | null
-  imageId: string | null
-  image: ImageDetail | null
   createdAt: Date
   updatedAt: Date
 }
@@ -101,10 +99,6 @@ export interface ListItemWrite {
   quantityDesired: number
   creatorNote: string | null
   sortOrder: number | null
-}
-
-export interface ListItemRowWithImage extends ListItem {
-  image: Image | null
 }
 
 export function toItemDetail(item: Item | ItemRowWithImage): ItemDetail {
@@ -157,8 +151,7 @@ export function toItemWithSources(item: ItemRowWithSources, locale: Locale): Ite
   }
 }
 
-export function toListItemDetail(listItem: ListItem | ListItemRowWithImage): ListItemDetail {
-  const image = 'image' in listItem ? listItem.image : null
+export function toListItemDetail(listItem: ListItem): ListItemDetail {
   return {
     id: listItem.id,
     listId: listItem.listId,
@@ -168,8 +161,6 @@ export function toListItemDetail(listItem: ListItem | ListItemRowWithImage): Lis
     itemStatus: listItem.itemStatus,
     sortOrder: listItem.sortOrder ?? null,
     creatorNote: listItem.creatorNote ?? null,
-    imageId: listItem.imageId ?? null,
-    image: image ? toImageDetail(image) : null,
     createdAt: listItem.createdAt,
     updatedAt: listItem.updatedAt,
   }

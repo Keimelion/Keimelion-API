@@ -75,7 +75,6 @@ export function findListBySlug(
       listItems: {
         orderBy: [sql`${listItems.sortOrder} ASC NULLS LAST`, asc(listItems.createdAt)],
         with: {
-          image: true,
           item: {
             with: {
               image: true,

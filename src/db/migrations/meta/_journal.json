@@ -162,6 +162,13 @@
       "when": 1793617922246,
       "tag": "0022_add_items_image_id_fk",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1793633177572,
+      "tag": "0023_drop_list_items_image_id",
+      "breakpoints": true
     }
   ]
 }

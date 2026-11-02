@@ -44,8 +44,7 @@ const RESERVATION_HYDRATION = {
   user: true,
   listItem: {
     with: {
-      item: true,
-      image: true,
+      item: { with: { image: true } },
       list: {
         with: {
           collaborators: {

@@ -8,7 +8,6 @@ import {
 import { ITEM_STATUS_VALUES, ItemStatuses } from '../../../shared/enums/item-status.js'
 import { lists } from '../lists/lists.schema.js'
 import { items } from '../items/items.schema.js'
-import { images } from '../images/images.schema.js'
 
 export const itemStatusEnum = pgEnum('item_status', ITEM_STATUS_VALUES)
 
@@ -23,7 +22,6 @@ export const listItems = pgTable(
     itemStatus: itemStatusEnum('item_status').notNull().default(ItemStatuses.AVAILABLE),
     sortOrder: nonNegativeInt('sort_order'),
     creatorNote: text('creator_note'),
-    imageId: uuid('image_id').references(() => images.id, { onDelete: 'set null' }),
     ...timestamps(),
   },
   (table) => [
