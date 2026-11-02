@@ -85,6 +85,8 @@ export interface PublicItemDetail {
   name: string
   description: string | null
   imageUrl: string | null
+  imageId: string | null
+  image: ImageDetail | null
   sources: ItemSourceDetail[]
   categories: CategoryPublic[]
   tags: TagPublic[]
@@ -168,6 +170,8 @@ function toPublicItemDetail(item: ItemRowWithSources, locale: Locale): PublicIte
     name: item.name,
     description: item.description ?? null,
     imageUrl: item.imageUrl ?? null,
+    imageId: item.imageId ?? null,
+    image: item.image ? toImageDetail(item.image) : null,
     sources: item.sources.map((source) => toItemSourceDetail(source)),
     categories: item.itemCategories.map((link) =>
       toCategoryPublic({
