@@ -9,6 +9,7 @@ import { deleteAllUserTokens } from '../../db/entities/access-tokens/access-toke
 import { revokeAllUserSessions } from '../../shared/db/user-sessions.js'
 import { cleanupReplacedImage, processOptionalImage, rollbackImage } from '../uploads/images.service.js'
 import {
+  findCollaboratorsForOwner,
   findFeedbackByUser,
   findImagesByUploaderForExport,
   findItemsByCreator,
@@ -32,6 +33,7 @@ import { toImageDetail } from '../uploads/images.mapper.js'
 import { buildExportZipStream } from './export/csv-archive-writer.js'
 import {
   EXPORT_ENTITY_REGISTRY,
+  toExportCollaboratorRow,
   toExportListRow,
   toExportListTagRow,
 } from './export/export-entities.js'
@@ -212,6 +214,7 @@ export async function exportUserData(userId: string, format: ExportFormat): Prom
     rawLists,
     rawTags,
     rawListTags,
+    rawCollaborators,
     rawFeedback,
     rawReservations,
     rawImages,
@@ -222,6 +225,7 @@ export async function exportUserData(userId: string, format: ExportFormat): Prom
     findListsOwnedByForExport(userId),
     findTagsCreatedByUser(userId),
     findListTagsForOwner(userId),
+    findCollaboratorsForOwner(userId),
     findFeedbackByUser(userId),
     findReservationsForExport(userId),
     findImagesByUploaderForExport(userId),
@@ -237,6 +241,7 @@ export async function exportUserData(userId: string, format: ExportFormat): Prom
       lists: rawLists.map(toExportListRow),
       tags: rawTags.map(toTagDetail),
       listTags: rawListTags.map(toExportListTagRow),
+      collaborators: rawCollaborators.map(toExportCollaboratorRow),
       feedback: rawFeedback.map(toFeedbackDetail),
       reservations: rawReservations,
       images: rawImages.map(toImageDetail),

@@ -1,5 +1,6 @@
 import { findUserById } from '../../../db/entities/users/users.repository.js'
 import {
+  findCollaboratorsForOwner,
   findFeedbackByUser,
   findImagesByUploaderForExport,
   findItemsByCreator,
@@ -17,8 +18,11 @@ import { toListDetail } from '../../../shared/types/list.js'
 import { toTagDetail } from '../../../shared/types/tag.js'
 import { toImageDetail } from '../../uploads/images.mapper.js'
 import type { List } from '../../../db/entities/lists/lists.schema.js'
+import type { ListCollaborator } from '../../../db/entities/list-collaborators/list-collaborators.schema.js'
 import type { ListTag } from '../../../db/entities/list-tags/list-tags.schema.js'
 import type { ListDetail } from '../../../shared/types/list.js'
+import type { CollabRole } from '../../../shared/enums/collab-role.js'
+import type { InviteStatus } from '../../../shared/enums/invite-status.js'
 
 export interface ExportListTagRow {
   listId: string
@@ -28,6 +32,26 @@ export interface ExportListTagRow {
 
 export function toExportListTagRow(row: ListTag): ExportListTagRow {
   return { listId: row.listId, tagId: row.tagId, assignedAt: row.assignedAt }
+}
+
+export interface ExportCollaboratorRow {
+  listId: string
+  invitedEmail: string | null
+  collabRole: CollabRole
+  inviteStatus: InviteStatus
+  acceptedAt: Date | null
+  createdAt: Date
+}
+
+export function toExportCollaboratorRow(row: ListCollaborator): ExportCollaboratorRow {
+  return {
+    listId: row.listId,
+    invitedEmail: row.invitedEmail ?? null,
+    collabRole: row.collabRole,
+    inviteStatus: row.inviteStatus,
+    acceptedAt: row.acceptedAt ?? null,
+    createdAt: row.createdAt,
+  }
 }
 
 export interface ExportListRow extends ListDetail {
@@ -190,6 +214,22 @@ const listTagsEntityDescriptor: ExportEntityDescriptor = {
   },
 }
 
+const collaboratorsEntityDescriptor: ExportEntityDescriptor = {
+  filename: 'collaborators.csv',
+  columns: [
+    'listId',
+    'invitedEmail',
+    'collabRole',
+    'inviteStatus',
+    'acceptedAt',
+    'createdAt',
+  ],
+  fetchRows: async (userId: string) => {
+    const rows = await findCollaboratorsForOwner(userId)
+    return rows.map(toExportCollaboratorRow)
+  },
+}
+
 const feedbackEntityDescriptor: ExportEntityDescriptor = {
   filename: 'feedback.csv',
   columns: [
@@ -251,6 +291,7 @@ export const EXPORT_ENTITY_REGISTRY: ExportEntityDescriptor[] = [
   listsEntityDescriptor,
   tagsEntityDescriptor,
   listTagsEntityDescriptor,
+  collaboratorsEntityDescriptor,
   feedbackEntityDescriptor,
   reservationsEntityDescriptor,
   imagesEntityDescriptor,

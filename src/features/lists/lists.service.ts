@@ -23,7 +23,11 @@ import { upsertTagsBySlugs } from '../../db/entities/tags/tags.repository.js'
 import { replaceListTags } from '../../db/entities/list-tags/list-tags.repository.js'
 import { toItemDetail, toListItemDetail } from '../../shared/types/item.js'
 import { extractOwnerDetail, toListDetail } from '../../shared/types/list.js'
-import { findListsOwnedBy, countListsOwnedBy } from './lists.repository.js'
+import { findListsAccessibleBy, countListsAccessibleBy } from './lists.repository.js'
+import {
+  fetchCollaboratorsSummariesByListId,
+  fetchCollaboratorsSummariesForList,
+} from './collaborators.mapper.js'
 import type { User } from '../../db/entities/users/users.schema.js'
 import type { InsertList } from '../../db/entities/lists/lists.repository.js'
 import type { ListDetail, ListRowWithOwner } from '../../shared/types/list.js'
@@ -51,17 +55,13 @@ export async function createUserList(
   const outcome = await insertListWithSlugRetry(user, input, tagSlugs)
   if ('errorCode' in outcome) return serviceError(outcome.errorCode)
 
-  if (tagSlugs !== null && tagSlugs.length > 0) {
-    const refreshed = await findListWithOwner(outcome.row.id)
-    if (refreshed) {
-      return {
-        data: { list: toListDetail(refreshed, extractOwnerDetail(refreshed)) },
-        httpStatus: HttpStatus.CREATED,
-      }
-    }
-  }
+  const sourceRow =
+    tagSlugs !== null && tagSlugs.length > 0
+      ? (await findListWithOwner(outcome.row.id)) ?? outcome.row
+      : outcome.row
+  const collaborators = await fetchCollaboratorsSummariesForList(sourceRow.id)
   return {
-    data: { list: toListDetail(outcome.row, extractOwnerDetail(outcome.row)) },
+    data: { list: toListDetail(sourceRow, extractOwnerDetail(sourceRow), collaborators) },
     httpStatus: HttpStatus.CREATED,
   }
 }
@@ -71,20 +71,24 @@ export async function listUserLists(
   input: ListUserListsInput,
 ): Promise<ServiceResult<PaginatedResponse<ListDetail>>> {
   const [rows, total] = await Promise.all([
-    findListsOwnedBy(userId, input, input.sort),
-    countListsOwnedBy(userId),
+    findListsAccessibleBy(userId, input, input.sort),
+    countListsAccessibleBy(userId),
   ])
 
-  const items = rows.map((row) => toListDetail(row, extractOwnerDetail(row)))
+  const collaboratorsByListId = await fetchCollaboratorsSummariesByListId(rows.map((row) => row.id))
+  const items = rows.map((row) =>
+    toListDetail(row, extractOwnerDetail(row), collaboratorsByListId.get(row.id) ?? []),
+  )
   return {
     data: buildPaginatedResponse(items, input, total),
     httpStatus: HttpStatus.OK,
   }
 }
 
-export function getUserListById(list: ListRowWithOwner): ServiceResult<{ list: ListDetail }> {
+export async function getUserListById(list: ListRowWithOwner): Promise<ServiceResult<{ list: ListDetail }>> {
+  const collaborators = await fetchCollaboratorsSummariesForList(list.id)
   return {
-    data: { list: toListDetail(list, extractOwnerDetail(list)) },
+    data: { list: toListDetail(list, extractOwnerDetail(list), collaborators) },
     httpStatus: HttpStatus.OK,
   }
 }
@@ -129,16 +133,18 @@ export async function updateUserList(
       collaborators: existing.collaborators,
       listTags: existing.listTags,
     }
+    const collaborators = await fetchCollaboratorsSummariesForList(refreshed.id)
     return {
-      data: { list: toListDetail(refreshed, extractOwnerDetail(refreshed)) },
+      data: { list: toListDetail(refreshed, extractOwnerDetail(refreshed), collaborators) },
       httpStatus: HttpStatus.OK,
     }
   }
 
   const refreshed = await findListWithOwner(existing.id)
   if (!refreshed) return serviceError(ErrorCode.NOT_FOUND)
+  const collaborators = await fetchCollaboratorsSummariesForList(refreshed.id)
   return {
-    data: { list: toListDetail(refreshed, extractOwnerDetail(refreshed)) },
+    data: { list: toListDetail(refreshed, extractOwnerDetail(refreshed), collaborators) },
     httpStatus: HttpStatus.OK,
   }
 }

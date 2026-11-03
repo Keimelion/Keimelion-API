@@ -169,6 +169,13 @@
       "when": 1793633177572,
       "tag": "0023_drop_list_items_image_id",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1793712819613,
+      "tag": "0024_collab_invite_token_hash",
+      "breakpoints": true
     }
   ]
 }

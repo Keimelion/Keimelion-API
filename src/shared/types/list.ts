@@ -16,6 +16,7 @@ import { toImageDetail } from '../../features/uploads/images.mapper.js'
 import type { ImageDetail } from '../../features/uploads/images.mapper.js'
 import type { UserDetail } from './user.js'
 import type { TagPublic } from './tag.js'
+import type { CollaboratorSummary } from './collaborator.js'
 
 export interface ListDetail {
   id: string
@@ -25,6 +26,7 @@ export interface ListDetail {
   listStatus: string
   occasionTypeId: string | null
   owner: UserDetail | null
+  collaborators?: CollaboratorSummary[]
   tags: TagPublic[]
   createdAt: Date
   updatedAt: Date
@@ -44,8 +46,12 @@ export function extractOwnerDetail(row: ListRowWithOwner): UserDetail | null {
   return ownerUser ? toUserDetail(ownerUser) : null
 }
 
-export function toListDetail(row: ListRowWithOwner, owner: UserDetail | null): ListDetail {
-  return {
+export function toListDetail(
+  row: ListRowWithOwner,
+  owner: UserDetail | null,
+  collaborators?: CollaboratorSummary[],
+): ListDetail {
+  const base: ListDetail = {
     id: row.id,
     title: row.title,
     slug: row.slug,
@@ -57,6 +63,8 @@ export function toListDetail(row: ListRowWithOwner, owner: UserDetail | null): L
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   }
+  if (collaborators !== undefined) base.collaborators = collaborators
+  return base
 }
 
 export interface PublicUserDetail {

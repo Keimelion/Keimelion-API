@@ -1,4 +1,5 @@
-import { index, pgEnum, pgTable, timestamp, uuid, varchar } from 'drizzle-orm/pg-core'
+import { sql } from 'drizzle-orm'
+import { index, pgEnum, pgTable, timestamp, uniqueIndex, uuid, varchar } from 'drizzle-orm/pg-core'
 import { timestamps, uuidPrimaryKey } from '../../../shared/db/columns.js'
 import { COLLAB_ROLE_VALUES, CollabRoles } from '../../../shared/enums/collab-role.js'
 import { INVITE_STATUS_VALUES, InviteStatuses } from '../../../shared/enums/invite-status.js'
@@ -7,6 +8,8 @@ import { users } from '../users/users.schema.js'
 
 export const collabRoleEnum = pgEnum('collab_role', COLLAB_ROLE_VALUES)
 export const inviteStatusEnum = pgEnum('invite_status', INVITE_STATUS_VALUES)
+
+export const INVITE_TOKEN_HASH_LENGTH = 64
 
 export const listCollaborators = pgTable(
   'list_collaborators',
@@ -17,7 +20,7 @@ export const listCollaborators = pgTable(
     invitedEmail: varchar('invited_email', { length: 255 }),
     collabRole: collabRoleEnum('collab_role').notNull().default(CollabRoles.EDITOR),
     inviteStatus: inviteStatusEnum('invite_status').notNull().default(InviteStatuses.PENDING),
-    inviteToken: uuid('invite_token').unique(),
+    inviteToken: varchar('invite_token', { length: INVITE_TOKEN_HASH_LENGTH }).unique(),
     inviteTokenExpiresAt: timestamp('invite_token_expires_at', { withTimezone: true }),
     acceptedAt: timestamp('accepted_at', { withTimezone: true }),
     ...timestamps(),
@@ -25,6 +28,9 @@ export const listCollaborators = pgTable(
   (table) => [
     index('idx_list_collaborators_user_role').on(table.userId, table.collabRole),
     index('idx_list_collaborators_list_role').on(table.listId, table.collabRole),
+    uniqueIndex('uniq_list_collaborators_active_editor')
+      .on(table.listId)
+      .where(sql`${table.collabRole} = 'editor' AND ${table.inviteStatus} IN ('pending','accepted')`),
   ],
 )
 

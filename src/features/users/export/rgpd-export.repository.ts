@@ -18,6 +18,7 @@ import type { ItemSource } from '../../../db/entities/item-sources/item-sources.
 import type { ListItem } from '../../../db/entities/list-items/list-items.schema.js'
 import type { ListTag } from '../../../db/entities/list-tags/list-tags.schema.js'
 import type { List } from '../../../db/entities/lists/lists.schema.js'
+import type { ListCollaborator } from '../../../db/entities/list-collaborators/list-collaborators.schema.js'
 import type { Tag } from '../../../db/entities/tags/tags.schema.js'
 
 export async function findItemsByCreator(userId: string): Promise<Item[]> {
@@ -74,6 +75,16 @@ export async function findFeedbackByUser(userId: string): Promise<Feedback[]> {
 export async function findImagesByUploaderForExport(userId: string): Promise<Image[]> {
   return db.query.images.findMany({
     where: eq(images.uploadedBy, userId),
+  })
+}
+
+export async function findCollaboratorsForOwner(userId: string): Promise<ListCollaborator[]> {
+  const ownedListIds = db
+    .select({ id: listCollaborators.listId })
+    .from(listCollaborators)
+    .where(and(eq(listCollaborators.userId, userId), eq(listCollaborators.collabRole, CollabRoles.OWNER)))
+  return db.query.listCollaborators.findMany({
+    where: inArray(listCollaborators.listId, ownedListIds),
   })
 }
 

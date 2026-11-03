@@ -73,6 +73,7 @@ function isListOwner(list: ListRowWithOwner, userId: string): Promise<boolean> {
 }
 
 async function isListContributor(list: ListRowWithOwner, userId: string): Promise<boolean> {
+  if (list.collaborators[0]?.userId === userId) return true
   const row = await findListContributor(list.id, userId)
   return row !== undefined
 }

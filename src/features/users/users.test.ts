@@ -827,6 +827,92 @@ describe('GET /v1/users/me/export', () => {
     expect(body.listTags[0]?.listId).toBe('00000000-0000-0000-0000-00000000c010')
   })
 
+  it('registers collaborators.csv with the exact allow-list required by RGPD (no secret token columns)', () => {
+    const collaboratorsDescriptor = EXPORT_ENTITY_REGISTRY.find(
+      (descriptor) => descriptor.filename === 'collaborators.csv',
+    )
+    expect(collaboratorsDescriptor).toBeDefined()
+    expect(collaboratorsDescriptor?.columns).toEqual([
+      'listId',
+      'invitedEmail',
+      'collabRole',
+      'inviteStatus',
+      'acceptedAt',
+      'createdAt',
+    ])
+    expect(collaboratorsDescriptor?.columns).not.toContain('inviteToken')
+    expect(collaboratorsDescriptor?.columns).not.toContain('inviteTokenExpiresAt')
+  })
+
+  it('fetches owner-scoped collaborators for RGPD and omits inviteToken / inviteTokenExpiresAt from rows', async () => {
+    const collaboratorsDescriptor = EXPORT_ENTITY_REGISTRY.find(
+      (descriptor) => descriptor.filename === 'collaborators.csv',
+    )
+    const ownedListId = '00000000-0000-0000-0000-00000000e001'
+    const collaboratorRow = {
+      id: '00000000-0000-0000-0000-00000000e002',
+      listId: ownedListId,
+      userId: null,
+      invitedEmail: 'invitee@example.com',
+      collabRole: 'editor' as const,
+      inviteStatus: 'pending' as const,
+      inviteToken: 'a'.repeat(64),
+      inviteTokenExpiresAt: new Date('2024-10-01'),
+      acceptedAt: null,
+      createdAt: new Date('2024-02-01'),
+      updatedAt: new Date('2024-02-01'),
+    }
+
+    vi.mocked(db.query.listCollaborators.findMany).mockResolvedValueOnce([collaboratorRow] as never)
+
+    expect(collaboratorsDescriptor).toBeDefined()
+    const rows = await (collaboratorsDescriptor as { fetchRows: (userId: string) => Promise<object[]> }).fetchRows(SAFE_USER.id)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({
+      listId: ownedListId,
+      invitedEmail: 'invitee@example.com',
+      collabRole: 'editor',
+      inviteStatus: 'pending',
+    })
+    expect(rows[0]).not.toHaveProperty('inviteToken')
+    expect(rows[0]).not.toHaveProperty('inviteTokenExpiresAt')
+    expect(rows[0]).not.toHaveProperty('id')
+    expect(rows[0]).not.toHaveProperty('userId')
+  })
+
+  it('includes a collaborators key in the JSON export payload', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+
+    vi.mocked(db.query.listCollaborators.findMany).mockResolvedValueOnce([
+      {
+        id: '00000000-0000-0000-0000-00000000e011',
+        listId: '00000000-0000-0000-0000-00000000e010',
+        userId: null,
+        invitedEmail: 'later@example.com',
+        collabRole: 'editor' as const,
+        inviteStatus: 'pending' as const,
+        inviteToken: 'b'.repeat(64),
+        inviteTokenExpiresAt: new Date('2024-10-01'),
+        acceptedAt: null,
+        createdAt: new Date('2024-02-01'),
+        updatedAt: new Date('2024-02-01'),
+      },
+    ] as never)
+
+    const response = await apiRequest('/v1/users/me/export?format=json', { token })
+
+    expect(response.status).toBe(200)
+    const body = await response.json() as {
+      collaborators: { invitedEmail: string | null; collabRole: string }[]
+    }
+    expect(body).toHaveProperty('collaborators')
+    expect(body.collaborators).toHaveLength(1)
+    expect(body.collaborators[0]?.invitedEmail).toBe('later@example.com')
+    expect(JSON.stringify(body.collaborators)).not.toContain('inviteToken')
+  })
+
   it('includes a feedback key in the JSON export payload with only entries submitted by the user', async () => {
     const token = await generateTestToken(SAFE_USER.id)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)

@@ -1,7 +1,7 @@
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { authMiddleware, getAuthUser } from '../../../shared/middlewares/auth.js'
-import { getList, listOwnershipMiddleware } from '../../../shared/middlewares/list-access.middleware.js'
+import { getList, listContributorMiddleware } from '../../../shared/middlewares/list-access.middleware.js'
 import { RATE_LIMITS } from '../../../shared/utils/rate-limiter.js'
 import { jsonResult } from '../../../shared/utils/response.js'
 import { validationErrorHandler } from '../../../shared/utils/validation.js'
@@ -29,7 +29,7 @@ export function mountUpdateUserList(router: FeatureRouter): void {
     RATE_LIMITS.STANDARD(),
     zValidator('param', uuidParamSchema, validationErrorHandler),
     zValidator('json', updateListSchema, validationErrorHandler),
-    listOwnershipMiddleware({ paramName: 'id' }),
+    listContributorMiddleware({ paramName: 'id' }),
     async (context) => {
       const user = getAuthUser(context)
       const input = context.req.valid('json')
