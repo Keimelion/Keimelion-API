@@ -129,8 +129,6 @@ export async function markInviteAccepted(
       inviteStatus: InviteStatuses.ACCEPTED,
       userId,
       acceptedAt,
-      inviteToken: null,
-      inviteTokenExpiresAt: null,
     })
     .where(eq(listCollaborators.id, inviteId))
     .returning()
