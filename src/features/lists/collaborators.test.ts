@@ -19,7 +19,7 @@ const OWNER_USER = {
   defaultCurrencyCode: 'USD',
   emailVerifyToken: null,
   emailVerifyTokenExpiresAt: null,
-  emailVerifiedAt: new Date('2024-01-02'),
+  emailVerifiedAt: new Date('2024-01-02') as Date | null,
   passwordResetToken: null,
   passwordResetTokenExpiresAt: null,
   lastActiveAt: null,
@@ -35,13 +35,9 @@ const INVITEE_USER = {
   id: '00000000-0000-0000-0000-000000000002',
   email: 'invitee@example.com',
   username: 'invitee',
-  emailVerifiedAt: new Date('2024-01-02') as Date | null,
 }
 
-const UNVERIFIED_USER = {
-  ...INVITEE_USER,
-  emailVerifiedAt: null,
-}
+const UNVERIFIED_USER = { ...INVITEE_USER, emailVerifiedAt: null }
 
 const LIST_ID = '00000000-0000-0000-0000-000000000010'
 
@@ -61,9 +57,9 @@ const OWNER_ACCESS_TOKEN_ENTRY = makeAccessTokenEntry(OWNER_USER.id)
 const INVITEE_ACCESS_TOKEN_ENTRY = makeAccessTokenEntry(INVITEE_USER.id)
 
 function rowWithOwner(row: object, owner: unknown): object {
-  if (owner === null) return { ...row, collaborators: [], listTags: [] }
+  if (owner === null) return { ...row, listUsers: [], listTags: [] }
   const ownerId = (owner as { id: string }).id
-  return { ...row, collaborators: [{ userId: ownerId, user: owner }], listTags: [] }
+  return { ...row, listUsers: [{ userId: ownerId, user: owner }], listTags: [] }
 }
 
 function mockOwnerAuth(): void {
@@ -88,16 +84,6 @@ function mockInsertInvite(returnRow: unknown): void {
   } as never)
 }
 
-function mockUpdateInvite(returnRow: unknown): void {
-  vi.mocked(db.update).mockReturnValueOnce({
-    set: vi.fn().mockReturnValueOnce({
-      where: vi.fn().mockReturnValueOnce({
-        returning: vi.fn().mockResolvedValueOnce([returnRow]),
-      }),
-    }),
-  } as never)
-}
-
 function sha256Hex(value: string): string {
   return createHash('sha256').update(value).digest('hex')
 }
@@ -108,13 +94,14 @@ const RAW_TOKEN_HASH = sha256Hex(RAW_TOKEN)
 const BASE_INVITE_ROW = {
   id: '00000000-0000-0000-0000-00000000d001',
   listId: LIST_ID,
-  userId: null as string | null,
+  invitedByUserId: OWNER_USER.id as string | null,
   invitedEmail: 'invitee@example.com',
-  collabRole: 'editor' as const,
-  inviteStatus: 'pending' as const,
+  role: 'editor' as const,
   inviteToken: RAW_TOKEN_HASH,
   inviteTokenExpiresAt: new Date(Date.now() + 60_000),
+  inviteStatus: 'pending' as const,
   acceptedAt: null as Date | null,
+  acceptedByUserId: null as string | null,
   createdAt: new Date('2024-01-01'),
   updatedAt: new Date('2024-01-01'),
 }
@@ -128,7 +115,8 @@ describe('POST /v1/lists/:listId/collaborators/invites', () => {
     const token = await generateTestToken(OWNER_USER.id)
     mockOwnerAuth()
     mockListWithOwner()
-    vi.mocked(db.query.listCollaborators.findFirst).mockResolvedValueOnce(undefined)
+    vi.mocked(db.query.listInvites.findFirst).mockResolvedValueOnce(undefined)
+    vi.mocked(db.query.listUsers.findFirst).mockResolvedValueOnce(undefined)
     mockInsertInvite(BASE_INVITE_ROW)
 
     const response = await apiRequest(`/v1/lists/${LIST_ID}/collaborators/invites`, {
@@ -138,12 +126,12 @@ describe('POST /v1/lists/:listId/collaborators/invites', () => {
     })
 
     const body = await response.json() as {
-      invite: { invitedEmail: string; collabRole: string; inviteStatus: string }
+      invite: { invitedEmail: string; role: string; inviteStatus: string }
       inviteToken: string
     }
     expect(response.status).toBe(201)
     expect(body.invite.invitedEmail).toBe('invitee@example.com')
-    expect(body.invite.collabRole).toBe('editor')
+    expect(body.invite.role).toBe('editor')
     expect(body.invite.inviteStatus).toBe('pending')
     expect(body.inviteToken).toMatch(/^[a-f0-9]{64}$/)
     expect(body.invite).not.toHaveProperty('inviteToken')
@@ -166,11 +154,37 @@ describe('POST /v1/lists/:listId/collaborators/invites', () => {
     expect(body.code).toBe('COLLAB_SELF_INVITE')
   })
 
-  it('returns 409 COLLAB_ALREADY_MEMBER when an active editor invite exists', async () => {
+  it('returns 409 COLLAB_ALREADY_MEMBER when a pending invite already exists', async () => {
     const token = await generateTestToken(OWNER_USER.id)
     mockOwnerAuth()
     mockListWithOwner()
-    vi.mocked(db.query.listCollaborators.findFirst).mockResolvedValueOnce(BASE_INVITE_ROW)
+    vi.mocked(db.query.listInvites.findFirst).mockResolvedValueOnce(BASE_INVITE_ROW)
+    vi.mocked(db.query.listUsers.findFirst).mockResolvedValueOnce(undefined)
+
+    const response = await apiRequest(`/v1/lists/${LIST_ID}/collaborators/invites`, {
+      method: 'POST',
+      token,
+      body: { email: 'invitee@example.com' },
+    })
+
+    const body = await response.json() as { code: string }
+    expect(response.status).toBe(409)
+    expect(body.code).toBe('COLLAB_ALREADY_MEMBER')
+  })
+
+  it('returns 409 COLLAB_ALREADY_MEMBER when an accepted editor already exists', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+    mockListWithOwner()
+    vi.mocked(db.query.listInvites.findFirst).mockResolvedValueOnce(undefined)
+    vi.mocked(db.query.listUsers.findFirst).mockResolvedValueOnce({
+      id: '00000000-0000-0000-0000-00000000d100',
+      listId: LIST_ID,
+      userId: INVITEE_USER.id,
+      role: 'editor' as const,
+      createdAt: new Date('2024-01-02'),
+      updatedAt: new Date('2024-01-02'),
+    })
 
     const response = await apiRequest(`/v1/lists/${LIST_ID}/collaborators/invites`, {
       method: 'POST',
@@ -187,7 +201,8 @@ describe('POST /v1/lists/:listId/collaborators/invites', () => {
     const token = await generateTestToken(OWNER_USER.id)
     mockOwnerAuth()
     mockListWithOwner()
-    vi.mocked(db.query.listCollaborators.findFirst).mockResolvedValueOnce(undefined)
+    vi.mocked(db.query.listInvites.findFirst).mockResolvedValueOnce(undefined)
+    vi.mocked(db.query.listUsers.findFirst).mockResolvedValueOnce(undefined)
     vi.mocked(db.insert).mockReturnValueOnce({
       values: vi.fn().mockReturnValueOnce({
         returning: vi.fn().mockRejectedValueOnce(Object.assign(new Error('unique'), { code: '23505' })),
@@ -266,13 +281,34 @@ describe('POST /v1/collaborators/invites/accept', () => {
   it('returns 200 and marks the invite accepted when the token matches a pending invite', async () => {
     const token = await generateTestToken(INVITEE_USER.id)
     mockInviteeAuth()
-    vi.mocked(db.query.listCollaborators.findFirst).mockResolvedValueOnce(BASE_INVITE_ROW)
-    mockUpdateInvite({
+    vi.mocked(db.query.listInvites.findFirst).mockResolvedValueOnce(BASE_INVITE_ROW)
+    const acceptedRow = {
       ...BASE_INVITE_ROW,
-      inviteStatus: 'accepted',
-      userId: INVITEE_USER.id,
+      inviteStatus: 'accepted' as const,
+      acceptedByUserId: INVITEE_USER.id,
       acceptedAt: new Date(),
-    })
+    }
+    vi.mocked(db.update).mockReturnValueOnce({
+      set: vi.fn().mockReturnValueOnce({
+        where: vi.fn().mockReturnValueOnce({
+          returning: vi.fn().mockResolvedValueOnce([acceptedRow]),
+        }),
+      }),
+    } as never)
+    vi.mocked(db.insert).mockReturnValueOnce({
+      values: vi.fn().mockReturnValueOnce({
+        returning: vi.fn().mockResolvedValueOnce([
+          {
+            id: '00000000-0000-0000-0000-00000000d200',
+            listId: LIST_ID,
+            userId: INVITEE_USER.id,
+            role: 'editor' as const,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        ]),
+      }),
+    } as never)
 
     const response = await apiRequest('/v1/collaborators/invites/accept', {
       method: 'POST',
@@ -306,7 +342,7 @@ describe('POST /v1/collaborators/invites/accept', () => {
   it('returns 404 COLLAB_INVITE_NOT_FOUND when the token hash does not match', async () => {
     const token = await generateTestToken(INVITEE_USER.id)
     mockInviteeAuth()
-    vi.mocked(db.query.listCollaborators.findFirst).mockResolvedValueOnce(undefined)
+    vi.mocked(db.query.listInvites.findFirst).mockResolvedValueOnce(undefined)
 
     const response = await apiRequest('/v1/collaborators/invites/accept', {
       method: 'POST',
@@ -322,7 +358,7 @@ describe('POST /v1/collaborators/invites/accept', () => {
   it('returns 409 COLLAB_INVITE_ALREADY_RESOLVED when the invite is already accepted', async () => {
     const token = await generateTestToken(INVITEE_USER.id)
     mockInviteeAuth()
-    vi.mocked(db.query.listCollaborators.findFirst).mockResolvedValueOnce(
+    vi.mocked(db.query.listInvites.findFirst).mockResolvedValueOnce(
       { ...BASE_INVITE_ROW, inviteStatus: 'accepted' } as never,
     )
 
@@ -340,7 +376,7 @@ describe('POST /v1/collaborators/invites/accept', () => {
   it('returns 410 COLLAB_INVITE_EXPIRED when the invite TTL has passed', async () => {
     const token = await generateTestToken(INVITEE_USER.id)
     mockInviteeAuth()
-    vi.mocked(db.query.listCollaborators.findFirst).mockResolvedValueOnce({
+    vi.mocked(db.query.listInvites.findFirst).mockResolvedValueOnce({
       ...BASE_INVITE_ROW,
       inviteTokenExpiresAt: new Date(Date.now() - 60_000),
     })
@@ -359,7 +395,7 @@ describe('POST /v1/collaborators/invites/accept', () => {
   it('returns 403 COLLAB_EMAIL_MISMATCH when caller email does not match invitedEmail', async () => {
     const token = await generateTestToken(INVITEE_USER.id)
     mockInviteeAuth()
-    vi.mocked(db.query.listCollaborators.findFirst).mockResolvedValueOnce({
+    vi.mocked(db.query.listInvites.findFirst).mockResolvedValueOnce({
       ...BASE_INVITE_ROW,
       invitedEmail: 'someone-else@example.com',
     })
@@ -378,7 +414,7 @@ describe('POST /v1/collaborators/invites/accept', () => {
   it('returns 409 COLLAB_ALREADY_MEMBER on 23505 race during accept', async () => {
     const token = await generateTestToken(INVITEE_USER.id)
     mockInviteeAuth()
-    vi.mocked(db.query.listCollaborators.findFirst).mockResolvedValueOnce(BASE_INVITE_ROW)
+    vi.mocked(db.query.listInvites.findFirst).mockResolvedValueOnce(BASE_INVITE_ROW)
     vi.mocked(db.update).mockReturnValueOnce({
       set: vi.fn().mockReturnValueOnce({
         where: vi.fn().mockReturnValueOnce({
@@ -426,38 +462,35 @@ describe('GET /v1/lists/:id — embeds collaborators for owner', () => {
     vi.clearAllMocks()
   })
 
-  it('embeds owner first and omits expired pending invites', async () => {
+  it('embeds owner first and includes a pending invite as a separate entry', async () => {
     const token = await generateTestToken(OWNER_USER.id)
     mockOwnerAuth()
     mockListWithOwner()
-    vi.mocked(db.query.listCollaborators.findMany).mockResolvedValueOnce([
+    vi.mocked(db.query.listUsers.findMany).mockResolvedValueOnce([
       {
         id: '00000000-0000-0000-0000-00000000d100',
         listId: LIST_ID,
         userId: OWNER_USER.id,
-        invitedEmail: null,
-        collabRole: 'owner' as const,
-        inviteStatus: 'accepted' as const,
-        inviteToken: null,
-        inviteTokenExpiresAt: null,
-        acceptedAt: new Date('2024-01-01'),
+        role: 'owner' as const,
         createdAt: new Date('2024-01-01'),
         updatedAt: new Date('2024-01-01'),
         user: OWNER_USER,
       },
+    ] as never)
+    vi.mocked(db.query.listInvites.findMany).mockResolvedValueOnce([
       {
         id: '00000000-0000-0000-0000-00000000d101',
         listId: LIST_ID,
-        userId: null,
+        invitedByUserId: OWNER_USER.id,
         invitedEmail: 'pending@example.com',
-        collabRole: 'editor' as const,
-        inviteStatus: 'pending' as const,
+        role: 'editor' as const,
         inviteToken: RAW_TOKEN_HASH,
         inviteTokenExpiresAt: new Date(Date.now() + 60_000),
+        inviteStatus: 'pending' as const,
         acceptedAt: null,
+        acceptedByUserId: null,
         createdAt: new Date('2024-01-02'),
         updatedAt: new Date('2024-01-02'),
-        user: null,
       },
     ] as never)
 

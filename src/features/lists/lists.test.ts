@@ -52,7 +52,7 @@ const MOCK_COLLABORATOR = {
   listId: LIST_ID,
   userId: AUTH_USER.id,
   invitedEmail: null,
-  collabRole: 'owner' as const,
+  role: 'owner' as const,
   inviteStatus: 'accepted',
   inviteToken: null,
   inviteTokenExpiresAt: null,
@@ -137,9 +137,9 @@ function mockCountChain(total: number): void {
 }
 
 function rowWithOwner(row: object, owner: unknown): object {
-  if (owner === null) return { ...row, collaborators: [], listTags: [] }
+  if (owner === null) return { ...row, listUsers: [], listTags: [] }
   const ownerId = (owner as { id: string }).id
-  return { ...row, collaborators: [{ userId: ownerId, user: owner }], listTags: [] }
+  return { ...row, listUsers: [{ userId: ownerId, user: owner }], listTags: [] }
 }
 
 function mockUpdateList(returnRow: unknown): void {
@@ -209,7 +209,7 @@ describe('POST /v1/lists', () => {
     })
     vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce({
       ...MOCK_LIST,
-      collaborators: [{ userId: AUTH_USER.id, user: AUTH_USER }],
+      listUsers: [{ userId: AUTH_USER.id, user: AUTH_USER }],
       listTags: [listTagLink(TAG_GAMING_ROW)],
     } as never)
 
@@ -646,7 +646,7 @@ describe('PATCH /v1/lists/:id', () => {
     vi.mocked(db.query.tags.findMany).mockResolvedValueOnce([TAG_GAMING_ROW, TAG_READING_ROW] as never)
     vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce({
       ...MOCK_LIST,
-      collaborators: [{ userId: AUTH_USER.id, user: AUTH_USER }],
+      listUsers: [{ userId: AUTH_USER.id, user: AUTH_USER }],
       listTags: [listTagLink(TAG_GAMING_ROW), listTagLink(TAG_READING_ROW)],
     } as never)
 
@@ -667,7 +667,7 @@ describe('PATCH /v1/lists/:id', () => {
     mockListAndOwner()
     vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce({
       ...MOCK_LIST,
-      collaborators: [{ userId: AUTH_USER.id, user: AUTH_USER }],
+      listUsers: [{ userId: AUTH_USER.id, user: AUTH_USER }],
       listTags: [],
     } as never)
 
@@ -923,7 +923,7 @@ describe('lists mapper hydrates tags', () => {
     mockAuthChain()
     vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce({
       ...MOCK_LIST,
-      collaborators: [{ userId: AUTH_USER.id, user: AUTH_USER }],
+      listUsers: [{ userId: AUTH_USER.id, user: AUTH_USER }],
       listTags: [listTagLink(TAG_GAMING_ROW)],
     } as never)
 
@@ -942,7 +942,7 @@ describe('lists mapper hydrates tags', () => {
     vi.mocked(db.query.lists.findMany).mockResolvedValueOnce([
       {
         ...MOCK_LIST,
-        collaborators: [{ userId: AUTH_USER.id, user: AUTH_USER }],
+        listUsers: [{ userId: AUTH_USER.id, user: AUTH_USER }],
         listTags: [listTagLink(TAG_READING_ROW)],
       },
     ] as never)

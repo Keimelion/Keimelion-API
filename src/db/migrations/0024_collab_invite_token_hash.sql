@@ -1,2 +1,0 @@
-ALTER TABLE "list_collaborators" ALTER COLUMN "invite_token" SET DATA TYPE varchar(64) USING "invite_token"::text;--> statement-breakpoint
-CREATE UNIQUE INDEX "uniq_list_collaborators_active_editor" ON "list_collaborators" USING btree ("list_id") WHERE "list_collaborators"."collab_role" = 'editor' AND "list_collaborators"."invite_status" IN ('pending','accepted');

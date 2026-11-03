@@ -1,5 +1,5 @@
 import type { List } from '../../db/entities/lists/lists.schema.js'
-import type { ListCollaborator } from '../../db/entities/list-collaborators/list-collaborators.schema.js'
+import type { ListUser } from '../../db/entities/list-users/list-users.schema.js'
 import type { ListTagWithTag } from '../../db/entities/list-tags/list-tags.schema.js'
 import type { ListItem } from '../../db/entities/list-items/list-items.schema.js'
 import type { User } from '../../db/entities/users/users.schema.js'
@@ -32,17 +32,17 @@ export interface ListDetail {
   updatedAt: Date
 }
 
-export interface ListCollaboratorWithUser extends ListCollaborator {
+export interface ListUserWithUser extends ListUser {
   user: User | null
 }
 
 export interface ListRowWithOwner extends List {
-  collaborators: ListCollaboratorWithUser[]
+  listUsers: ListUserWithUser[]
   listTags: ListTagWithTag[]
 }
 
 export function extractOwnerDetail(row: ListRowWithOwner): UserDetail | null {
-  const ownerUser = row.collaborators[0]?.user ?? null
+  const ownerUser = row.listUsers[0]?.user ?? null
   return ownerUser ? toUserDetail(ownerUser) : null
 }
 
@@ -116,7 +116,7 @@ export interface PublicListDetail {
   updatedAt: Date
 }
 
-export interface PublicCollaboratorRow extends ListCollaborator {
+export interface PublicListUserRow extends ListUser {
   user: (User & { avatarImage: Image | null }) | null
 }
 
@@ -125,7 +125,7 @@ export interface PublicListItemRow extends ListItem {
 }
 
 export interface PublicListRow extends List {
-  collaborators: PublicCollaboratorRow[]
+  listUsers: PublicListUserRow[]
   listTags: ListTagWithTag[]
   listItems: PublicListItemRow[]
 }
@@ -138,7 +138,7 @@ export function toPublicListDetail(row: PublicListRow, locale: Locale): PublicLi
     description: row.description ?? null,
     listStatus: row.listStatus,
     occasionTypeId: row.occasionTypeId ?? null,
-    owner: toPublicOwner(row.collaborators[0]?.user ?? null),
+    owner: toPublicOwner(row.listUsers[0]?.user ?? null),
     tags: row.listTags.map((link) => toTagPublic(link.tag)),
     items: row.listItems.map((listItem) => toPublicListItem(listItem, locale)),
     createdAt: row.createdAt,

@@ -1,15 +1,15 @@
 import { relations } from 'drizzle-orm'
-import { listCollaborators } from './list-collaborators.schema.js'
+import { listUsers } from './list-users.schema.js'
 import { lists } from '../lists/lists.schema.js'
 import { users } from '../users/users.schema.js'
 
-export const listCollaboratorsRelations = relations(listCollaborators, ({ one }) => ({
+export const listUsersRelations = relations(listUsers, ({ one }) => ({
   list: one(lists, {
-    fields: [listCollaborators.listId],
+    fields: [listUsers.listId],
     references: [lists.id],
   }),
   user: one(users, {
-    fields: [listCollaborators.userId],
+    fields: [listUsers.userId],
     references: [users.id],
   }),
 }))

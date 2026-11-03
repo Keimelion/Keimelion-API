@@ -18,7 +18,7 @@ import {
   updateList,
   softDeleteList,
 } from '../../db/entities/lists/lists.repository.js'
-import { insertOwnerCollaborator } from '../../db/entities/list-collaborators/list-collaborators.repository.js'
+import { insertOwnerListUser } from '../../db/entities/list-users/list-users.repository.js'
 import { upsertTagsBySlugs } from '../../db/entities/tags/tags.repository.js'
 import { replaceListTags } from '../../db/entities/list-tags/list-tags.repository.js'
 import { toItemDetail, toListItemDetail } from '../../shared/types/item.js'
@@ -130,7 +130,7 @@ export async function updateUserList(
   if (tagSlugs === null) {
     const refreshed: ListRowWithOwner = {
       ...writeOutcome.row,
-      collaborators: existing.collaborators,
+      listUsers: existing.listUsers,
       listTags: existing.listTags,
     }
     const collaborators = await fetchCollaboratorsSummariesForList(refreshed.id)
@@ -212,17 +212,17 @@ async function tryInsertList(
     const created = await db.transaction(async (tx) => {
       const inserted = await insertList(buildCreatePayload(input, slug), tx)
       if (!inserted) throw new Error('List insert returned no row')
-      const collaborator = await insertOwnerCollaborator(inserted.id, user.id, tx)
-      if (!collaborator) throw new Error('Owner collaborator insert returned no row')
+      const ownerMembership = await insertOwnerListUser(inserted.id, user.id, tx)
+      if (!ownerMembership) throw new Error('Owner list_users insert returned no row')
       if (tagSlugs !== null && tagSlugs.length > 0) {
         const tagIds = await upsertTagsBySlugs(tagSlugs, user.id, tx)
         await replaceListTags(inserted.id, tagIds, tx)
       }
-      return { list: inserted, collaborator }
+      return { list: inserted, ownerMembership }
     })
     const row: ListRowWithOwner = {
       ...created.list,
-      collaborators: [{ ...created.collaborator, user }],
+      listUsers: [{ ...created.ownerMembership, user }],
       listTags: [],
     }
     return { row }

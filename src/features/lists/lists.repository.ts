@@ -6,9 +6,8 @@ import {
   LIST_SORTABLE_FIELDS,
   LIST_WITH_OWNER,
 } from '../../db/entities/lists/lists.repository.js'
-import { listCollaborators } from '../../db/entities/list-collaborators/list-collaborators.schema.js'
-import { CONTRIBUTOR_ROLE_VALUES } from '../../shared/enums/collab-role.js'
-import { InviteStatuses } from '../../shared/enums/invite-status.js'
+import { listUsers } from '../../db/entities/list-users/list-users.schema.js'
+import { CONTRIBUTOR_ROLE_VALUES } from '../../shared/enums/list-user-role.js'
 import { defineEntity } from '../../shared/db/entity-descriptor.js'
 import type { ListRowWithOwner } from '../../shared/types/list.js'
 import { getOffset } from '../../shared/schemas/pagination.js'
@@ -48,13 +47,12 @@ export async function countListsAccessibleBy(userId: string): Promise<number> {
 
 function accessibleListsWhere(userId: string): SQL | undefined {
   const accessibleListIds = db
-    .select({ id: listCollaborators.listId })
-    .from(listCollaborators)
+    .select({ id: listUsers.listId })
+    .from(listUsers)
     .where(
       and(
-        eq(listCollaborators.userId, userId),
-        inArray(listCollaborators.collabRole, [...CONTRIBUTOR_ROLE_VALUES]),
-        eq(listCollaborators.inviteStatus, InviteStatuses.ACCEPTED),
+        eq(listUsers.userId, userId),
+        inArray(listUsers.role, [...CONTRIBUTOR_ROLE_VALUES]),
       ),
     )
   return and(isNull(lists.deletedAt), inArray(lists.id, accessibleListIds))

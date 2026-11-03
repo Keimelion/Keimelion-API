@@ -4,7 +4,7 @@ import { authMiddleware, getAuthUser } from '../../../../shared/middlewares/auth
 import { RATE_LIMITS } from '../../../../shared/utils/rate-limiter.js'
 import { validationErrorHandler } from '../../../../shared/utils/validation.js'
 import { jsonResult } from '../../../../shared/utils/response.js'
-import { INVITE_TOKEN_HASH_LENGTH } from '../../../../db/entities/list-collaborators/list-collaborators.schema.js'
+import { INVITE_TOKEN_HASH_LENGTH } from '../../../../db/entities/list-invites/list-invites.schema.js'
 import type { FeatureRouter } from '../../../../shared/types/app.js'
 import { acceptListInvite } from '../../collaborators.service.js'
 

@@ -71,7 +71,7 @@ const applyDbMockDefaults = (db: Record<string, unknown>): void => {
   }))
   const passThrough = (async (callback: (tx: unknown) => Promise<unknown>) => callback(db)) as never
   vi.mocked(db.transaction as ReturnType<typeof vi.fn>).mockImplementation(passThrough)
-  const emptyFindMany = ['lists', 'listCollaborators', 'items', 'itemSources', 'listItems', 'shops', 'categories', 'itemCategories', 'tags', 'itemTags', 'listTags', 'feedback', 'images', 'reservations']
+  const emptyFindMany = ['lists', 'listUsers', 'listInvites', 'items', 'itemSources', 'listItems', 'shops', 'categories', 'itemCategories', 'tags', 'itemTags', 'listTags', 'feedback', 'images', 'reservations']
   for (const table of emptyFindMany) {
     const q = (db.query as Record<string, { findMany: ReturnType<typeof vi.fn> }>)[table]
     if (q !== undefined) q.findMany.mockResolvedValue([])
@@ -104,7 +104,11 @@ vi.mock('../../db/client.js', () => {
         findFirst: vi.fn(),
         findMany: vi.fn().mockResolvedValue([]),
       },
-      listCollaborators: {
+      listUsers: {
+        findFirst: vi.fn(),
+        findMany: vi.fn().mockResolvedValue([]),
+      },
+      listInvites: {
         findFirst: vi.fn(),
         findMany: vi.fn().mockResolvedValue([]),
       },

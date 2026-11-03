@@ -1,4 +1,5 @@
 import { randomBytes } from 'crypto'
+import { db } from '../../db/client.js'
 import { HttpStatus } from '../../shared/enums/http.js'
 import { ErrorCode } from '../../shared/enums/error-code.js'
 import { NodeEnvs } from '../../shared/enums/node-env.js'
@@ -10,12 +11,17 @@ import { runWrite } from '../../shared/utils/admin-write.js'
 import { serviceError } from '../../shared/utils/response.js'
 import {
   findActiveEditorForList,
+  insertEditorListUser,
+} from '../../db/entities/list-users/list-users.repository.js'
+import {
   findInviteByTokenHash,
-  insertEditorInvite,
+  findPendingInviteForList,
+  insertListInvite,
   markInviteAccepted,
-} from '../../db/entities/list-collaborators/list-collaborators.repository.js'
-import { toCollaboratorDetail } from '../../shared/types/collaborator.js'
+} from '../../db/entities/list-invites/list-invites.repository.js'
+import { toInviteDetail } from '../../shared/types/collaborator.js'
 import type { CollaboratorDetail } from '../../shared/types/collaborator.js'
+import { toUserDetail } from '../../shared/types/user.js'
 import type { User } from '../../db/entities/users/users.schema.js'
 import type { ListRowWithOwner } from '../../shared/types/list.js'
 import type { ServiceResult } from '../../shared/types/service.js'
@@ -39,17 +45,24 @@ export async function createListInvite(
     return serviceError(ErrorCode.COLLAB_SELF_INVITE)
   }
 
-  const existing = await findActiveEditorForList(list.id, new Date())
-  if (existing) return serviceError(ErrorCode.COLLAB_ALREADY_MEMBER)
+  const now = new Date()
+  const [existingPendingInvite, existingEditor] = await Promise.all([
+    findPendingInviteForList(list.id, now),
+    findActiveEditorForList(list.id),
+  ])
+  if (existingPendingInvite || existingEditor) {
+    return serviceError(ErrorCode.COLLAB_ALREADY_MEMBER)
+  }
 
   const rawToken = randomBytes(INVITE_TOKEN_BYTE_LENGTH).toString('hex')
   const tokenHash = hashSha256Hex(rawToken)
-  const expiresAt = new Date(Date.now() + COLLAB_INVITE_TTL_MS)
+  const expiresAt = new Date(now.getTime() + COLLAB_INVITE_TTL_MS)
 
   const outcome = await runWrite(
     () =>
-      insertEditorInvite({
+      insertListInvite({
         listId: list.id,
+        invitedByUserId: owner.id,
         invitedEmail: input.email,
         inviteTokenHash: tokenHash,
         inviteTokenExpiresAt: expiresAt,
@@ -63,7 +76,7 @@ export async function createListInvite(
 
   logInviteCreated(owner.id, list.id, input.email, rawToken)
 
-  const invite = toCollaboratorDetail({ ...outcome.row, user: null })
+  const invite = toInviteDetail(outcome.row)
   const response: CreateInviteResponse = { invite }
   if (env.NODE_ENV !== NodeEnvs.PRODUCTION) {
     response.inviteToken = rawToken
@@ -83,15 +96,23 @@ export async function acceptListInvite(
   if (invite.inviteStatus !== InviteStatuses.PENDING) {
     return serviceError(ErrorCode.COLLAB_INVITE_ALREADY_RESOLVED)
   }
-  if (invite.inviteTokenExpiresAt && invite.inviteTokenExpiresAt.getTime() <= Date.now()) {
+  if (invite.inviteTokenExpiresAt.getTime() <= Date.now()) {
     return serviceError(ErrorCode.COLLAB_INVITE_EXPIRED)
   }
-  if (invite.invitedEmail?.toLowerCase() !== acceptor.email.toLowerCase()) {
+  if (invite.invitedEmail.toLowerCase() !== acceptor.email.toLowerCase()) {
     return serviceError(ErrorCode.COLLAB_EMAIL_MISMATCH)
   }
 
   const outcome = await runWrite(
-    () => markInviteAccepted(invite.id, acceptor.id, new Date()),
+    () =>
+      db.transaction(async (tx) => {
+        const acceptedAt = new Date()
+        const updated = await markInviteAccepted(invite.id, acceptor.id, acceptedAt, tx)
+        if (!updated) return undefined
+        const membership = await insertEditorListUser(invite.listId, acceptor.id, tx)
+        if (!membership) return undefined
+        return updated
+      }),
     { fallbackErrorCode: ErrorCode.INTERNAL_ERROR },
   )
   if ('errorCode' in outcome) {
@@ -101,8 +122,9 @@ export async function acceptListInvite(
 
   logInviteAccepted(acceptor.id, invite.listId, invite.id)
 
+  const detail = toInviteDetail(outcome.row)
   return {
-    data: { invite: toCollaboratorDetail({ ...outcome.row, user: acceptor }) },
+    data: { invite: { ...detail, user: toUserDetail(acceptor) } },
     httpStatus: HttpStatus.OK,
   }
 }

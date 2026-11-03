@@ -1,5 +1,5 @@
 {
-  "id": "42f83cb9-b2c0-4d59-bf8d-79bf793e7e15",
+  "id": "8407a41f-f803-447b-8d0b-680a21666af2",
   "prevId": "b699671b-5257-47fe-97f3-6f919beacd8d",
   "version": "7",
   "dialect": "postgresql",
@@ -873,8 +873,8 @@
       },
       "isRLSEnabled": false
     },
-    "public.list_collaborators": {
-      "name": "list_collaborators",
+    "public.list_invites": {
+      "name": "list_invites",
       "schema": "",
       "columns": {
         "id": {
@@ -890,8 +890,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "user_id": {
-          "name": "user_id",
+        "invited_by_user_id": {
+          "name": "invited_by_user_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
@@ -900,15 +900,27 @@
           "name": "invited_email",
           "type": "varchar(255)",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
-        "collab_role": {
-          "name": "collab_role",
-          "type": "collab_role",
+        "role": {
+          "name": "role",
+          "type": "list_user_role",
           "typeSchema": "public",
           "primaryKey": false,
           "notNull": true,
           "default": "'editor'"
+        },
+        "invite_token": {
+          "name": "invite_token",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "invite_token_expires_at": {
+          "name": "invite_token_expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
         },
         "invite_status": {
           "name": "invite_status",
@@ -918,21 +930,15 @@
           "notNull": true,
           "default": "'pending'"
         },
-        "invite_token": {
-          "name": "invite_token",
-          "type": "varchar(64)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "invite_token_expires_at": {
-          "name": "invite_token_expires_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
         "accepted_at": {
           "name": "accepted_at",
           "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "accepted_by_user_id": {
+          "name": "accepted_by_user_id",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": false
         },
@@ -952,50 +958,8 @@
         }
       },
       "indexes": {
-        "idx_list_collaborators_user_role": {
-          "name": "idx_list_collaborators_user_role",
-          "columns": [
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "collab_role",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_list_collaborators_list_role": {
-          "name": "idx_list_collaborators_list_role",
-          "columns": [
-            {
-              "expression": "list_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "collab_role",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "uniq_list_collaborators_active_editor": {
-          "name": "uniq_list_collaborators_active_editor",
+        "uniq_list_invites_pending_per_list": {
+          "name": "uniq_list_invites_pending_per_list",
           "columns": [
             {
               "expression": "list_id",
@@ -1005,16 +969,52 @@
             }
           ],
           "isUnique": true,
-          "where": "\"list_collaborators\".\"collab_role\" = 'editor' AND \"list_collaborators\".\"invite_status\" IN ('pending','accepted')",
+          "where": "\"list_invites\".\"invite_status\" = 'pending'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_list_invites_list_status": {
+          "name": "idx_list_invites_list_status",
+          "columns": [
+            {
+              "expression": "list_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "invite_status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_list_invites_invited_email": {
+          "name": "idx_list_invites_invited_email",
+          "columns": [
+            {
+              "expression": "invited_email",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
           "concurrently": false,
           "method": "btree",
           "with": {}
         }
       },
       "foreignKeys": {
-        "list_collaborators_list_id_lists_id_fk": {
-          "name": "list_collaborators_list_id_lists_id_fk",
-          "tableFrom": "list_collaborators",
+        "list_invites_list_id_lists_id_fk": {
+          "name": "list_invites_list_id_lists_id_fk",
+          "tableFrom": "list_invites",
           "tableTo": "lists",
           "columnsFrom": [
             "list_id"
@@ -1025,12 +1025,25 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "list_collaborators_user_id_users_id_fk": {
-          "name": "list_collaborators_user_id_users_id_fk",
-          "tableFrom": "list_collaborators",
+        "list_invites_invited_by_user_id_users_id_fk": {
+          "name": "list_invites_invited_by_user_id_users_id_fk",
+          "tableFrom": "list_invites",
           "tableTo": "users",
           "columnsFrom": [
-            "user_id"
+            "invited_by_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "list_invites_accepted_by_user_id_users_id_fk": {
+          "name": "list_invites_accepted_by_user_id_users_id_fk",
+          "tableFrom": "list_invites",
+          "tableTo": "users",
+          "columnsFrom": [
+            "accepted_by_user_id"
           ],
           "columnsTo": [
             "id"
@@ -1041,8 +1054,8 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "list_collaborators_invite_token_unique": {
-          "name": "list_collaborators_invite_token_unique",
+        "list_invites_invite_token_unique": {
+          "name": "list_invites_invite_token_unique",
           "nullsNotDistinct": false,
           "columns": [
             "invite_token"
@@ -1260,6 +1273,166 @@
           ]
         }
       },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.list_users": {
+      "name": "list_users",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "list_id": {
+          "name": "list_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "role": {
+          "name": "role",
+          "type": "list_user_role",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "uniq_list_users_list_user": {
+          "name": "uniq_list_users_list_user",
+          "columns": [
+            {
+              "expression": "list_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "uniq_list_users_active_editor": {
+          "name": "uniq_list_users_active_editor",
+          "columns": [
+            {
+              "expression": "list_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"list_users\".\"role\" = 'editor'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_list_users_user_role": {
+          "name": "idx_list_users_user_role",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "role",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_list_users_list_role": {
+          "name": "idx_list_users_list_role",
+          "columns": [
+            {
+              "expression": "list_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "role",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "list_users_list_id_lists_id_fk": {
+          "name": "list_users_list_id_lists_id_fk",
+          "tableFrom": "list_users",
+          "tableTo": "lists",
+          "columnsFrom": [
+            "list_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "list_users_user_id_users_id_fk": {
+          "name": "list_users_user_id_users_id_fk",
+          "tableFrom": "list_users",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
@@ -2263,15 +2436,6 @@
         "closed"
       ]
     },
-    "public.collab_role": {
-      "name": "collab_role",
-      "schema": "public",
-      "values": [
-        "owner",
-        "editor",
-        "viewer"
-      ]
-    },
     "public.invite_status": {
       "name": "invite_status",
       "schema": "public",
@@ -2289,6 +2453,15 @@
         "available",
         "reserved",
         "purchased"
+      ]
+    },
+    "public.list_user_role": {
+      "name": "list_user_role",
+      "schema": "public",
+      "values": [
+        "owner",
+        "editor",
+        "viewer"
       ]
     },
     "public.list_status": {

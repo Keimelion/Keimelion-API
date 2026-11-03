@@ -1,8 +1,8 @@
 import { and, asc, eq, isNull, sql } from 'drizzle-orm'
 import { db } from '../../client.js'
-import { CollabRoles } from '../../../shared/enums/collab-role.js'
+import { ListUserRoles } from '../../../shared/enums/list-user-role.js'
 import { pickDefined } from '../../../shared/utils/partial-update.js'
-import { listCollaborators } from '../list-collaborators/list-collaborators.schema.js'
+import { listUsers } from '../list-users/list-users.schema.js'
 import { listItems } from '../list-items/list-items.schema.js'
 import { lists } from './lists.schema.js'
 import type { ListStatus } from '../../../shared/enums/list-status.js'
@@ -10,8 +10,8 @@ import type { ListRowWithOwner, PublicListRow } from '../../../shared/types/list
 import type { List } from './lists.schema.js'
 
 export const LIST_WITH_OWNER = {
-  collaborators: {
-    where: eq(listCollaborators.collabRole, CollabRoles.OWNER),
+  listUsers: {
+    where: eq(listUsers.role, ListUserRoles.OWNER),
     limit: 1,
     with: { user: true },
   },
@@ -64,8 +64,8 @@ export function findListBySlug(
   return db.query.lists.findFirst({
     where,
     with: {
-      collaborators: {
-        where: eq(listCollaborators.collabRole, CollabRoles.OWNER),
+      listUsers: {
+        where: eq(listUsers.role, ListUserRoles.OWNER),
         limit: 1,
         with: { user: { with: { avatarImage: true } } },
       },

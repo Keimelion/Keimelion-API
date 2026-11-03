@@ -85,12 +85,12 @@ function mockFindListByIdWithOwner(row: unknown, owner: unknown): void {
   const rowOut =
     row === undefined || row === null
       ? undefined
-      : { ...(row), collaborators: buildCollaborators(owner), listTags: [] }
+      : { ...(row), listUsers: buildCollaborators(owner), listTags: [] }
   vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(rowOut as never)
 }
 
 function rowWithOwner(row: object, owner: unknown): object {
-  return { ...row, collaborators: buildCollaborators(owner), listTags: [] }
+  return { ...row, listUsers: buildCollaborators(owner), listTags: [] }
 }
 
 function buildCollaborators(owner: unknown): { userId: string; user: unknown }[] {
@@ -796,7 +796,7 @@ describe('PATCH /v1/admin/lists/:id', () => {
     vi.mocked(db.query.tags.findMany).mockResolvedValueOnce([TAG_GAMING_ROW] as never)
     vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce({
       ...LIST_ROW,
-      collaborators: [{ userId: OWNER_USER.id, user: OWNER_USER }],
+      listUsers: [{ userId: OWNER_USER.id, user: OWNER_USER }],
       listTags: [listTagLink(TAG_GAMING_ROW)],
     } as never)
 

@@ -173,8 +173,8 @@
     {
       "idx": 24,
       "version": "7",
-      "when": 1793712819613,
-      "tag": "0024_collab_invite_token_hash",
+      "when": 1793723375334,
+      "tag": "0024_split_list_collaborators_into_list_users_and_list_invites",
       "breakpoints": true
     }
   ]

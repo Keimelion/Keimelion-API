@@ -31,16 +31,18 @@ const INVITE_LIST = {
 const PENDING_INVITE_ROW = {
   id: INVITE_ID,
   listId: LIST_ID,
-  userId: null,
+  invitedByUserId: ADMIN_USER.id,
   invitedEmail: 'invitee@example.com',
-  collabRole: 'editor' as const,
-  inviteStatus: 'pending' as const,
+  role: 'editor' as const,
   inviteToken: 'a'.repeat(64),
   inviteTokenExpiresAt: new Date(Date.now() + 60_000),
+  inviteStatus: 'pending' as const,
   acceptedAt: null,
+  acceptedByUserId: null,
   createdAt: new Date('2024-02-01'),
   updatedAt: new Date('2024-02-01'),
-  user: null,
+  invitedByUser: null,
+  acceptedByUser: null,
   list: INVITE_LIST,
 }
 
@@ -76,7 +78,7 @@ describe('GET /v1/admin/collaborator-invites', () => {
   it('returns 200 with paginated editor invites and derived isExpired flag', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
-    vi.mocked(db.query.listCollaborators.findMany).mockResolvedValueOnce([
+    vi.mocked(db.query.listInvites.findMany).mockResolvedValueOnce([
       PENDING_INVITE_ROW,
       EXPIRED_INVITE_ROW,
     ] as never)
@@ -87,7 +89,7 @@ describe('GET /v1/admin/collaborator-invites', () => {
     const body = await response.json() as {
       items: {
         id: string
-        collabRole: string
+        role: string
         inviteStatus: string
         isExpired: boolean
         list: { id: string; title: string; slug: string }
@@ -97,7 +99,7 @@ describe('GET /v1/admin/collaborator-invites', () => {
     expect(response.status).toBe(200)
     expect(body.pagination.total).toBe(2)
     expect(body.items).toHaveLength(2)
-    expect(body.items[0]?.collabRole).toBe('editor')
+    expect(body.items[0]?.role).toBe('editor')
     expect(body.items[0]?.list.id).toBe(LIST_ID)
     expect(body.items[0]?.isExpired).toBe(false)
     expect(body.items[1]?.isExpired).toBe(true)
@@ -109,13 +111,13 @@ describe('GET /v1/admin/collaborator-invites', () => {
   it('passes inviteStatus filter through to the repository', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
-    vi.mocked(db.query.listCollaborators.findMany).mockResolvedValueOnce([PENDING_INVITE_ROW] as never)
+    vi.mocked(db.query.listInvites.findMany).mockResolvedValueOnce([PENDING_INVITE_ROW] as never)
     mockCountChain(1)
 
     const response = await apiRequest('/v1/admin/collaborator-invites?inviteStatus=pending', { token })
 
     expect(response.status).toBe(200)
-    const findManyArgs = vi.mocked(db.query.listCollaborators.findMany).mock.calls[0]?.[0]
+    const findManyArgs = vi.mocked(db.query.listInvites.findMany).mock.calls[0]?.[0]
     expect(findManyArgs?.limit).toBe(20)
     expect(findManyArgs?.offset).toBe(0)
   })

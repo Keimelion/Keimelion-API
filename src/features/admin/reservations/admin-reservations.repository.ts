@@ -2,8 +2,8 @@ import { and, count, eq, inArray, type SQL } from 'drizzle-orm'
 import { db } from '../../../db/client.js'
 import { reservations } from '../../../db/entities/reservations/reservations.schema.js'
 import { listItems } from '../../../db/entities/list-items/list-items.schema.js'
-import { listCollaborators } from '../../../db/entities/list-collaborators/list-collaborators.schema.js'
-import { CollabRoles } from '../../../shared/enums/collab-role.js'
+import { listUsers } from '../../../db/entities/list-users/list-users.schema.js'
+import { ListUserRoles } from '../../../shared/enums/list-user-role.js'
 import {
   RESERVATION_SORTABLE_FIELDS,
   RESERVATION_DEFAULT_SORT,
@@ -47,8 +47,8 @@ const RESERVATION_HYDRATION = {
       item: { with: { image: true } },
       list: {
         with: {
-          collaborators: {
-            where: eq(listCollaborators.collabRole, CollabRoles.OWNER),
+          listUsers: {
+            where: eq(listUsers.role, ListUserRoles.OWNER),
             limit: 1,
             with: { user: true },
           },

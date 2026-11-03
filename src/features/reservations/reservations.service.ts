@@ -43,7 +43,7 @@ export async function createOrUpdateReservation(
   const list = await findListWithOwner(listItem.listId, { excludeDeleted: true })
   if (!list) return serviceError(ErrorCode.NOT_FOUND)
 
-  const ownerUserId = list.collaborators[0]?.userId ?? null
+  const ownerUserId = list.listUsers[0]?.userId ?? null
   if (ownerUserId === input.userId) return serviceError(ErrorCode.FORBIDDEN)
 
   if (input.quantityBooked > listItem.quantityDesired) {

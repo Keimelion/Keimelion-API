@@ -1,19 +1,19 @@
 import type { Reservation } from '../../db/entities/reservations/reservations.schema.js'
 import type { ListItem } from '../../db/entities/list-items/list-items.schema.js'
 import type { List } from '../../db/entities/lists/lists.schema.js'
-import type { ListCollaborator } from '../../db/entities/list-collaborators/list-collaborators.schema.js'
+import type { ListUser } from '../../db/entities/list-users/list-users.schema.js'
 import type { User } from '../../db/entities/users/users.schema.js'
 import { toItemDetail } from './item.js'
 import type { ItemDetail, ItemRowWithImage } from './item.js'
 import { toUserDetail } from './user.js'
 import type { UserDetail } from './user.js'
 
-export interface ReservationListCollaboratorWithUser extends ListCollaborator {
+export interface ReservationListUserWithUser extends ListUser {
   user: User | null
 }
 
 export interface ReservationListRow extends List {
-  collaborators: ReservationListCollaboratorWithUser[]
+  listUsers: ReservationListUserWithUser[]
 }
 
 export interface ReservationListItemRow extends ListItem {
@@ -47,7 +47,7 @@ export interface ReservationDetail {
 }
 
 export function toReservationDetail(row: ReservationRowHydrated): ReservationDetail {
-  const ownerUser = row.listItem.list.collaborators[0]?.user ?? null
+  const ownerUser = row.listItem.list.listUsers[0]?.user ?? null
   return {
     id: row.id,
     quantityBooked: row.quantityBooked,

@@ -542,7 +542,7 @@ describe('GET /v1/users/me/export', () => {
     vi.mocked(db.query.items.findMany).mockResolvedValueOnce([mockItem] as never)
     vi.mocked(db.query.items.findMany).mockResolvedValueOnce([mockItem] as never)
     vi.mocked(db.query.itemSources.findMany).mockResolvedValueOnce([])
-    vi.mocked(db.query.listCollaborators.findMany).mockResolvedValueOnce([])
+    vi.mocked(db.query.listUsers.findMany).mockResolvedValueOnce([])
 
     const response = await apiRequest('/v1/users/me/export?format=json', { token })
 
@@ -562,7 +562,7 @@ describe('GET /v1/users/me/export', () => {
     vi.mocked(db.query.items.findMany).mockResolvedValueOnce([])
     vi.mocked(db.query.items.findMany).mockResolvedValueOnce([])
     vi.mocked(db.query.itemSources.findMany).mockResolvedValueOnce([])
-    vi.mocked(db.query.listCollaborators.findMany).mockResolvedValueOnce([])
+    vi.mocked(db.query.listUsers.findMany).mockResolvedValueOnce([])
 
     const response = await apiRequest('/v1/users/me/export?format=json', { token })
 
@@ -627,7 +627,7 @@ describe('GET /v1/users/me/export', () => {
     }
     const deletedList = { ...activeList, id: '00000000-0000-0000-0000-0000000000a2', slug: 'deleted-a2', deletedAt: new Date('2024-06-01') }
 
-    vi.mocked(db.query.listCollaborators.findMany).mockResolvedValueOnce([
+    vi.mocked(db.query.listUsers.findMany).mockResolvedValueOnce([
       { listId: activeList.id },
       { listId: deletedList.id },
     ] as never)
@@ -645,7 +645,7 @@ describe('GET /v1/users/me/export', () => {
     const listsDescriptor = EXPORT_ENTITY_REGISTRY.find(
       (descriptor) => descriptor.filename === 'lists.csv',
     )
-    vi.mocked(db.query.listCollaborators.findMany).mockResolvedValueOnce([] as never)
+    vi.mocked(db.query.listUsers.findMany).mockResolvedValueOnce([] as never)
 
     expect(listsDescriptor).toBeDefined()
     const rows = await (listsDescriptor as { fetchRows: (userId: string) => Promise<object[]> }).fetchRows(SAFE_USER.id)
@@ -660,8 +660,8 @@ describe('GET /v1/users/me/export', () => {
     vi.mocked(db.query.items.findMany).mockResolvedValueOnce([])
     vi.mocked(db.query.items.findMany).mockResolvedValueOnce([])
     vi.mocked(db.query.itemSources.findMany).mockResolvedValueOnce([])
-    vi.mocked(db.query.listCollaborators.findMany).mockResolvedValueOnce([])
-    vi.mocked(db.query.listCollaborators.findMany).mockResolvedValueOnce([])
+    vi.mocked(db.query.listUsers.findMany).mockResolvedValueOnce([])
+    vi.mocked(db.query.listUsers.findMany).mockResolvedValueOnce([])
 
     const response = await apiRequest('/v1/users/me/export?format=json', { token })
 
@@ -679,7 +679,7 @@ describe('GET /v1/users/me/export', () => {
     vi.mocked(db.query.items.findMany).mockResolvedValueOnce([] as never)
     vi.mocked(db.query.items.findMany).mockResolvedValueOnce([] as never)
     vi.mocked(db.query.itemSources.findMany).mockResolvedValueOnce([])
-    vi.mocked(db.query.listCollaborators.findMany).mockResolvedValueOnce([])
+    vi.mocked(db.query.listUsers.findMany).mockResolvedValueOnce([])
 
     const response = await apiRequest('/v1/users/me/export?format=json', { token })
 
@@ -805,8 +805,8 @@ describe('GET /v1/users/me/export', () => {
 
     vi.mocked(db.query.items.findMany).mockResolvedValueOnce([])
     vi.mocked(db.query.itemSources.findMany).mockResolvedValueOnce([])
-    vi.mocked(db.query.listCollaborators.findMany).mockResolvedValueOnce([])
-    vi.mocked(db.query.listCollaborators.findMany).mockResolvedValueOnce([])
+    vi.mocked(db.query.listUsers.findMany).mockResolvedValueOnce([])
+    vi.mocked(db.query.listUsers.findMany).mockResolvedValueOnce([])
     vi.mocked(db.query.tags.findMany).mockResolvedValueOnce([])
     vi.mocked(db.query.listTags.findMany).mockResolvedValueOnce([
       {
@@ -827,75 +827,116 @@ describe('GET /v1/users/me/export', () => {
     expect(body.listTags[0]?.listId).toBe('00000000-0000-0000-0000-00000000c010')
   })
 
-  it('registers collaborators.csv with the exact allow-list required by RGPD (no secret token columns)', () => {
-    const collaboratorsDescriptor = EXPORT_ENTITY_REGISTRY.find(
-      (descriptor) => descriptor.filename === 'collaborators.csv',
-    )
-    expect(collaboratorsDescriptor).toBeDefined()
-    expect(collaboratorsDescriptor?.columns).toEqual([
+  it('registers list-users.csv with the membership allow-list', () => {
+    const descriptor = EXPORT_ENTITY_REGISTRY.find((d) => d.filename === 'list-users.csv')
+    expect(descriptor).toBeDefined()
+    expect(descriptor?.columns).toEqual(['listId', 'role', 'createdAt', 'updatedAt'])
+    expect(descriptor?.columns).not.toContain('userId')
+  })
+
+  it('registers list-invites.csv with the invite allow-list (no token columns)', () => {
+    const descriptor = EXPORT_ENTITY_REGISTRY.find((d) => d.filename === 'list-invites.csv')
+    expect(descriptor).toBeDefined()
+    expect(descriptor?.columns).toEqual([
       'listId',
       'invitedEmail',
-      'collabRole',
+      'role',
       'inviteStatus',
       'acceptedAt',
       'createdAt',
     ])
-    expect(collaboratorsDescriptor?.columns).not.toContain('inviteToken')
-    expect(collaboratorsDescriptor?.columns).not.toContain('inviteTokenExpiresAt')
+    expect(descriptor?.columns).not.toContain('inviteToken')
+    expect(descriptor?.columns).not.toContain('inviteTokenExpiresAt')
   })
 
-  it('fetches owner-scoped collaborators for RGPD and omits inviteToken / inviteTokenExpiresAt from rows', async () => {
-    const collaboratorsDescriptor = EXPORT_ENTITY_REGISTRY.find(
-      (descriptor) => descriptor.filename === 'collaborators.csv',
-    )
+  it('fetches owner-scoped list_users for RGPD without userId', async () => {
+    const descriptor = EXPORT_ENTITY_REGISTRY.find((d) => d.filename === 'list-users.csv')
     const ownedListId = '00000000-0000-0000-0000-00000000e001'
-    const collaboratorRow = {
+    const listUserRow = {
       id: '00000000-0000-0000-0000-00000000e002',
       listId: ownedListId,
-      userId: null,
-      invitedEmail: 'invitee@example.com',
-      collabRole: 'editor' as const,
-      inviteStatus: 'pending' as const,
-      inviteToken: 'a'.repeat(64),
-      inviteTokenExpiresAt: new Date('2024-10-01'),
-      acceptedAt: null,
+      userId: SAFE_USER.id,
+      role: 'owner' as const,
       createdAt: new Date('2024-02-01'),
       updatedAt: new Date('2024-02-01'),
     }
 
-    vi.mocked(db.query.listCollaborators.findMany).mockResolvedValueOnce([collaboratorRow] as never)
+    vi.mocked(db.query.listUsers.findMany).mockResolvedValueOnce([listUserRow] as never)
 
-    expect(collaboratorsDescriptor).toBeDefined()
-    const rows = await (collaboratorsDescriptor as { fetchRows: (userId: string) => Promise<object[]> }).fetchRows(SAFE_USER.id)
+    expect(descriptor).toBeDefined()
+    const rows = await (descriptor as { fetchRows: (userId: string) => Promise<object[]> }).fetchRows(SAFE_USER.id)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ listId: ownedListId, role: 'owner' })
+    expect(rows[0]).not.toHaveProperty('userId')
+    expect(rows[0]).not.toHaveProperty('id')
+  })
+
+  it('fetches owner-scoped list_invites for RGPD and omits inviteToken / inviteTokenExpiresAt from rows', async () => {
+    const descriptor = EXPORT_ENTITY_REGISTRY.find((d) => d.filename === 'list-invites.csv')
+    const ownedListId = '00000000-0000-0000-0000-00000000e003'
+    const inviteRow = {
+      id: '00000000-0000-0000-0000-00000000e004',
+      listId: ownedListId,
+      invitedByUserId: SAFE_USER.id,
+      invitedEmail: 'invitee@example.com',
+      role: 'editor' as const,
+      inviteToken: 'a'.repeat(64),
+      inviteTokenExpiresAt: new Date('2024-10-01'),
+      inviteStatus: 'pending' as const,
+      acceptedAt: null,
+      acceptedByUserId: null,
+      createdAt: new Date('2024-02-01'),
+      updatedAt: new Date('2024-02-01'),
+    }
+
+    vi.mocked(db.query.listUsers.findMany).mockResolvedValueOnce([{ listId: ownedListId }] as never)
+    vi.mocked(db.query.listInvites.findMany).mockResolvedValueOnce([inviteRow] as never)
+
+    expect(descriptor).toBeDefined()
+    const rows = await (descriptor as { fetchRows: (userId: string) => Promise<object[]> }).fetchRows(SAFE_USER.id)
     expect(rows).toHaveLength(1)
     expect(rows[0]).toMatchObject({
       listId: ownedListId,
       invitedEmail: 'invitee@example.com',
-      collabRole: 'editor',
+      role: 'editor',
       inviteStatus: 'pending',
     })
     expect(rows[0]).not.toHaveProperty('inviteToken')
     expect(rows[0]).not.toHaveProperty('inviteTokenExpiresAt')
+    expect(rows[0]).not.toHaveProperty('invitedByUserId')
     expect(rows[0]).not.toHaveProperty('id')
-    expect(rows[0]).not.toHaveProperty('userId')
   })
 
-  it('includes a collaborators key in the JSON export payload', async () => {
+  it('includes listUsers and listInvites keys in the JSON export payload', async () => {
     const token = await generateTestToken(SAFE_USER.id)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
 
-    vi.mocked(db.query.listCollaborators.findMany).mockResolvedValueOnce([
+    vi.mocked(db.query.listUsers.findMany).mockResolvedValueOnce([
       {
         id: '00000000-0000-0000-0000-00000000e011',
         listId: '00000000-0000-0000-0000-00000000e010',
-        userId: null,
+        userId: SAFE_USER.id,
+        role: 'owner' as const,
+        createdAt: new Date('2024-02-01'),
+        updatedAt: new Date('2024-02-01'),
+      },
+    ] as never)
+    vi.mocked(db.query.listUsers.findMany).mockResolvedValueOnce([
+      { listId: '00000000-0000-0000-0000-00000000e010' },
+    ] as never)
+    vi.mocked(db.query.listInvites.findMany).mockResolvedValueOnce([
+      {
+        id: '00000000-0000-0000-0000-00000000e021',
+        listId: '00000000-0000-0000-0000-00000000e010',
+        invitedByUserId: SAFE_USER.id,
         invitedEmail: 'later@example.com',
-        collabRole: 'editor' as const,
-        inviteStatus: 'pending' as const,
+        role: 'editor' as const,
         inviteToken: 'b'.repeat(64),
         inviteTokenExpiresAt: new Date('2024-10-01'),
+        inviteStatus: 'pending' as const,
         acceptedAt: null,
+        acceptedByUserId: null,
         createdAt: new Date('2024-02-01'),
         updatedAt: new Date('2024-02-01'),
       },
@@ -905,12 +946,15 @@ describe('GET /v1/users/me/export', () => {
 
     expect(response.status).toBe(200)
     const body = await response.json() as {
-      collaborators: { invitedEmail: string | null; collabRole: string }[]
+      listUsers: { role: string }[]
+      listInvites: { invitedEmail: string | null; role: string }[]
     }
-    expect(body).toHaveProperty('collaborators')
-    expect(body.collaborators).toHaveLength(1)
-    expect(body.collaborators[0]?.invitedEmail).toBe('later@example.com')
-    expect(JSON.stringify(body.collaborators)).not.toContain('inviteToken')
+    expect(body).toHaveProperty('listUsers')
+    expect(body).toHaveProperty('listInvites')
+    expect(body.listUsers).toHaveLength(1)
+    expect(body.listInvites).toHaveLength(1)
+    expect(body.listInvites[0]?.invitedEmail).toBe('later@example.com')
+    expect(JSON.stringify(body.listInvites)).not.toContain('inviteToken')
   })
 
   it('includes a feedback key in the JSON export payload with only entries submitted by the user', async () => {
@@ -1246,13 +1290,13 @@ const RESERVATION_PROFILE_ROW = {
       deletedAt: null,
       createdAt: new Date('2024-01-01'),
       updatedAt: new Date('2024-01-01'),
-      collaborators: [
+      listUsers: [
         {
           id: '00000000-0000-0000-0000-00000001d001',
           listId: RESERVATION_LIST_ID,
           userId: OTHER_USER_ID,
           invitedEmail: null,
-          collabRole: 'owner' as const,
+          role: 'owner' as const,
           inviteStatus: 'accepted' as const,
           inviteToken: null,
           inviteTokenExpiresAt: null,
@@ -1391,9 +1435,9 @@ describe('GET /v1/users/me/reservations', () => {
         ...RESERVATION_PROFILE_ROW.listItem,
         list: {
           ...RESERVATION_PROFILE_ROW.listItem.list,
-          collaborators: [
+          listUsers: [
             {
-              ...RESERVATION_PROFILE_ROW.listItem.list.collaborators[0],
+              ...RESERVATION_PROFILE_ROW.listItem.list.listUsers[0],
               user: { ...SAFE_USER, id: OTHER_USER_ID, username: null },
             },
           ],

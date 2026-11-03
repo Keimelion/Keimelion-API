@@ -4,21 +4,23 @@ import { feedback } from '../../../db/entities/feedback/feedback.schema.js'
 import { images } from '../../../db/entities/images/images.schema.js'
 import { items } from '../../../db/entities/items/items.schema.js'
 import { itemSources } from '../../../db/entities/item-sources/item-sources.schema.js'
-import { listCollaborators } from '../../../db/entities/list-collaborators/list-collaborators.schema.js'
+import { listUsers } from '../../../db/entities/list-users/list-users.schema.js'
 import { listItems } from '../../../db/entities/list-items/list-items.schema.js'
 import { listTags } from '../../../db/entities/list-tags/list-tags.schema.js'
 import { lists } from '../../../db/entities/lists/lists.schema.js'
 import { reservations } from '../../../db/entities/reservations/reservations.schema.js'
 import { tags } from '../../../db/entities/tags/tags.schema.js'
-import { CollabRoles, CONTRIBUTOR_ROLE_VALUES } from '../../../shared/enums/collab-role.js'
+import { CONTRIBUTOR_ROLE_VALUES, ListUserRoles } from '../../../shared/enums/list-user-role.js'
+import { findInvitesForOwnerListsExport } from '../../../db/entities/list-invites/list-invites.repository.js'
 import type { Feedback } from '../../../db/entities/feedback/feedback.schema.js'
 import type { Image } from '../../../db/entities/images/images.schema.js'
 import type { Item } from '../../../db/entities/items/items.schema.js'
 import type { ItemSource } from '../../../db/entities/item-sources/item-sources.schema.js'
+import type { ListUser } from '../../../db/entities/list-users/list-users.schema.js'
+import type { ListInvite } from '../../../db/entities/list-invites/list-invites.schema.js'
 import type { ListItem } from '../../../db/entities/list-items/list-items.schema.js'
 import type { ListTag } from '../../../db/entities/list-tags/list-tags.schema.js'
 import type { List } from '../../../db/entities/lists/lists.schema.js'
-import type { ListCollaborator } from '../../../db/entities/list-collaborators/list-collaborators.schema.js'
 import type { Tag } from '../../../db/entities/tags/tags.schema.js'
 
 export async function findItemsByCreator(userId: string): Promise<Item[]> {
@@ -39,11 +41,11 @@ export async function findItemSourcesByCreator(userId: string): Promise<ItemSour
 
 export async function findListItemsForContributor(userId: string): Promise<ListItem[]> {
   const contributorListIds = db
-    .select({ id: listCollaborators.listId })
-    .from(listCollaborators)
+    .select({ id: listUsers.listId })
+    .from(listUsers)
     .where(and(
-      eq(listCollaborators.userId, userId),
-      inArray(listCollaborators.collabRole, [...CONTRIBUTOR_ROLE_VALUES]),
+      eq(listUsers.userId, userId),
+      inArray(listUsers.role, [...CONTRIBUTOR_ROLE_VALUES]),
     ))
   return db.query.listItems.findMany({
     where: inArray(listItems.listId, contributorListIds),
@@ -52,9 +54,9 @@ export async function findListItemsForContributor(userId: string): Promise<ListI
 
 export async function findListsOwnedByForExport(userId: string): Promise<List[]> {
   const ownedListIds = db
-    .select({ id: listCollaborators.listId })
-    .from(listCollaborators)
-    .where(and(eq(listCollaborators.userId, userId), eq(listCollaborators.collabRole, CollabRoles.OWNER)))
+    .select({ id: listUsers.listId })
+    .from(listUsers)
+    .where(and(eq(listUsers.userId, userId), eq(listUsers.role, ListUserRoles.OWNER)))
   return db.query.lists.findMany({
     where: inArray(lists.id, ownedListIds),
   })
@@ -78,24 +80,32 @@ export async function findImagesByUploaderForExport(userId: string): Promise<Ima
   })
 }
 
-export async function findCollaboratorsForOwner(userId: string): Promise<ListCollaborator[]> {
-  const ownedListIds = db
-    .select({ id: listCollaborators.listId })
-    .from(listCollaborators)
-    .where(and(eq(listCollaborators.userId, userId), eq(listCollaborators.collabRole, CollabRoles.OWNER)))
-  return db.query.listCollaborators.findMany({
-    where: inArray(listCollaborators.listId, ownedListIds),
-  })
-}
-
 export async function findListTagsForOwner(userId: string): Promise<ListTag[]> {
   const ownedListIds = db
-    .select({ id: listCollaborators.listId })
-    .from(listCollaborators)
-    .where(and(eq(listCollaborators.userId, userId), eq(listCollaborators.collabRole, CollabRoles.OWNER)))
+    .select({ id: listUsers.listId })
+    .from(listUsers)
+    .where(and(eq(listUsers.userId, userId), eq(listUsers.role, ListUserRoles.OWNER)))
   return db.query.listTags.findMany({
     where: inArray(listTags.listId, ownedListIds),
   })
+}
+
+export async function findListUsersForOwnerExport(userId: string): Promise<ListUser[]> {
+  const ownedListIds = db
+    .select({ id: listUsers.listId })
+    .from(listUsers)
+    .where(and(eq(listUsers.userId, userId), eq(listUsers.role, ListUserRoles.OWNER)))
+  return db.query.listUsers.findMany({
+    where: inArray(listUsers.listId, ownedListIds),
+  })
+}
+
+export async function findListInvitesForOwnerExport(userId: string): Promise<ListInvite[]> {
+  const ownedRows = await db.query.listUsers.findMany({
+    columns: { listId: true },
+    where: and(eq(listUsers.userId, userId), eq(listUsers.role, ListUserRoles.OWNER)),
+  })
+  return findInvitesForOwnerListsExport(ownedRows.map((row) => row.listId))
 }
 
 export interface ReservationExportRow {

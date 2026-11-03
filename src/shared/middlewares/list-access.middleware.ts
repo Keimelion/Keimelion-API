@@ -4,7 +4,7 @@ import { HonoContextKey } from '../enums/context-key.js'
 import { sendError } from '../utils/response.js'
 import { logger } from '../utils/logger.js'
 import { findListWithOwner } from '../../db/entities/lists/lists.repository.js'
-import { findListContributor } from '../../db/entities/list-collaborators/list-collaborators.repository.js'
+import { findListContributor } from '../../db/entities/list-users/list-users.repository.js'
 import { getAuthUser } from './auth.js'
 import type { AppVariables } from '../types/app.js'
 import type { ListRowWithOwner } from '../types/list.js'
@@ -69,11 +69,11 @@ async function resolveListId(
 }
 
 function isListOwner(list: ListRowWithOwner, userId: string): Promise<boolean> {
-  return Promise.resolve(list.collaborators[0]?.userId === userId)
+  return Promise.resolve(list.listUsers[0]?.userId === userId)
 }
 
 async function isListContributor(list: ListRowWithOwner, userId: string): Promise<boolean> {
-  if (list.collaborators[0]?.userId === userId) return true
+  if (list.listUsers[0]?.userId === userId) return true
   const row = await findListContributor(list.id, userId)
   return row !== undefined
 }

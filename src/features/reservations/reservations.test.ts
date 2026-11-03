@@ -54,7 +54,7 @@ const OWNER_COLLABORATOR = {
   listId: LIST_ID,
   userId: OWNER_USER_ID,
   invitedEmail: null,
-  collabRole: 'owner' as const,
+  role: 'owner' as const,
   inviteStatus: 'accepted',
   inviteToken: null,
   inviteTokenExpiresAt: null,
@@ -91,7 +91,7 @@ function mockListWithOwnerLookup(options: { deleted?: boolean; ownerUserId?: str
   const list = {
     ...MOCK_LIST,
     deletedAt: options.deleted ? new Date('2024-01-02') : null,
-    collaborators: [{ ...OWNER_COLLABORATOR, userId: options.ownerUserId ?? OWNER_USER_ID }],
+    listUsers: [{ ...OWNER_COLLABORATOR, userId: options.ownerUserId ?? OWNER_USER_ID }],
     listTags: [],
   }
   vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(list)
@@ -243,7 +243,7 @@ describe('POST /v1/list-items/:id/reserve', () => {
     vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce({
       ...MOCK_LIST,
       deletedAt: new Date('2024-01-05'),
-      collaborators: [OWNER_COLLABORATOR],
+      listUsers: [OWNER_COLLABORATOR],
       listTags: [],
     } as never)
 
