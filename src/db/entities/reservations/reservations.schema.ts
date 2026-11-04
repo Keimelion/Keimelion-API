@@ -2,13 +2,13 @@ import { check, index, pgTable, timestamp, unique, uniqueIndex, uuid, varchar } 
 import { sql } from 'drizzle-orm'
 import { uuidPrimaryKey } from '../../../shared/db/columns.js'
 import { positiveCheck, positiveSmallInt } from '../../../shared/db/checks.js'
-import {
-  RESERVATION_TOKEN_HASH_LENGTH,
-  RESERVER_EMAIL_MAX_LENGTH,
-  RESERVER_NAME_MAX_LENGTH,
-} from '../../../features/reservations/reservations.constants.js'
+import { SHA256_HEX_LENGTH } from '../../../shared/utils/hash.js'
 import { listItems } from '../list-items/list-items.schema.js'
 import { users } from '../users/users.schema.js'
+
+export const RESERVER_NAME_MAX_LENGTH = 100
+
+export const RESERVER_EMAIL_MAX_LENGTH = 254
 
 export const reservations = pgTable(
   'reservations',
@@ -20,7 +20,7 @@ export const reservations = pgTable(
     userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
     reserverName: varchar('reserver_name', { length: RESERVER_NAME_MAX_LENGTH }),
     reserverEmail: varchar('reserver_email', { length: RESERVER_EMAIL_MAX_LENGTH }),
-    anonymousTokenHash: varchar('anonymous_token_hash', { length: RESERVATION_TOKEN_HASH_LENGTH }),
+    anonymousTokenHash: varchar('anonymous_token_hash', { length: SHA256_HEX_LENGTH }),
     quantityBooked: positiveSmallInt('quantity_booked').notNull(),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()

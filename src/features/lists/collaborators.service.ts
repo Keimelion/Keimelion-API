@@ -30,7 +30,7 @@ import type { AcceptInviteInput } from './endpoints/collaborators/accept-invite.
 
 export const COLLAB_INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
-// Raw token sent to the invitee; independent from the stored hash width (INVITE_TOKEN_HASH_LENGTH).
+// Raw token sent to the invitee; independent from the stored hash width (SHA256_HEX_LENGTH).
 export const INVITE_TOKEN_BYTE_LENGTH = 32
 export const INVITE_TOKEN_HEX_LENGTH = INVITE_TOKEN_BYTE_LENGTH * 2
 

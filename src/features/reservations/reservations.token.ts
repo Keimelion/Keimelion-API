@@ -1,11 +1,9 @@
-import { randomBytes, timingSafeEqual } from 'crypto'
-import { hashSha256Hex } from '../../shared/utils/hash.js'
+import { randomBytes } from 'crypto'
+import { extractBearerToken } from '../../shared/utils/bearer.js'
+import { hashSha256Hex, matchesSha256Hex } from '../../shared/utils/hash.js'
 import { RESERVATION_TOKEN_BYTE_LENGTH, RESERVATION_TOKEN_PREFIX } from './reservations.constants.js'
 
-const BEARER_PREFIX = `Bearer ${RESERVATION_TOKEN_PREFIX}`
-const SHA256_BYTE_LENGTH = 32
-
-export interface GeneratedReservationToken {
+interface GeneratedReservationToken {
   rawToken: string
   tokenHash: string
 }
@@ -16,13 +14,11 @@ export function generateReservationToken(): GeneratedReservationToken {
 }
 
 export function extractReservationToken(authorizationHeader: string | undefined): string | null {
-  if (!authorizationHeader?.startsWith(BEARER_PREFIX)) return null
-  return authorizationHeader.slice('Bearer '.length)
+  const token = extractBearerToken(authorizationHeader)
+  if (!token?.startsWith(RESERVATION_TOKEN_PREFIX)) return null
+  return token
 }
 
 export function isReservationTokenMatch(rawToken: string, storedTokenHash: string): boolean {
-  const candidate = Buffer.from(hashSha256Hex(rawToken), 'hex')
-  const stored = Buffer.from(storedTokenHash, 'hex')
-  if (candidate.length !== SHA256_BYTE_LENGTH || stored.length !== SHA256_BYTE_LENGTH) return false
-  return timingSafeEqual(candidate, stored)
+  return matchesSha256Hex(rawToken, storedTokenHash)
 }

@@ -59,7 +59,7 @@ export async function insertNamedReservation(
   return row
 }
 
-export interface NamedReservationIdentity {
+interface NamedReservationIdentity {
   listItemId: string
   reserverName: string
   reserverEmail: string | null
@@ -83,10 +83,6 @@ export function findReservationByIdWithListItem(id: string): Promise<Reservation
     where: eq(reservations.id, id),
     with: RESERVATION_LIST_ITEM_HYDRATION,
   })
-}
-
-export function findReservationById(id: string): Promise<Reservation | undefined> {
-  return db.query.reservations.findFirst({ where: eq(reservations.id, id) })
 }
 
 export async function findReservationByIdForUpdate(

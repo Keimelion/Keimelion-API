@@ -4,7 +4,7 @@ import { getOptionalAuthUser, optionalAuthMiddleware } from '../../../shared/mid
 import { authAwareRateLimiter, createRateLimiter, RATE_LIMITS } from '../../../shared/utils/rate-limiter.js'
 import { jsonResult } from '../../../shared/utils/response.js'
 import { validationErrorHandler } from '../../../shared/utils/validation.js'
-import { RESERVER_EMAIL_MAX_LENGTH, RESERVER_NAME_MAX_LENGTH } from '../reservations.constants.js'
+import { RESERVER_EMAIL_MAX_LENGTH, RESERVER_NAME_MAX_LENGTH } from '../../../db/entities/reservations/reservations.schema.js'
 import { createOrUpdateReservation } from '../reservations.service.js'
 import type { FeatureRouter } from '../../../shared/types/app.js'
 

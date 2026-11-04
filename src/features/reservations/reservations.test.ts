@@ -14,7 +14,7 @@ import {
   generateReservationToken,
   isReservationTokenMatch,
 } from './reservations.token.js'
-import { RESERVER_NAME_MAX_LENGTH } from './reservations.constants.js'
+import { RESERVER_NAME_MAX_LENGTH } from '../../db/entities/reservations/reservations.schema.js'
 import type { ListItem } from '../../db/entities/list-items/list-items.schema.js'
 import type { Reservation } from '../../db/entities/reservations/reservations.schema.js'
 
@@ -413,6 +413,7 @@ describe('POST /v1/reservations', () => {
       mockListItemLookup()
       mockListWithOwnerLookup({ ownerUserId: AUTH_USER.id })
       mockSelectForUpdateListItem()
+      mockFindExistingReservation(undefined)
       const valuesMock = mockInsertNamedReservation(PROXY_RESERVATION)
       mockUpdateListItemState({ ...MOCK_LIST_ITEM, quantityReservedTotal: 1 })
 
@@ -441,22 +442,23 @@ describe('POST /v1/reservations', () => {
       expectLoggedEvent('owner_proxy_create_reservation')
     })
 
-    it('does not run the anonymous duplicate check on proxy reservations', async () => {
+    it('returns 409 when a reservation with the same normalised name or email already exists', async () => {
       const token = await generateTestToken(AUTH_USER.id)
       mockAuth()
       mockListItemLookup()
       mockListWithOwnerLookup({ ownerUserId: AUTH_USER.id })
       mockSelectForUpdateListItem()
-      mockInsertNamedReservation(PROXY_RESERVATION)
-      mockUpdateListItemState({ ...MOCK_LIST_ITEM, quantityReservedTotal: 1 })
+      mockFindExistingReservation(ANONYMOUS_RESERVATION)
 
       const response = await postReservation(
-        { listItemId: LIST_ITEM_ID, quantityBooked: 1, reserverName: 'Grandpa Joe' },
+        { listItemId: LIST_ITEM_ID, quantityBooked: 1, reserverName: 'aunt marie' },
         token,
       )
 
-      expect(response.status).toBe(201)
-      expect(vi.mocked(db.query.reservations.findFirst)).not.toHaveBeenCalled()
+      const body = await response.json() as ApiErrorBody
+      expect(response.status).toBe(409)
+      expect(body.code).toBe(ErrorCode.CONFLICT)
+      expect(vi.mocked(db.insert)).not.toHaveBeenCalled()
     })
   })
 

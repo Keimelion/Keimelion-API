@@ -268,12 +268,7 @@ async function reserveAsProxy(
   ownerUserId: string,
   reserverName: string,
 ): Promise<ServiceResult<ReservationActionResponse>> {
-  const values = toNamedReservationValues(input, reserverName, null)
-  const outcome = await db.transaction<NamedReservationOutcome>(async (tx) => {
-    const current = await findListItemByIdForUpdate(input.listItemId, tx)
-    if (!current) return ErrorCode.NOT_FOUND
-    return insertNamedReservationOnLockedItem(tx, current, values)
-  })
+  const outcome = await reserveNamed(toNamedReservationValues(input, reserverName, null))
   if (typeof outcome === 'string') return serviceError(outcome)
 
   logger.info({
@@ -291,16 +286,7 @@ async function reserveAnonymously(
   reserverName: string,
 ): Promise<ServiceResult<AnonymousReservationActionResponse>> {
   const { rawToken, tokenHash } = generateReservationToken()
-  const values = toNamedReservationValues(input, reserverName, tokenHash)
-  const outcome = await db.transaction<NamedReservationOutcome>(async (tx) => {
-    const current = await findListItemByIdForUpdate(input.listItemId, tx)
-    if (!current) return ErrorCode.NOT_FOUND
-
-    const duplicate = await findNamedReservationDuplicate(values, tx)
-    if (duplicate) return ErrorCode.CONFLICT
-
-    return insertNamedReservationOnLockedItem(tx, current, values)
-  })
+  const outcome = await reserveNamed(toNamedReservationValues(input, reserverName, tokenHash))
   if (typeof outcome === 'string') return serviceError(outcome)
 
   return { data: { ...outcome, token: rawToken }, httpStatus: HttpStatus.CREATED }
@@ -320,18 +306,24 @@ function toNamedReservationValues(
   }
 }
 
-async function insertNamedReservationOnLockedItem(
-  tx: DbTransaction,
-  current: ListItem,
-  values: NamedReservationValues,
-): Promise<NamedReservationOutcome> {
-  const newTotal = current.quantityReservedTotal + values.quantityBooked
-  if (newTotal > current.quantityDesired) return ErrorCode.CONFLICT
+// Shared by proxy and anonymous modes: a named reservation is unique per (item, name or email)
+// regardless of who created it, so an owner proxy and a guest cannot book twice for one person.
+async function reserveNamed(values: NamedReservationValues): Promise<NamedReservationOutcome> {
+  return db.transaction<NamedReservationOutcome>(async (tx) => {
+    const current = await findListItemByIdForUpdate(values.listItemId, tx)
+    if (!current) return ErrorCode.NOT_FOUND
 
-  const reservation = await insertNamedReservation(values, tx)
-  const totals = { listItemId: current.id, newTotal, quantityDesired: current.quantityDesired }
-  const response = await summarizeReservation(tx, reservation, totals)
-  return response ?? ErrorCode.INTERNAL_ERROR
+    const duplicate = await findNamedReservationDuplicate(values, tx)
+    if (duplicate) return ErrorCode.CONFLICT
+
+    const newTotal = current.quantityReservedTotal + values.quantityBooked
+    if (newTotal > current.quantityDesired) return ErrorCode.CONFLICT
+
+    const reservation = await insertNamedReservation(values, tx)
+    const totals = { listItemId: current.id, newTotal, quantityDesired: current.quantityDesired }
+    const response = await summarizeReservation(tx, reservation, totals)
+    return response ?? ErrorCode.INTERNAL_ERROR
+  })
 }
 
 async function summarizeReservation(
