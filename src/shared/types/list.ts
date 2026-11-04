@@ -14,7 +14,7 @@ import { resolveCategoryName, toCategoryPublic } from './category.js'
 import type { CategoryPublic } from './category.js'
 import { toImageDetail } from '../../features/uploads/images.mapper.js'
 import type { ImageDetail } from '../../features/uploads/images.mapper.js'
-import type { UserDetail } from './user.js'
+import type { UserDetail, UserRowWithAvatar } from './user.js'
 import type { TagPublic } from './tag.js'
 import { toListMemberUser } from './collaborator.js'
 import type { CollaboratorSummary, ListMemberUser } from './collaborator.js'
@@ -36,7 +36,7 @@ export interface ListDetail {
 }
 
 export interface ListUserWithUser extends ListUser {
-  user: User | null
+  user: UserRowWithAvatar | null
 }
 
 export interface ListRowWithOwner extends List {

@@ -32,8 +32,8 @@ export interface UserRowWithAvatar extends User {
   avatarImage: Image | null
 }
 
-export function toUserDetail(user: User | UserRowWithAvatar): UserDetail {
-  const avatarImage = 'avatarImage' in user ? user.avatarImage : null
+export function toUserDetail(user: UserRowWithAvatar): UserDetail {
+  const { avatarImage } = user
   return {
     id: user.id,
     email: user.email,

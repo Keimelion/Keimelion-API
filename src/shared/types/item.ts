@@ -94,8 +94,8 @@ export interface ListItemWrite {
   sortOrder: number | null
 }
 
-export function toItemDetail(item: Item | ItemRowWithImage): ItemDetail {
-  const image = 'image' in item ? item.image : null
+export function toItemDetail(item: ItemRowWithImage): ItemDetail {
+  const { image } = item
   return {
     id: item.id,
     name: item.name,

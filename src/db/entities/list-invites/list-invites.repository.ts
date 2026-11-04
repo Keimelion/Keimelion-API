@@ -5,7 +5,7 @@ import type { InviteStatus } from '../../../shared/enums/invite-status.js'
 import { listInvites } from './list-invites.schema.js'
 import type { ListInvite } from './list-invites.schema.js'
 import type { List } from '../lists/lists.schema.js'
-import type { User } from '../users/users.schema.js'
+import type { UserRowWithAvatar } from '../../../shared/types/user.js'
 import { getOffset } from '../../../shared/schemas/pagination.js'
 import type { PaginationInput } from '../../../shared/schemas/pagination.js'
 
@@ -13,8 +13,8 @@ type DbOrTx = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0]
 
 export interface ListInviteWithRelationsRow extends ListInvite {
   list: List
-  invitedByUser: User | null
-  acceptedByUser: User | null
+  invitedByUser: UserRowWithAvatar | null
+  acceptedByUser: UserRowWithAvatar | null
 }
 
 export function findInviteByTokenHash(tokenHash: string): Promise<ListInvite | undefined> {
@@ -105,7 +105,11 @@ export function findAllListInvites(
     orderBy: [desc(listInvites.createdAt)],
     limit: pagination.limit,
     offset,
-    with: { list: true, invitedByUser: true, acceptedByUser: true },
+    with: {
+      list: true,
+      invitedByUser: { with: { avatarImage: true } },
+      acceptedByUser: { with: { avatarImage: true } },
+    },
   })
 }
 

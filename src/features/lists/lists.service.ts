@@ -9,7 +9,7 @@ import { buildPaginatedResponse } from '../../shared/schemas/pagination.js'
 import { buildSlugFromTitle, normalizeTagSlugs } from '../../shared/utils/slug.js'
 import { isPgForeignKeyViolation, isPgUniqueViolation } from '../../shared/db/pg-errors.js'
 import { logger } from '../../shared/utils/logger.js'
-import { findItemById } from '../../db/entities/items/items.repository.js'
+import { findItemByIdWithImage } from '../../db/entities/items/items.repository.js'
 import { insertListItem } from '../../db/entities/list-items/list-items.repository.js'
 import {
   buildListUpdatePatch,
@@ -19,6 +19,7 @@ import {
   softDeleteList,
 } from '../../db/entities/lists/lists.repository.js'
 import { insertListUser } from '../../db/entities/list-users/list-users.repository.js'
+import { findUserByIdWithAvatar } from '../../db/entities/users/users.repository.js'
 import { ListUserRoles } from '../../shared/enums/list-user-role.js'
 import { upsertTagsBySlugs } from '../../db/entities/tags/tags.repository.js'
 import { replaceListTags } from '../../db/entities/list-tags/list-tags.repository.js'
@@ -150,7 +151,7 @@ export async function addItemToList(
   listId: string,
   input: AddItemInput,
 ): Promise<ServiceResult<{ listItem: ListItemResponse }>> {
-  const item = await findItemById(input.itemId)
+  const item = await findItemByIdWithImage(input.itemId)
   if (!item) return serviceError(ErrorCode.NOT_FOUND)
 
   const listItem = await insertListItem({
@@ -212,9 +213,10 @@ async function tryInsertList(
       }
       return { list: inserted, ownerMembership }
     })
+    const owner = (await findUserByIdWithAvatar(user.id)) ?? null
     const row: ListRowWithOwner = {
       ...created.list,
-      listUsers: [{ ...created.ownerMembership, user }],
+      listUsers: [{ ...created.ownerMembership, user: owner }],
       listTags: [],
     }
     return { row }

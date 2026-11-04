@@ -125,6 +125,46 @@ describe('PATCH /v1/users/me', () => {
     expect(body.user.username).toBe('newusername')
   })
 
+  it('keeps returning the current avatar when the avatar is not changed', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    const avatarImage = {
+      id: '00000000-0000-0000-0000-00000000e001',
+      hash: 'e'.repeat(64),
+      fileKey: 'ee/ee/' + 'e'.repeat(64),
+      mime: 'image/png',
+      sizeBytes: 4,
+      width: 640,
+      height: 480,
+      uploadedBy: SAFE_USER.id,
+      createdAt: new Date('2024-05-01'),
+      updatedAt: new Date('2024-05-01'),
+    }
+    const userWithAvatar = { ...SAFE_USER, avatarImageId: avatarImage.id }
+
+    vi.mocked(db.query.users.findFirst)
+      .mockResolvedValueOnce(SAFE_USER)
+      .mockResolvedValueOnce({ ...userWithAvatar, avatarImage } as never)
+    vi.mocked(db.update).mockReturnValueOnce({
+      set: vi.fn().mockReturnValueOnce({
+        where: vi.fn().mockReturnValueOnce({
+          returning: vi.fn().mockResolvedValueOnce([{ ...userWithAvatar, username: 'newusername' }]),
+        }),
+      }),
+    } as never)
+
+    const response = await apiRequest('/v1/users/me', {
+      method: 'PATCH',
+      token,
+      body: { username: 'newusername' },
+    })
+
+    const body = await response.json() as { user: { avatar: { id: string; urls: { md: string } } | null } }
+    expect(response.status).toBe(200)
+    expect(body.user.avatar?.id).toBe(avatarImage.id)
+    expect(body.user.avatar?.urls.md).toContain('-800.webp')
+    expect(vi.mocked(db.delete)).not.toHaveBeenCalled()
+  })
+
   it('returns 422 when avatarUrl is sent (avatars are upload-only)', async () => {
     const token = await generateTestToken(SAFE_USER.id)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)

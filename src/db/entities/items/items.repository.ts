@@ -5,7 +5,7 @@ import { listItems } from '../list-items/list-items.schema.js'
 import { getOffset } from '../../../shared/schemas/pagination.js'
 import type { PaginationInput } from '../../../shared/schemas/pagination.js'
 import type { Item } from './items.schema.js'
-import type { ItemRowWithSources } from '../../../shared/types/item.js'
+import type { ItemRowWithImage, ItemRowWithSources } from '../../../shared/types/item.js'
 
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
@@ -33,6 +33,10 @@ export async function insertItem(input: InsertItemInput, tx?: DbTransaction): Pr
 
 export function findItemById(id: string): Promise<Item | undefined> {
   return db.query.items.findFirst({ where: eq(items.id, id) })
+}
+
+export function findItemByIdWithImage(id: string): Promise<ItemRowWithImage | undefined> {
+  return db.query.items.findFirst({ where: eq(items.id, id), with: { image: true } })
 }
 
 export function findItemByIdWithSources(id: string): Promise<ItemRowWithSources | undefined> {

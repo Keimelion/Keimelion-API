@@ -323,6 +323,7 @@ describe('POST /v1/collaborators/invites/accept', () => {
         ]),
       }),
     } as never)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce({ ...INVITEE_USER, avatarImage: null } as never)
 
     const response = await apiRequest('/v1/collaborators/invites/accept', {
       method: 'POST',

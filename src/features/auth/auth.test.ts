@@ -283,6 +283,40 @@ describe('POST /v1/auth/login', () => {
     expect(body.user.email).toBe('user@example.com')
   })
 
+  it('returns the uploaded avatar with the user on login', async () => {
+    const bcrypt = await import('bcryptjs')
+    const hash = await bcrypt.default.hash('securepassword123', 4)
+    const avatarImage = {
+      id: '00000000-0000-0000-0000-00000000e002',
+      hash: 'f'.repeat(64),
+      fileKey: 'ff/ff/' + 'f'.repeat(64),
+      mime: 'image/png',
+      sizeBytes: 4,
+      width: 640,
+      height: 480,
+      uploadedBy: VALID_USER.id,
+      createdAt: new Date('2024-05-01'),
+      updatedAt: new Date('2024-05-01'),
+    }
+
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce({
+      ...VALID_USER,
+      passwordHash: hash,
+      avatarImageId: avatarImage.id,
+      avatarImage,
+    } as never)
+    mockInsertNoReturning()
+
+    const response = await apiRequest('/v1/auth/login', {
+      method: 'POST',
+      body: { email: 'user@example.com', password: 'securepassword123' },
+    })
+
+    const body = await response.json() as { user: { avatar: { id: string } | null } }
+    expect(response.status).toBe(200)
+    expect(body.user.avatar?.id).toBe(avatarImage.id)
+  })
+
   it('returns 401 when email is unknown', async () => {
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(undefined)
 

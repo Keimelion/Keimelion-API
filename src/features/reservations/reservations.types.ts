@@ -2,7 +2,9 @@ import type { ItemStatus } from '../../shared/enums/item-status.js'
 import type { Reservation } from '../../db/entities/reservations/reservations.schema.js'
 import type { ListItem } from '../../db/entities/list-items/list-items.schema.js'
 import type { List } from '../../db/entities/lists/lists.schema.js'
-import type { Item } from '../../db/entities/items/items.schema.js'
+import type { ItemRowWithImage } from '../../shared/types/item.js'
+import { toImageDetail } from '../uploads/images.mapper.js'
+import type { ImageDetail } from '../uploads/images.mapper.js'
 import { findOwnerUser } from '../../shared/types/list.js'
 import type { ListUserWithUser } from '../../shared/types/list.js'
 
@@ -40,7 +42,7 @@ export interface ReservationProfileListRow extends List {
 }
 
 export interface ReservationProfileListItemRow extends ListItem {
-  item: Item
+  item: ItemRowWithImage
   list: ReservationProfileListRow
 }
 
@@ -59,6 +61,7 @@ export interface ReservationProfileEntry {
     name: string
     quantityDesired: number
     imageId: string | null
+    image: ImageDetail | null
   }
   list: {
     id: string
@@ -81,6 +84,7 @@ export function toReservationProfileEntry(row: ReservationProfileRow): Reservati
       name: row.listItem.item.name,
       quantityDesired: row.listItem.quantityDesired,
       imageId: row.listItem.item.imageId ?? null,
+      image: row.listItem.item.image ? toImageDetail(row.listItem.item.image) : null,
     },
     list: {
       id: row.listItem.list.id,

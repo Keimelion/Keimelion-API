@@ -42,7 +42,9 @@ import {
 import { buildPaginatedResponse } from '../../shared/schemas/pagination.js'
 import { toReservationProfileEntry } from '../reservations/reservations.types.js'
 import type { ReservationProfileEntry } from '../reservations/reservations.types.js'
-import type { UserDetail, UserWrite } from '../../shared/types/user.js'
+import type { UserDetail, UserRowWithAvatar, UserWrite } from '../../shared/types/user.js'
+import type { User } from '../../db/entities/users/users.schema.js'
+import type { Image } from '../../db/entities/images/images.schema.js'
 import type { ServiceResult } from '../../shared/types/service.js'
 import type { PaginatedResponse } from '../../shared/types/api.js'
 import type { PartialWrite } from '../../shared/types/api.js'
@@ -97,7 +99,7 @@ export async function updateProfile(
     return serviceError(ErrorCode.IMAGE_AND_CLEAR_CONFLICT)
   }
 
-  const previous = await findUserById(userId)
+  const previous = await findUserByIdWithAvatar(userId)
   const previousAvatarImageId = previous?.avatarImageId ?? null
 
   const imageOutcome = await processOptionalImage(avatarBuffer, userId)
@@ -121,9 +123,20 @@ export async function updateProfile(
   )
 
   return {
-    data: { user: toUserDetail({ ...updatedUser, avatarImage: imageOutcome.image }) },
+    data: { user: toUserDetail({ ...updatedUser, avatarImage: resolveAvatarImage(updatedUser, imageOutcome.image, previous) }) },
     httpStatus: HttpStatus.OK,
   }
+}
+
+// The avatar image row is only loaded for the previous state; reuse it when the avatar did not change.
+function resolveAvatarImage(
+  updatedUser: User,
+  uploadedImage: Image | null,
+  previous: UserRowWithAvatar | undefined,
+): Image | null {
+  if (uploadedImage) return uploadedImage
+  if (updatedUser.avatarImageId === null) return null
+  return previous?.avatarImage ?? null
 }
 
 function buildAvatarPatch(
@@ -205,7 +218,7 @@ export async function exportUserData(userId: string, format: ExportFormat): Prom
     }
   }
 
-  const user = await findUserById(userId)
+  const user = await findUserByIdWithAvatar(userId)
   const profile = user ? toUserDetail(user) : null
 
   const [
