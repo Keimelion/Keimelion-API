@@ -14,7 +14,6 @@ export interface ListMemberUser {
   id: string
   email: string
   username: string | null
-  avatarUrl: string | null
   avatar: ImageDetail | null
 }
 
@@ -43,7 +42,6 @@ export function toListMemberUser(user: User | UserRowWithAvatar): ListMemberUser
     id: user.id,
     email: user.email,
     username: user.username ?? null,
-    avatarUrl: user.avatarUrl ?? null,
     avatar: avatarImage ? toImageDetail(avatarImage) : null,
   }
 }

@@ -176,6 +176,13 @@
       "when": 1793723375334,
       "tag": "0024_split_list_collaborators_into_list_users_and_list_invites",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1793808092073,
+      "tag": "0025_upload_only_images",
+      "breakpoints": true
     }
   ]
 }

@@ -7,7 +7,6 @@ import { sendError } from '../../shared/utils/response.js'
 import { mapZodIssues } from '../../shared/utils/validation.js'
 import type { ValidationIssue } from '../../shared/utils/validation.js'
 
-const JSON_CONTENT_TYPE = 'application/json'
 const MULTIPART_CONTENT_TYPE = 'multipart/form-data'
 const DEFAULT_IMAGE_FIELD = 'image'
 const INVALID_JSON_FIELD_MESSAGE = 'Expected a JSON-encoded value'
@@ -33,20 +32,6 @@ export function multipartJsonSchema<Inner extends ZodType>(
       }
     })
     .pipe(inner)
-}
-
-export function multipartEmptyAsNullSchema<Inner extends ZodType<unknown, string | null>>(
-  inner: Inner,
-): z.ZodPipe<z.ZodPipe<z.ZodString, z.ZodTransform<string | null, string>>, Inner> {
-  return z
-    .string()
-    .transform((raw) => (raw === '' ? null : raw))
-    .pipe(inner)
-}
-
-export function isJsonRequest(context: Context): boolean {
-  const contentType = context.req.header('Content-Type') ?? ''
-  return contentType.toLowerCase().startsWith(JSON_CONTENT_TYPE)
 }
 
 export function isMultipartRequest(context: Context): boolean {
@@ -131,8 +116,8 @@ interface ParseJsonOrMultipartOptions<JsonSchema extends ZodType, MultipartSchem
 }
 
 export type ParsedJsonOrMultipart<JsonSchema extends ZodType, MultipartSchema extends ZodType> =
-  | { ok: true; kind: 'json'; data: zInfer<JsonSchema>; imageBuffer: null }
-  | { ok: true; kind: 'multipart'; data: zInfer<MultipartSchema>; imageBuffer: Buffer | null }
+  | { ok: true; data: zInfer<JsonSchema>; imageBuffer: null }
+  | { ok: true; data: zInfer<MultipartSchema>; imageBuffer: Buffer | null }
   | ParseFailure
 
 interface ParseFailure {
@@ -157,7 +142,6 @@ export async function parseJsonOrMultipart<
     }
     return {
       ok: true,
-      kind: 'multipart',
       data: result.data,
       imageBuffer: parsed.imageBuffer,
     }
@@ -175,7 +159,6 @@ export async function parseJsonOrMultipart<
   }
   return {
     ok: true,
-    kind: 'json',
     data: result.data,
     imageBuffer: null,
   }

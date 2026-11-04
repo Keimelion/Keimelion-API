@@ -12,14 +12,11 @@ type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 interface InsertItemInput {
   name: string
   description: string | null
-  imageUrl: string | null
   imageId: string | null
   createdByUserId: string | null
 }
 
-type UpdateItemFields = Partial<
-  Pick<typeof items.$inferInsert, 'name' | 'description' | 'imageUrl' | 'imageId'>
->
+type UpdateItemFields = Partial<Pick<typeof items.$inferInsert, 'name' | 'description' | 'imageId'>>
 
 const ITEM_WITH_SOURCES_WITH = {
   image: true,

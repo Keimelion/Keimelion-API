@@ -4,7 +4,6 @@ import { ErrorCode } from '../../shared/enums/error-code.js'
 import { serviceError } from '../../shared/utils/response.js'
 import { pickDefined } from '../../shared/utils/partial-update.js'
 import { buildPaginatedResponse } from '../../shared/schemas/pagination.js'
-import { normalizeTagSlugs } from '../../shared/utils/slug.js'
 import {
   countAllItems,
   findAllItemsWithSources,
@@ -13,10 +12,7 @@ import {
   insertItem,
   updateItem,
 } from '../../db/entities/items/items.repository.js'
-import { findCategoriesByIds } from '../../db/entities/categories/categories.repository.js'
-import { replaceItemCategories } from '../../db/entities/item-categories/item-categories.repository.js'
-import { upsertTagsBySlugs } from '../../db/entities/tags/tags.repository.js'
-import { replaceItemTags } from '../../db/entities/item-tags/item-tags.repository.js'
+import { resolveItemRelations, writeItemRelations } from '../../shared/db/item-relations.js'
 import { toItemWithSources } from '../../shared/types/item.js'
 import {
   cleanupReplacedImage,
@@ -24,6 +20,7 @@ import {
   runWithImageRollback,
 } from '../uploads/images.service.js'
 import type { Item } from '../../db/entities/items/items.schema.js'
+import type { ItemRelations } from '../../shared/db/item-relations.js'
 import type { ItemWithSources } from '../../shared/types/item.js'
 import type { PaginationInput } from '../../shared/schemas/pagination.js'
 import type { PaginatedResponse } from '../../shared/types/api.js'
@@ -43,17 +40,6 @@ export interface UpdateUserItemInput extends UpdateItemFields {
 
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 type ItemPatch = Parameters<typeof updateItem>[1]
-
-interface ItemRelations {
-  tagSlugs: string[] | null
-  categoryIds: string[] | null
-}
-
-interface ItemRelationsWrite {
-  itemId: string
-  userId: string
-  relations: ItemRelations
-}
 
 interface ItemUpdateWrite {
   item: Item
@@ -86,9 +72,6 @@ export async function createUserItem(
   input: CreateUserItemInput,
   locale: Locale,
 ): Promise<ServiceResult<{ item: ItemWithSources }>> {
-  const conflict = detectImageSourceConflict(input.imageBuffer, input.imageUrl ?? null, false)
-  if (conflict) return serviceError(conflict)
-
   const relations = await resolveItemRelations(input.tags, input.categories)
   if ('errorCode' in relations) return serviceError(relations.errorCode)
 
@@ -99,7 +82,6 @@ export async function createUserItem(
   const values = {
     name: input.name,
     description: input.description ?? null,
-    imageUrl: input.imageUrl ?? null,
     imageId: newImageId,
     createdByUserId: userId,
   }
@@ -132,8 +114,7 @@ export async function updateUserItem(
   input: UpdateUserItemInput,
   locale: Locale,
 ): Promise<ServiceResult<{ item: ItemWithSources }>> {
-  const conflict = detectImageSourceConflict(input.imageBuffer, input.imageUrl ?? null, input.clearImage)
-  if (conflict) return serviceError(conflict)
+  if (input.imageBuffer && input.clearImage) return serviceError(ErrorCode.IMAGE_AND_CLEAR_CONFLICT)
   if (!hasFieldToUpdate(input)) return serviceError(ErrorCode.NO_FIELDS_TO_UPDATE)
 
   const item = await findItemById(itemId)
@@ -159,37 +140,6 @@ export async function updateUserItem(
   return { data: { item: toItemWithSources(refreshed, locale) }, httpStatus: HttpStatus.OK }
 }
 
-function detectImageSourceConflict(
-  imageBuffer: Buffer | null,
-  imageUrl: string | null,
-  clearImage: boolean,
-): ErrorCode | null {
-  if (!imageBuffer) return null
-  if (imageUrl !== null) return ErrorCode.ITEM_IMAGE_SOURCE_CONFLICT
-  if (clearImage) return ErrorCode.IMAGE_AND_CLEAR_CONFLICT
-  return null
-}
-
-async function resolveItemRelations(
-  tags: string[] | undefined,
-  categories: string[] | undefined,
-): Promise<ItemRelations | { errorCode: ErrorCode }> {
-  const tagSlugs = tags === undefined ? null : normalizeTagSlugs(tags)
-  if (tags !== undefined && tagSlugs === null) return { errorCode: ErrorCode.TAG_INVALID_NAME }
-
-  const categoryIds = categories === undefined ? null : Array.from(new Set(categories))
-  if (categoryIds !== null && !(await areAllCategoriesFound(categoryIds))) {
-    return { errorCode: ErrorCode.CATEGORY_NOT_FOUND }
-  }
-  return { tagSlugs, categoryIds }
-}
-
-async function areAllCategoriesFound(categoryIds: string[]): Promise<boolean> {
-  if (categoryIds.length === 0) return true
-  const found = await findCategoriesByIds(categoryIds)
-  return found.length === categoryIds.length
-}
-
 async function insertItemWithRelations(
   values: Parameters<typeof insertItem>[0] & { createdByUserId: string },
   relations: ItemRelations,
@@ -197,19 +147,8 @@ async function insertItemWithRelations(
 ): Promise<Item | undefined> {
   const item = await insertItem(values, tx)
   if (!item) return undefined
-  await writeItemRelations({ itemId: item.id, userId: values.createdByUserId, relations }, tx)
+  await writeItemRelations({ itemId: item.id, tagCreatorId: values.createdByUserId, relations }, tx)
   return item
-}
-
-async function writeItemRelations(write: ItemRelationsWrite, tx: DbTransaction): Promise<void> {
-  const { itemId, userId, relations } = write
-  if (relations.tagSlugs !== null) {
-    const tagIds = await upsertTagsBySlugs(relations.tagSlugs, userId, tx)
-    await replaceItemTags(itemId, tagIds, tx)
-  }
-  if (relations.categoryIds !== null) {
-    await replaceItemCategories(itemId, relations.categoryIds, tx)
-  }
 }
 
 function hasFieldToUpdate(input: UpdateUserItemInput): boolean {
@@ -219,13 +158,9 @@ function hasFieldToUpdate(input: UpdateUserItemInput): boolean {
 }
 
 function buildItemPatch(input: UpdateUserItemInput, newImageId: string | null): ItemPatch {
-  const patch: ItemPatch = pickDefined({
-    name: input.name,
-    description: input.description,
-    imageUrl: input.imageUrl,
-  })
-  if (newImageId !== null) return { ...patch, imageId: newImageId, imageUrl: null }
-  if (input.clearImage || typeof patch.imageUrl === 'string') return { ...patch, imageId: null }
+  const patch: ItemPatch = pickDefined({ name: input.name, description: input.description })
+  if (newImageId !== null) return { ...patch, imageId: newImageId }
+  if (input.clearImage) return { ...patch, imageId: null }
   return patch
 }
 
@@ -233,6 +168,6 @@ async function applyItemUpdate(write: ItemUpdateWrite, tx: DbTransaction): Promi
   const { item, patch, userId, relations } = write
   const updated = Object.keys(patch).length > 0 ? await updateItem(item.id, patch, tx) : item
   if (!updated) return undefined
-  await writeItemRelations({ itemId: item.id, userId, relations }, tx)
+  await writeItemRelations({ itemId: item.id, tagCreatorId: userId, relations }, tx)
   return updated
 }

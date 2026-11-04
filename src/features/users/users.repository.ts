@@ -23,7 +23,7 @@ type SetPasswordResetTokenFields = Partial<Pick<typeof users.$inferInsert, 'pass
 type ResetPasswordFields = Pick<typeof users.$inferInsert, 'passwordHash' | 'passwordResetToken' | 'passwordResetTokenExpiresAt'>
 
 type UpdateUserProfileFields = Partial<
-  Pick<typeof users.$inferInsert, 'username' | 'avatarUrl' | 'avatarImageId' | 'isMarketingOptedIn' | 'defaultCurrencyCode'>
+  Pick<typeof users.$inferInsert, 'username' | 'avatarImageId' | 'isMarketingOptedIn' | 'defaultCurrencyCode'>
 >
 
 export function findUserByEmail(email: string): Promise<User | undefined> {

@@ -13,6 +13,7 @@ import { runWrite } from '../../../shared/utils/admin-write.js'
 import { findAllUsers, countUsers, adminUpdateUser, adminInsertUser } from './admin-users.repository.js'
 import { findUserById, softDeleteUser } from '../../../db/entities/users/users.repository.js'
 import { revokeAllUserSessions } from '../../../shared/db/user-sessions.js'
+import { cleanupReplacedImage } from '../../uploads/images.service.js'
 import { toAdminUser } from './admin-users.mapper.js'
 import {
   countReservationsByUserIds,
@@ -106,6 +107,10 @@ export async function updateUser(
     return serviceError(ErrorCode.FORBIDDEN)
   }
 
+  const { clearAvatar, ...fields } = input
+  const patch = { ...pickDefined(fields), ...(clearAvatar && { avatarImageId: null }) }
+  if (Object.keys(patch).length === 0) return serviceError(ErrorCode.NO_FIELDS_TO_UPDATE)
+
   const targetUser = await findUserById(targetUserId)
 
   if (!targetUser) {
@@ -117,7 +122,7 @@ export async function updateUser(
   let updatedRow: User | undefined
 
   await db.transaction(async (tx) => {
-    const result = await adminUpdateUser(targetUserId, pickDefined(input), tx)
+    const result = await adminUpdateUser(targetUserId, patch, tx)
     if (!result) return
     updatedRow = result
     if (shouldRevoke) {
@@ -128,6 +133,7 @@ export async function updateUser(
   if (!updatedRow) {
     return serviceError(ErrorCode.USER_UPDATE_FAILED)
   }
+  await cleanupReplacedImage(targetUser.avatarImageId, updatedRow.avatarImageId, 'admin.update_user')
 
   const reservationsCount = await countReservationsForUser(targetUserId)
   const updatedUser = toAdminUser(updatedRow, reservationsCount)

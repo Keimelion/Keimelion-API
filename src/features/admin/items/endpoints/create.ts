@@ -1,15 +1,9 @@
-import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { adminOnly } from '../../../../shared/middlewares/admin-only.js'
 import { jsonResult } from '../../../../shared/utils/response.js'
-import { validationErrorHandler } from '../../../../shared/utils/validation.js'
 import { getAuthUser } from '../../../../shared/middlewares/auth.js'
-import { RATE_LIMITS } from '../../../../shared/utils/rate-limiter.js'
-import {
-  itemNameSchema,
-  itemDescriptionSchema,
-  itemImageUrlSchema,
-} from '../../../../db/entities/items/items.schemas.js'
+import { multipartOnly, RATE_LIMITS } from '../../../../shared/utils/rate-limiter.js'
+import { itemNameSchema, itemDescriptionSchema } from '../../../../db/entities/items/items.schemas.js'
 import {
   currencySchema,
   httpsSourceUrlSchema,
@@ -20,6 +14,7 @@ import {
 import { itemCategoriesInputSchema } from '../../../../db/entities/item-categories/item-categories.schemas.js'
 import { itemTagsInputSchema } from '../../../../db/entities/item-tags/item-tags.schemas.js'
 import { getLocale } from '../../../../shared/middlewares/resolve-locale.js'
+import { multipartJsonSchema, parseJsonOrMultipart, sendParseFailure } from '../../../uploads/multipart.js'
 import type { FeatureRouter } from '../../../../shared/types/app.js'
 import { createItem } from '../admin-items.service.js'
 
@@ -32,12 +27,17 @@ const createItemSourceInputSchema = z
   })
   .strict()
 
-const adminCreateItemSchema = z
+const createItemSourcesSchema = z.array(createItemSourceInputSchema).min(1)
+
+const adminCreateItemScalarFields = {
+  name: itemNameSchema,
+  description: itemDescriptionSchema.optional().transform((value) => value ?? null),
+}
+
+const jsonAdminCreateItemSchema = z
   .object({
-    name: itemNameSchema,
-    description: itemDescriptionSchema.optional().transform((value) => value ?? null),
-    imageUrl: itemImageUrlSchema.optional().transform((value) => value ?? null),
-    sources: z.array(createItemSourceInputSchema).min(1),
+    ...adminCreateItemScalarFields,
+    sources: createItemSourcesSchema,
     categories: itemCategoriesInputSchema,
     tags: itemTagsInputSchema,
   })
@@ -46,19 +46,36 @@ const adminCreateItemSchema = z
     reportDuplicateSourceShopIds(value.sources, ctx)
   })
 
-export type CreateItemInput = z.infer<typeof adminCreateItemSchema>
-export type CreateItemSourceEntry = z.infer<typeof createItemSourceInputSchema>
+const multipartAdminCreateItemSchema = z
+  .object({
+    ...adminCreateItemScalarFields,
+    sources: multipartJsonSchema(createItemSourcesSchema),
+    categories: multipartJsonSchema(itemCategoriesInputSchema).optional(),
+    tags: multipartJsonSchema(itemTagsInputSchema).optional(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    reportDuplicateSourceShopIds(value.sources, ctx)
+  })
+
+export type CreateItemFields = z.infer<typeof jsonAdminCreateItemSchema>
 
 export function mountCreateItem(router: FeatureRouter): void {
   router.post(
     '/',
     ...adminOnly,
     RATE_LIMITS.STANDARD(),
-    zValidator('json', adminCreateItemSchema, validationErrorHandler),
+    multipartOnly(RATE_LIMITS.UPLOAD()),
     async (context) => {
+      const parsed = await parseJsonOrMultipart(context, {
+        jsonSchema: jsonAdminCreateItemSchema,
+        multipartSchema: multipartAdminCreateItemSchema,
+      })
+      if (!parsed.ok) return sendParseFailure(parsed)
+
       const admin = getAuthUser(context)
-      const input = context.req.valid('json')
       const locale = getLocale(context)
+      const input = { ...parsed.data, imageBuffer: parsed.imageBuffer }
       return jsonResult(context, await createItem(admin.id, input, locale))
     },
   )

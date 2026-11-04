@@ -40,7 +40,7 @@ export function findUserByUsername(username: string): Promise<User | undefined> 
 export async function anonymizeUser(tx: DbTransaction, userId: string, anonymizedEmail: string): Promise<User | undefined> {
   const [user] = await tx
     .update(users)
-    .set({ email: anonymizedEmail, username: null, avatarUrl: null, passwordHash: null, deletedAt: new Date() })
+    .set({ email: anonymizedEmail, username: null, avatarImageId: null, passwordHash: null, deletedAt: new Date() })
     .where(eq(users.id, userId))
     .returning()
   return user

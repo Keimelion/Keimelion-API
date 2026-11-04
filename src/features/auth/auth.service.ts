@@ -18,7 +18,7 @@ import {
   resetUserPassword,
   updateUserProfile,
 } from '../users/users.repository.js'
-import { processOptionalImage, rollbackImage } from '../uploads/images.service.js'
+import { processOptionalImage, runWithImageRollback } from '../uploads/images.service.js'
 import { toUserDetail } from '../../shared/types/user.js'
 import type { User } from '../../db/entities/users/users.schema.js'
 import type { Image } from '../../db/entities/images/images.schema.js'
@@ -84,11 +84,11 @@ async function maybeAttachAvatar(
   if ('errorCode' in imageOutcome) return { errorCode: imageOutcome.errorCode }
   if (!imageOutcome.image) return { row: createdUser, avatarImage: null }
 
-  const updated = await updateUserProfile(createdUser.id, { avatarImageId: imageOutcome.image.id })
-  if (!updated) {
-    await rollbackImage(imageOutcome.image.id, 'auth.register_avatar')
-    return { errorCode: ErrorCode.USER_UPDATE_FAILED }
-  }
+  const avatarImageId = imageOutcome.image.id
+  const updated = await runWithImageRollback(avatarImageId, 'auth.register_avatar', () =>
+    updateUserProfile(createdUser.id, { avatarImageId }),
+  )
+  if (!updated) return { errorCode: ErrorCode.USER_UPDATE_FAILED }
   return { row: updated, avatarImage: imageOutcome.image }
 }
 

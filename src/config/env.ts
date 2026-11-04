@@ -37,6 +37,8 @@ const envSchema = z.object({
   UPLOADS_DIR: z.string().min(1).default('./uploads'),
   UPLOADS_MAX_SIZE_BYTES: z.coerce.number().int().positive().default(10_000_000),
   UPLOADS_PUBLIC_BASE_URL: z.url().default('http://localhost:3000/uploads'),
+  IMAGE_ORPHAN_CLEANUP_INTERVAL_MS: z.coerce.number().int().min(60_000).default(86_400_000),
+  IMAGE_ORPHAN_GRACE_HOURS: z.coerce.number().int().min(1).default(24),
 })
 
 const parsed = envSchema.safeParse(process.env)

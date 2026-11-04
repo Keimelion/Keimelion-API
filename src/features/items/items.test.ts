@@ -15,7 +15,6 @@ const ITEM_ROW = {
   id: '00000000-0000-0000-0000-000000000010',
   name: 'Test Item',
   description: 'A test item',
-  imageUrl: null,
   imageId: null,
   createdByUserId: null,
   createdAt: new Date('2024-01-01'),
@@ -233,7 +232,6 @@ const OWNER_USER = {
   passwordHash: 'hashed',
   authProvider: 'email' as const,
   role: 'user' as const,
-  avatarUrl: null,
   avatarImageId: null,
   isCgvAccepted: true,
   cgvAcceptedAt: new Date('2024-01-01'),
@@ -849,24 +847,18 @@ describe('PATCH /v1/items/:id', () => {
     expect(body.item.description).toBeNull()
   })
 
-  it('updates imageUrl when only imageUrl is sent', async () => {
+  it('returns 422 when imageUrl is sent (external image URLs are not accepted)', async () => {
     const token = await generateTestToken(OWNER_USER.id)
     mockOwnerAuth()
-    const newUrl = 'https://example.com/img.jpg'
-    vi.mocked(db.query.items.findFirst)
-      .mockResolvedValueOnce(OWNED_ITEM_ROW)
-      .mockResolvedValueOnce({ ...OWNED_ITEM_ROW, imageUrl: newUrl, sources: [], itemCategories: [], itemTags: [] } as never)
-    mockUpdateItemTagsTransaction([])
 
     const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}`, {
       method: 'PATCH',
       token,
-      body: { imageUrl: newUrl },
+      body: { imageUrl: 'https://example.com/img.jpg' },
     })
 
-    const body = await response.json() as { item: { imageUrl: string | null } }
-    expect(response.status).toBe(200)
-    expect(body.item.imageUrl).toBe(newUrl)
+    expect(response.status).toBe(422)
+    expect(vi.mocked(db.transaction)).not.toHaveBeenCalled()
   })
 
   it('updates name and tags together', async () => {
@@ -988,7 +980,6 @@ const UPLOAD_BODY_LIMIT_OVERFLOW_BYTES = 64 * 1024 + 1
 interface ItemImageBody {
   item: {
     id: string
-    imageUrl: string | null
     imageId: string | null
     image: { id: string; urls: { sm: string; md: string; lg: string } } | null
   }
@@ -1045,7 +1036,7 @@ describe('POST /v1/items — multipart image upload', () => {
     mockProcessImage.mockResolvedValue({ image: NEW_IMAGE_ROW })
   })
 
-  it('returns 201 with the uploaded image linked to the item and imageUrl null', async () => {
+  it('returns 201 with the uploaded image linked to the item', async () => {
     const token = await generateTestToken(OWNER_USER.id)
     mockOwnerAuth()
     const createdRow = { ...OWNED_ITEM_ROW, imageId: NEW_IMAGE_ROW.id }
@@ -1062,14 +1053,12 @@ describe('POST /v1/items — multipart image upload', () => {
     const body = await response.json() as ItemImageBody
     expect(response.status).toBe(201)
     expect(body.item.imageId).toBe(NEW_IMAGE_ROW.id)
-    expect(body.item.imageUrl).toBeNull()
     expect(body.item.image?.urls.sm).toContain('-300.webp')
     expect(body.item.image?.urls.md).toContain('-800.webp')
     expect(body.item.image?.urls.lg).toContain('-1600.webp')
     expect(mockProcessImage).toHaveBeenCalledWith(expect.any(Buffer), OWNER_USER.id)
     expect(spies.values).toHaveBeenCalledWith(expect.objectContaining({
       imageId: NEW_IMAGE_ROW.id,
-      imageUrl: null,
       createdByUserId: OWNER_USER.id,
     }))
   })
@@ -1110,7 +1099,7 @@ describe('POST /v1/items — multipart image upload', () => {
     const response = await apiMultipartRequest('/v1/items', {
       method: 'POST',
       token,
-      fields: { name: 'Nintendo Switch', imageUrl: '' },
+      fields: { name: 'Nintendo Switch' },
     })
 
     const body = await response.json() as ItemImageBody
@@ -1118,44 +1107,24 @@ describe('POST /v1/items — multipart image upload', () => {
     expect(body.item.imageId).toBeNull()
     expect(body.item.image).toBeNull()
     expect(mockProcessImage).not.toHaveBeenCalled()
-    expect(spies.values).toHaveBeenCalledWith(expect.objectContaining({ imageId: null, imageUrl: null }))
-  })
-
-  it('keeps the JSON body contract unchanged (imageUrl stored, no image processed)', async () => {
-    const token = await generateTestToken(OWNER_USER.id)
-    mockOwnerAuth()
-    const createdRow = { ...OWNED_ITEM_ROW, imageUrl: 'https://cdn.example.com/a.png' }
-    const spies = mockItemWriteTransaction(createdRow)
-    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(hydrated(createdRow, null) as never)
-
-    const response = await apiRequest('/v1/items', {
-      method: 'POST',
-      token,
-      body: { name: 'Nintendo Switch', imageUrl: 'https://cdn.example.com/a.png' },
-    })
-
-    const body = await response.json() as ItemImageBody
-    expect(response.status).toBe(201)
-    expect(body.item.imageUrl).toBe('https://cdn.example.com/a.png')
-    expect(body.item.image).toBeNull()
-    expect(mockProcessImage).not.toHaveBeenCalled()
     expect(spies.values).toHaveBeenCalledWith(expect.objectContaining({ imageId: null }))
   })
 
-  it('returns 422 ITEM_IMAGE_SOURCE_CONFLICT when image and imageUrl are both sent', async () => {
+  it.each([
+    ['multipart', true],
+    ['JSON', false],
+  ])('returns 422 when imageUrl is sent (%s) — only uploaded images are accepted', async (_label, isMultipart) => {
     const token = await generateTestToken(OWNER_USER.id)
     mockOwnerAuth()
+    const imageUrl = 'https://cdn.example.com/a.png'
 
-    const response = await apiMultipartRequest('/v1/items', {
-      method: 'POST',
-      token,
-      fields: { name: 'Nintendo Switch', imageUrl: 'https://cdn.example.com/a.png' },
-      image: { buffer: IMAGE_BUFFER },
-    })
+    const response = isMultipart
+      ? await apiMultipartRequest('/v1/items', { method: 'POST', token, fields: { name: 'Nintendo Switch', imageUrl } })
+      : await apiRequest('/v1/items', { method: 'POST', token, body: { name: 'Nintendo Switch', imageUrl } })
 
     const body = await response.json() as ErrorBody
     expect(response.status).toBe(422)
-    expect(body.code).toBe(ErrorCode.ITEM_IMAGE_SOURCE_CONFLICT)
+    expect(body.metadata.issues?.[0]?.code).toBe('unrecognized_keys')
     expect(mockProcessImage).not.toHaveBeenCalled()
     expect(vi.mocked(db.transaction)).not.toHaveBeenCalled()
   })
@@ -1408,7 +1377,7 @@ describe('PATCH /v1/items/:id — image replace / clear', () => {
     const body = await response.json() as ItemImageBody
     expect(response.status).toBe(200)
     expect(body.item.image?.urls.md).toContain('-800.webp')
-    expect(spies.set).toHaveBeenCalledWith({ imageId: NEW_IMAGE_ROW.id, imageUrl: null })
+    expect(spies.set).toHaveBeenCalledWith({ imageId: NEW_IMAGE_ROW.id })
     expect(vi.mocked(db.delete)).not.toHaveBeenCalled()
   })
 
@@ -1455,60 +1424,6 @@ describe('PATCH /v1/items/:id — image replace / clear', () => {
     expect(mockProcessImage).not.toHaveBeenCalled()
   })
 
-  it('nulls a legacy imageUrl when an image is uploaded', async () => {
-    const token = await generateTestToken(OWNER_USER.id)
-    mockOwnerAuth()
-    const legacyRow = { ...OWNED_ITEM_ROW, imageUrl: 'https://cdn.example.com/legacy.png' }
-    const updatedRow = { ...OWNED_ITEM_ROW, imageId: NEW_IMAGE_ROW.id, imageUrl: null }
-    vi.mocked(db.query.items.findFirst)
-      .mockResolvedValueOnce(legacyRow)
-      .mockResolvedValueOnce(hydrated(updatedRow, NEW_IMAGE_ROW) as never)
-    const spies = mockItemWriteTransaction(updatedRow)
-
-    const response = await apiMultipartRequest(PATH, { method: 'PATCH', token, image: { buffer: IMAGE_BUFFER } })
-
-    const body = await response.json() as ItemImageBody
-    expect(response.status).toBe(200)
-    expect(body.item.imageUrl).toBeNull()
-    expect(body.item.image?.id).toBe(NEW_IMAGE_ROW.id)
-    expect(spies.set).toHaveBeenCalledWith(expect.objectContaining({ imageUrl: null }))
-  })
-
-  it('switches to an external imageUrl, clearing imageId and deleting the previous row', async () => {
-    const token = await generateTestToken(OWNER_USER.id)
-    mockOwnerAuth()
-    const imageUrl = 'https://cdn.example.com/new.png'
-    const updatedRow = { ...OWNED_ITEM_ROW, imageId: null, imageUrl }
-    vi.mocked(db.query.items.findFirst)
-      .mockResolvedValueOnce(ITEM_WITH_IMAGE_ROW)
-      .mockResolvedValueOnce(hydrated(updatedRow, null) as never)
-    const spies = mockItemWriteTransaction(updatedRow)
-
-    const response = await apiRequest(PATH, { method: 'PATCH', token, body: { imageUrl } })
-
-    const body = await response.json() as ItemImageBody
-    expect(response.status).toBe(200)
-    expect(body.item.imageId).toBeNull()
-    expect(body.item.imageUrl).toBe(imageUrl)
-    expect(spies.set).toHaveBeenCalledWith({ imageUrl, imageId: null })
-    expect(vi.mocked(db.delete)).toHaveBeenCalledWith(images)
-  })
-
-  it('keeps the uploaded image when imageUrl: null is sent', async () => {
-    const token = await generateTestToken(OWNER_USER.id)
-    mockOwnerAuth()
-    vi.mocked(db.query.items.findFirst)
-      .mockResolvedValueOnce(ITEM_WITH_IMAGE_ROW)
-      .mockResolvedValueOnce(hydrated(ITEM_WITH_IMAGE_ROW, null) as never)
-    const spies = mockItemWriteTransaction(ITEM_WITH_IMAGE_ROW)
-
-    const response = await apiRequest(PATH, { method: 'PATCH', token, body: { imageUrl: null } })
-
-    expect(response.status).toBe(200)
-    expect(spies.set).toHaveBeenCalledWith({ imageUrl: null })
-    expect(vi.mocked(db.delete)).not.toHaveBeenCalled()
-  })
-
   it('returns 422 NO_FIELDS_TO_UPDATE when only clearImage=false is sent', async () => {
     const token = await generateTestToken(OWNER_USER.id)
     mockOwnerAuth()
@@ -1536,23 +1451,6 @@ describe('PATCH /v1/items/:id — image replace / clear', () => {
     expect(body.code).toBe(ErrorCode.IMAGE_AND_CLEAR_CONFLICT)
     expect(mockProcessImage).not.toHaveBeenCalled()
     expect(vi.mocked(db.transaction)).not.toHaveBeenCalled()
-  })
-
-  it('returns 422 ITEM_IMAGE_SOURCE_CONFLICT when image and imageUrl are both sent', async () => {
-    const token = await generateTestToken(OWNER_USER.id)
-    mockOwnerAuth()
-
-    const response = await apiMultipartRequest(PATH, {
-      method: 'PATCH',
-      token,
-      fields: { imageUrl: 'https://cdn.example.com/a.png' },
-      image: { buffer: IMAGE_BUFFER },
-    })
-
-    const body = await response.json() as ErrorBody
-    expect(response.status).toBe(422)
-    expect(body.code).toBe(ErrorCode.ITEM_IMAGE_SOURCE_CONFLICT)
-    expect(mockProcessImage).not.toHaveBeenCalled()
   })
 
   it('returns 403 for a non-owner without processing the image', async () => {

@@ -4,6 +4,7 @@ import { apiRequest } from '../../../shared/test/api-request.js'
 import { generateTestToken, makeAccessTokenEntry } from '../../../shared/test/auth.js'
 import { ADMIN_USER_FIXTURE as ADMIN_USER, makeAdminUser } from '../../../shared/test/fixtures/users.js'
 import { logger } from '../../../shared/utils/logger.js'
+import { images } from '../../../db/entities/images/images.schema.js'
 
 vi.mock('../../../shared/utils/logger.js', () => ({
   logger: {
@@ -605,14 +606,14 @@ describe('PATCH /v1/admin/users/:id', () => {
     expect(body.user.role).toBe('moderator')
   })
 
-  it('returns 422 when avatar_url is not a valid URL', async () => {
+  it('returns 422 when avatarUrl is sent (avatars are upload-only)', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
 
     const response = await apiRequest(`/v1/admin/users/${TARGET_USER.id}`, {
       method: 'PATCH',
       token,
-      body: { avatarUrl: 'not-a-url' },
+      body: { avatarUrl: 'https://example.com/avatar.png' },
     })
 
     expect(response.status).toBe(422)
@@ -652,7 +653,7 @@ describe('PATCH /v1/admin/users/:id', () => {
     const response = await apiRequest(`/v1/admin/users/${ADMIN_USER.id}`, {
       method: 'PATCH',
       token,
-      body: { avatarUrl: 'https://example.com/avatar.png' },
+      body: { clearAvatar: true },
     })
 
     expect(response.status).toBe(403)
@@ -805,9 +806,34 @@ describe('PATCH /v1/admin/users/:id', () => {
     expect(capturedTx?.delete).not.toHaveBeenCalled()
   })
 
+  it('clears the avatar with clearAvatar=true and deletes the previous images row', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    const previousImageId = '00000000-0000-0000-0000-00000000d000'
+    const set = vi.fn().mockReturnValueOnce({
+      where: vi.fn().mockReturnValueOnce({
+        returning: vi.fn().mockResolvedValueOnce([{ ...TARGET_USER, avatarImageId: null }]),
+      }),
+    })
+
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce({ ...TARGET_USER, avatarImageId: previousImageId })
+    vi.mocked(db.transaction).mockImplementationOnce(async (callback) => callback({ update: vi.fn(() => ({ set })) } as never))
+    mockReservationCountForUser()
+
+    const response = await apiRequest(`/v1/admin/users/${TARGET_USER.id}`, {
+      method: 'PATCH',
+      token,
+      body: { clearAvatar: true },
+    })
+
+    expect(response.status).toBe(200)
+    expect(set).toHaveBeenCalledWith({ avatarImageId: null })
+    expect(vi.mocked(db.delete)).toHaveBeenCalledWith(images)
+  })
+
   it('skips token revocation when update does not include role', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
-    const updatedUser = { ...TARGET_USER, avatarUrl: 'https://example.com/avatar.png' }
+    const updatedUser = { ...TARGET_USER, isMarketingOptedIn: true }
     let capturedTx: { delete: ReturnType<typeof vi.fn> } | undefined
 
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
@@ -831,7 +857,7 @@ describe('PATCH /v1/admin/users/:id', () => {
     const response = await apiRequest(`/v1/admin/users/${TARGET_USER.id}`, {
       method: 'PATCH',
       token,
-      body: { avatarUrl: 'https://example.com/avatar.png' },
+      body: { isMarketingOptedIn: true },
     })
 
     expect(response.status).toBe(200)

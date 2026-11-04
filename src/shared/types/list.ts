@@ -89,7 +89,6 @@ export function toListDetail(row: ListRowWithOwner, collaborators?: Collaborator
 export interface PublicUserDetail {
   id: string
   username: string | null
-  avatarUrl: string | null
   avatar: ImageDetail | null
 }
 
@@ -111,7 +110,6 @@ export interface PublicItemDetail {
   id: string
   name: string
   description: string | null
-  imageUrl: string | null
   imageId: string | null
   image: ImageDetail | null
   sources: ItemSourceDetail[]
@@ -171,7 +169,6 @@ function toPublicOwner(user: (User & { avatarImage: Image | null }) | null): Pub
   return {
     id: user.id,
     username: user.username ?? null,
-    avatarUrl: user.avatarUrl ?? null,
     avatar: user.avatarImage ? toImageDetail(user.avatarImage) : null,
   }
 }
@@ -197,7 +194,6 @@ function toPublicItemDetail(item: ItemRowWithSources, locale: Locale): PublicIte
     id: item.id,
     name: item.name,
     description: item.description ?? null,
-    imageUrl: item.imageUrl ?? null,
     imageId: item.imageId ?? null,
     image: item.image ? toImageDetail(item.image) : null,
     sources: item.sources.map((source) => toItemSourceDetail(source)),

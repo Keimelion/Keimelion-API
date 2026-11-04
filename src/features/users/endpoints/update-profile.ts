@@ -5,7 +5,6 @@ import { jsonResult } from '../../../shared/utils/response.js'
 import type { FeatureRouter } from '../../../shared/types/app.js'
 import { updateProfile } from '../users.service.js'
 import { usernameSchema } from '../../../shared/schemas/username.js'
-import { urlSchema } from '../../../shared/schemas/url.js'
 import { supportedCurrencyEnum } from '../../../shared/schemas/currency.js'
 import {
   multipartBoolSchema,
@@ -16,7 +15,6 @@ import type { UpdateUserProfileInput } from '../users.service.js'
 
 const jsonUpdateProfileSchema = z.object({
   username: usernameSchema.nullable().optional(),
-  avatarUrl: urlSchema('avatarUrl').nullable().optional(),
   isMarketingOptedIn: z.boolean().optional(),
   defaultCurrency: supportedCurrencyEnum.optional(),
   clearAvatar: z.boolean().optional(),
@@ -24,7 +22,6 @@ const jsonUpdateProfileSchema = z.object({
 
 const multipartUpdateProfileSchema = z.object({
   username: usernameSchema.optional(),
-  avatarUrl: urlSchema('avatarUrl').optional(),
   isMarketingOptedIn: multipartBoolSchema.optional(),
   defaultCurrency: supportedCurrencyEnum.optional(),
   clearAvatar: multipartBoolSchema.optional(),

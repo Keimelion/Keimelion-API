@@ -12,7 +12,6 @@ const SAFE_USER = {
   passwordHash: 'hashed',
   authProvider: 'email' as const,
   role: 'user' as const,
-  avatarUrl: null,
   avatarImageId: null,
   isCgvAccepted: true,
   cgvAcceptedAt: new Date('2024-01-01'),
@@ -126,14 +125,14 @@ describe('PATCH /v1/users/me', () => {
     expect(body.user.username).toBe('newusername')
   })
 
-  it('returns 422 when avatar_url is not a valid URL', async () => {
+  it('returns 422 when avatarUrl is sent (avatars are upload-only)', async () => {
     const token = await generateTestToken(SAFE_USER.id)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
 
     const response = await apiRequest('/v1/users/me', {
       method: 'PATCH',
       token,
-      body: { avatarUrl: 'not-a-url' },
+      body: { avatarUrl: 'https://example.com/avatar.png' },
     })
 
     expect(response.status).toBe(422)
@@ -389,7 +388,7 @@ describe('DELETE /v1/users/me', () => {
 
     expect(setArgs.email).toMatch(/^deleted_.*@deleted\.keimelion\.fr$/)
     expect(setArgs.username).toBeNull()
-    expect(setArgs.avatarUrl).toBeNull()
+    expect(setArgs.avatarImageId).toBeNull()
     expect(setArgs.passwordHash).toBeNull()
     expect(setArgs.deletedAt).toBeInstanceOf(Date)
 
@@ -534,7 +533,6 @@ describe('GET /v1/users/me/export', () => {
       id: '00000000-0000-0000-0000-000000000020',
       name: 'Test Item',
       description: null,
-      imageUrl: null,
       imageId: null,
       createdByUserId: SAFE_USER.id,
       createdAt: new Date('2024-01-01'),
@@ -1319,7 +1317,6 @@ const RESERVATION_PROFILE_ROW = {
       id: '00000000-0000-0000-0000-00000001b100',
       name: 'Fancy vase',
       description: null,
-      imageUrl: null,
       imageId: '00000000-0000-0000-0000-00000001b200',
       createdByUserId: null,
       createdAt: new Date('2024-04-01'),
@@ -1591,7 +1588,6 @@ describe('RGPD export — item images uploaded via /items', () => {
     id: '00000000-0000-0000-0000-00000000f010',
     name: 'Item with uploaded image',
     description: null,
-    imageUrl: null,
     imageId: ITEM_IMAGE_ROW.id,
     createdByUserId: SAFE_USER.id,
     createdAt: new Date('2024-06-01'),
@@ -1650,14 +1646,14 @@ describe('PATCH /v1/users/me — multipart guards', () => {
     const token = await generateTestToken(SAFE_USER.id)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
 
-    const response = await apiRequest('/v1/users/me', { method: 'PATCH', token, body: { avatarUrl: 'not-a-url' } })
+    const response = await apiRequest('/v1/users/me', { method: 'PATCH', token, body: { isMarketingOptedIn: 'yes' } })
 
     const body = await response.json() as { metadata: { issues: { path: string; message: string; code: string }[] } }
     expect(response.status).toBe(422)
     expect(body.metadata.issues[0]).toEqual({
-      path: 'avatarUrl',
-      message: 'avatarUrl must be a valid URL',
-      code: 'invalid_format',
+      path: 'isMarketingOptedIn',
+      message: expect.any(String) as string,
+      code: 'invalid_type',
     })
   })
 
@@ -1671,6 +1667,23 @@ describe('PATCH /v1/users/me — multipart guards', () => {
     const body = await response.json() as { code: string }
     expect(response.status).toBe(413)
     expect(body.code).toBe('PAYLOAD_TOO_LARGE')
+    expect(vi.mocked(db.update)).not.toHaveBeenCalled()
+  })
+
+  it('returns 422 IMAGE_AND_CLEAR_CONFLICT when an avatar and clearAvatar=true are both sent', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+
+    const response = await apiMultipartRequest('/v1/users/me', {
+      method: 'PATCH',
+      token,
+      fields: { clearAvatar: 'true' },
+      image: { buffer: Buffer.from([0x89, 0x50, 0x4e, 0x47]) },
+    })
+
+    const body = await response.json() as { code: string }
+    expect(response.status).toBe(422)
+    expect(body.code).toBe('IMAGE_AND_CLEAR_CONFLICT')
     expect(vi.mocked(db.update)).not.toHaveBeenCalled()
   })
 })
