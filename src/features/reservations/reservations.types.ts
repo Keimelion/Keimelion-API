@@ -5,6 +5,7 @@ import type { List } from '../../db/entities/lists/lists.schema.js'
 import type { Item } from '../../db/entities/items/items.schema.js'
 import type { ListUser } from '../../db/entities/list-users/list-users.schema.js'
 import type { User } from '../../db/entities/users/users.schema.js'
+import { ListUserRoles } from '../../shared/enums/list-user-role.js'
 
 export interface ReservationSummary {
   id: string
@@ -73,7 +74,8 @@ export interface ReservationProfileEntry {
 }
 
 export function toReservationProfileEntry(row: ReservationProfileRow): ReservationProfileEntry {
-  const ownerUser = row.listItem.list.listUsers[0]?.user ?? null
+  const ownerUser =
+    row.listItem.list.listUsers.find((member) => member.role === ListUserRoles.OWNER)?.user ?? null
   return {
     reservation: {
       id: row.id,

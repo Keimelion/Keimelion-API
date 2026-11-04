@@ -4,18 +4,17 @@ import { authMiddleware, getAuthUser } from '../../../../shared/middlewares/auth
 import { RATE_LIMITS } from '../../../../shared/utils/rate-limiter.js'
 import { validationErrorHandler } from '../../../../shared/utils/validation.js'
 import { jsonResult } from '../../../../shared/utils/response.js'
-import { INVITE_TOKEN_HASH_LENGTH } from '../../../../db/entities/list-invites/list-invites.schema.js'
 import type { FeatureRouter } from '../../../../shared/types/app.js'
-import { acceptListInvite } from '../../collaborators.service.js'
+import { INVITE_TOKEN_HEX_LENGTH, acceptListInvite } from '../../collaborators.service.js'
 
 const INVITE_TOKEN_HEX_REGEX = /^[a-f0-9]+$/
-const INVITE_TOKEN_HEX_MESSAGE = 'Invitation token must be a hex-encoded SHA-256 value'
+const INVITE_TOKEN_HEX_MESSAGE = 'Invitation token must be a hex-encoded value'
 
 const acceptInviteSchema = z
   .object({
     token: z
       .string()
-      .length(INVITE_TOKEN_HASH_LENGTH)
+      .length(INVITE_TOKEN_HEX_LENGTH)
       .regex(INVITE_TOKEN_HEX_REGEX, INVITE_TOKEN_HEX_MESSAGE),
   })
   .strict()

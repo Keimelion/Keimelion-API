@@ -2,6 +2,7 @@ import type { ListInvite } from '../../db/entities/list-invites/list-invites.sch
 import type { ListUserWithUserRow } from '../../db/entities/list-users/list-users.repository.js'
 import type { ListUserRole } from '../enums/list-user-role.js'
 import type { InviteStatus } from '../enums/invite-status.js'
+import type { User } from '../../db/entities/users/users.schema.js'
 import { toUserDetail } from './user.js'
 import type { UserDetail } from './user.js'
 import { InviteStatuses } from '../enums/invite-status.js'
@@ -43,11 +44,11 @@ export function toPendingInviteSummary(row: ListInvite): CollaboratorSummary {
   }
 }
 
-export function toInviteDetail(row: ListInvite): CollaboratorDetail {
+export function toInviteDetail(row: ListInvite, user: User | null = null): CollaboratorDetail {
   return {
     id: row.id,
     listId: row.listId,
-    user: null,
+    user: user ? toUserDetail(user) : null,
     invitedEmail: row.invitedEmail,
     inviteStatus: row.inviteStatus,
     role: row.role,

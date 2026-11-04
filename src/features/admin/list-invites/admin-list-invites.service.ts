@@ -1,9 +1,9 @@
 import { HttpStatus } from '../../../shared/enums/http.js'
 import { buildPaginatedResponse } from '../../../shared/schemas/pagination.js'
 import {
-  countAdminListInvites,
-  findAllAdminListInvites,
-} from './admin-list-invites.repository.js'
+  countListInvites,
+  findAllListInvites,
+} from '../../../db/entities/list-invites/list-invites.repository.js'
 import { toAdminListInviteDetail } from './admin-list-invites.mapper.js'
 import type { AdminListInviteDetail } from './admin-list-invites.mapper.js'
 import type { ServiceResult } from '../../../shared/types/service.js'
@@ -15,8 +15,8 @@ export async function listAdminInvites(
 ): Promise<ServiceResult<PaginatedResponse<AdminListInviteDetail>>> {
   const filters = { inviteStatus: input.inviteStatus }
   const [rows, total] = await Promise.all([
-    findAllAdminListInvites(input, filters),
-    countAdminListInvites(filters),
+    findAllListInvites(input, filters),
+    countListInvites(filters),
   ])
 
   const now = new Date()

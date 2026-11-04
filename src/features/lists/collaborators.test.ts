@@ -59,7 +59,7 @@ const INVITEE_ACCESS_TOKEN_ENTRY = makeAccessTokenEntry(INVITEE_USER.id)
 function rowWithOwner(row: object, owner: unknown): object {
   if (owner === null) return { ...row, listUsers: [], listTags: [] }
   const ownerId = (owner as { id: string }).id
-  return { ...row, listUsers: [{ userId: ownerId, user: owner }], listTags: [] }
+  return { ...row, listUsers: [{ userId: ownerId, role: "owner" as const, user: owner }], listTags: [] }
 }
 
 function mockOwnerAuth(): void {
@@ -115,7 +115,6 @@ describe('POST /v1/lists/:listId/collaborators/invites', () => {
     const token = await generateTestToken(OWNER_USER.id)
     mockOwnerAuth()
     mockListWithOwner()
-    vi.mocked(db.query.listInvites.findFirst).mockResolvedValueOnce(undefined)
     vi.mocked(db.query.listUsers.findFirst).mockResolvedValueOnce(undefined)
     mockInsertInvite(BASE_INVITE_ROW)
 
@@ -154,12 +153,16 @@ describe('POST /v1/lists/:listId/collaborators/invites', () => {
     expect(body.code).toBe('COLLAB_SELF_INVITE')
   })
 
-  it('returns 409 COLLAB_ALREADY_MEMBER when a pending invite already exists', async () => {
+  it('returns 409 COLLAB_ALREADY_MEMBER when a pending invite already exists (partial unique races)', async () => {
     const token = await generateTestToken(OWNER_USER.id)
     mockOwnerAuth()
     mockListWithOwner()
-    vi.mocked(db.query.listInvites.findFirst).mockResolvedValueOnce(BASE_INVITE_ROW)
     vi.mocked(db.query.listUsers.findFirst).mockResolvedValueOnce(undefined)
+    vi.mocked(db.insert).mockReturnValueOnce({
+      values: vi.fn().mockReturnValueOnce({
+        returning: vi.fn().mockRejectedValueOnce(Object.assign(new Error('unique'), { code: '23505' })),
+      }),
+    } as never)
 
     const response = await apiRequest(`/v1/lists/${LIST_ID}/collaborators/invites`, {
       method: 'POST',
@@ -176,7 +179,6 @@ describe('POST /v1/lists/:listId/collaborators/invites', () => {
     const token = await generateTestToken(OWNER_USER.id)
     mockOwnerAuth()
     mockListWithOwner()
-    vi.mocked(db.query.listInvites.findFirst).mockResolvedValueOnce(undefined)
     vi.mocked(db.query.listUsers.findFirst).mockResolvedValueOnce({
       id: '00000000-0000-0000-0000-00000000d100',
       listId: LIST_ID,
@@ -185,29 +187,6 @@ describe('POST /v1/lists/:listId/collaborators/invites', () => {
       createdAt: new Date('2024-01-02'),
       updatedAt: new Date('2024-01-02'),
     })
-
-    const response = await apiRequest(`/v1/lists/${LIST_ID}/collaborators/invites`, {
-      method: 'POST',
-      token,
-      body: { email: 'invitee@example.com' },
-    })
-
-    const body = await response.json() as { code: string }
-    expect(response.status).toBe(409)
-    expect(body.code).toBe('COLLAB_ALREADY_MEMBER')
-  })
-
-  it('returns 409 COLLAB_ALREADY_MEMBER on partial-unique index race (23505)', async () => {
-    const token = await generateTestToken(OWNER_USER.id)
-    mockOwnerAuth()
-    mockListWithOwner()
-    vi.mocked(db.query.listInvites.findFirst).mockResolvedValueOnce(undefined)
-    vi.mocked(db.query.listUsers.findFirst).mockResolvedValueOnce(undefined)
-    vi.mocked(db.insert).mockReturnValueOnce({
-      values: vi.fn().mockReturnValueOnce({
-        returning: vi.fn().mockRejectedValueOnce(Object.assign(new Error('unique'), { code: '23505' })),
-      }),
-    } as never)
 
     const response = await apiRequest(`/v1/lists/${LIST_ID}/collaborators/invites`, {
       method: 'POST',
@@ -409,6 +388,32 @@ describe('POST /v1/collaborators/invites/accept', () => {
     const body = await response.json() as { code: string }
     expect(response.status).toBe(403)
     expect(body.code).toBe('COLLAB_EMAIL_MISMATCH')
+  })
+
+  it('returns 409 COLLAB_INVITE_ALREADY_RESOLVED when the invite is revoked/expired between read and update (TOCTOU)', async () => {
+    const token = await generateTestToken(INVITEE_USER.id)
+    mockInviteeAuth()
+    // findInviteByTokenHash returns a pending invite, but markInviteAccepted's
+    // WHERE narrows to still-pending/not-expired and finds nothing → the
+    // transaction throws the sentinel which maps to COLLAB_INVITE_ALREADY_RESOLVED.
+    vi.mocked(db.query.listInvites.findFirst).mockResolvedValueOnce(BASE_INVITE_ROW)
+    vi.mocked(db.update).mockReturnValueOnce({
+      set: vi.fn().mockReturnValueOnce({
+        where: vi.fn().mockReturnValueOnce({
+          returning: vi.fn().mockResolvedValueOnce([]),
+        }),
+      }),
+    } as never)
+
+    const response = await apiRequest('/v1/collaborators/invites/accept', {
+      method: 'POST',
+      token,
+      body: { token: RAW_TOKEN },
+    })
+
+    const body = await response.json() as { code: string }
+    expect(response.status).toBe(409)
+    expect(body.code).toBe('COLLAB_INVITE_ALREADY_RESOLVED')
   })
 
   it('returns 409 COLLAB_ALREADY_MEMBER on 23505 race during accept', async () => {

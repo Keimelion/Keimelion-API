@@ -1,6 +1,5 @@
 import { and, asc, eq, isNull, sql } from 'drizzle-orm'
 import { db } from '../../client.js'
-import { ListUserRoles } from '../../../shared/enums/list-user-role.js'
 import { pickDefined } from '../../../shared/utils/partial-update.js'
 import { listUsers } from '../list-users/list-users.schema.js'
 import { listItems } from '../list-items/list-items.schema.js'
@@ -9,16 +8,20 @@ import type { ListStatus } from '../../../shared/enums/list-status.js'
 import type { ListRowWithOwner, PublicListRow } from '../../../shared/types/list.js'
 import type { List } from './lists.schema.js'
 
+// Hydrates every list_users row so callers can treat `row.listUsers` as the full membership
+// array (e.g. `.some(…)` on it is safe). Owner-only filtering is done at the mapper level
+// via `extractOwnerDetail`.
 export const LIST_WITH_OWNER = {
   listUsers: {
-    where: eq(listUsers.role, ListUserRoles.OWNER),
-    limit: 1,
+    orderBy: [asc(listUsers.createdAt)],
     with: { user: true },
   },
   listTags: {
     with: { tag: true },
   },
-} as const
+} satisfies ListWithOwnerConfig
+
+type ListWithOwnerConfig = NonNullable<Parameters<typeof db.query.lists.findFirst>[0]>['with']
 
 export const LIST_SORTABLE_FIELDS = {
   createdAt:  lists.createdAt,
@@ -65,8 +68,7 @@ export function findListBySlug(
     where,
     with: {
       listUsers: {
-        where: eq(listUsers.role, ListUserRoles.OWNER),
-        limit: 1,
+        orderBy: [asc(listUsers.createdAt)],
         with: { user: { with: { avatarImage: true } } },
       },
       listTags: {

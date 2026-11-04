@@ -58,12 +58,6 @@ const MOCK_COLLABORATOR = {
   updatedAt: new Date('2024-01-01'),
 }
 
-const MOCK_EDITOR_COLLABORATOR = {
-  ...MOCK_COLLABORATOR,
-  id: '00000000-0000-0000-0000-000000000041',
-  role: 'editor' as const,
-}
-
 const MOCK_LIST_ITEM = {
   id: LIST_ITEM_ID,
   listId: LIST_ID,
@@ -98,7 +92,7 @@ function mockAuthChain(): void {
 function mockListItemOwnershipChain(): void {
   vi.mocked(db.query.listItems.findFirst).mockResolvedValue(MOCK_LIST_ITEM as never)
   vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(
-    { ...MOCK_LIST, listUsers: [{ userId: AUTH_USER.id, user: AUTH_USER }] } as never,
+    { ...MOCK_LIST, listUsers: [{ userId: AUTH_USER.id, role: "owner" as const, user: AUTH_USER }] } as never,
   )
   vi.mocked(db.query.listUsers.findFirst).mockResolvedValueOnce(MOCK_COLLABORATOR)
 }
@@ -112,7 +106,7 @@ describe('POST /v1/list-items', () => {
     const token = await generateTestToken(AUTH_USER.id)
     mockAuthChain()
     vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(
-      { ...MOCK_LIST, listUsers: [{ userId: AUTH_USER.id, user: AUTH_USER }] } as never,
+      { ...MOCK_LIST, listUsers: [{ userId: AUTH_USER.id, role: "owner" as const, user: AUTH_USER }] } as never,
     )
     vi.mocked(db.query.listUsers.findFirst).mockResolvedValueOnce(MOCK_COLLABORATOR)
     vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(MOCK_ITEM)
@@ -139,7 +133,7 @@ describe('POST /v1/list-items', () => {
     const token = await generateTestToken(AUTH_USER.id)
     mockAuthChain()
     vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(
-      { ...MOCK_LIST, listUsers: [{ userId: AUTH_USER.id, user: AUTH_USER }] } as never,
+      { ...MOCK_LIST, listUsers: [{ userId: AUTH_USER.id, role: "owner" as const, user: AUTH_USER }] } as never,
     )
     vi.mocked(db.query.listUsers.findFirst).mockResolvedValueOnce(MOCK_COLLABORATOR)
     vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(undefined)
@@ -183,7 +177,7 @@ describe('POST /v1/list-items', () => {
     const token = await generateTestToken(AUTH_USER.id)
     mockAuthChain()
     vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(
-      { ...MOCK_LIST, listUsers: [{ userId: AUTH_USER.id, user: AUTH_USER }] } as never,
+      { ...MOCK_LIST, listUsers: [{ userId: AUTH_USER.id, role: "owner" as const, user: AUTH_USER }] } as never,
     )
     vi.mocked(db.query.listUsers.findFirst).mockResolvedValueOnce(MOCK_COLLABORATOR)
 
@@ -255,9 +249,12 @@ describe('PATCH /v1/list-items/:id', () => {
     mockAuthChain()
     vi.mocked(db.query.listItems.findFirst).mockResolvedValue(MOCK_LIST_ITEM as never)
     vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(
-      { ...MOCK_LIST, listUsers: [], listTags: [] } as never,
+      {
+        ...MOCK_LIST,
+        listUsers: [{ userId: AUTH_USER.id, role: 'editor' as const, user: AUTH_USER }],
+        listTags: [],
+      } as never,
     )
-    vi.mocked(db.query.listUsers.findFirst).mockResolvedValueOnce(MOCK_EDITOR_COLLABORATOR)
 
     const updatedListItem = { ...MOCK_LIST_ITEM, quantityDesired: 5 }
     vi.mocked(db.update).mockReturnValueOnce({

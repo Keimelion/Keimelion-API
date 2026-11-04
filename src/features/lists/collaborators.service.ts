@@ -3,11 +3,11 @@ import { db } from '../../db/client.js'
 import { HttpStatus } from '../../shared/enums/http.js'
 import { ErrorCode } from '../../shared/enums/error-code.js'
 import { NodeEnvs } from '../../shared/enums/node-env.js'
-import { InviteStatuses } from '../../shared/enums/invite-status.js'
 import { env } from '../../config/env.js'
 import { hashSha256Hex } from '../../shared/utils/hash.js'
 import { logger } from '../../shared/utils/logger.js'
 import { runWrite } from '../../shared/utils/admin-write.js'
+import { isPgUniqueViolation } from '../../shared/db/pg-errors.js'
 import { serviceError } from '../../shared/utils/response.js'
 import {
   findActiveEditorForList,
@@ -15,13 +15,12 @@ import {
 } from '../../db/entities/list-users/list-users.repository.js'
 import {
   findInviteByTokenHash,
-  findPendingInviteForList,
   insertListInvite,
   markInviteAccepted,
 } from '../../db/entities/list-invites/list-invites.repository.js'
+import { InviteStatuses } from '../../shared/enums/invite-status.js'
 import { toInviteDetail } from '../../shared/types/collaborator.js'
 import type { CollaboratorDetail } from '../../shared/types/collaborator.js'
-import { toUserDetail } from '../../shared/types/user.js'
 import type { User } from '../../db/entities/users/users.schema.js'
 import type { ListRowWithOwner } from '../../shared/types/list.js'
 import type { ServiceResult } from '../../shared/types/service.js'
@@ -29,7 +28,20 @@ import type { CreateInviteInput } from './endpoints/collaborators/create-invite.
 import type { AcceptInviteInput } from './endpoints/collaborators/accept-invite.js'
 
 export const COLLAB_INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000
-const INVITE_TOKEN_BYTE_LENGTH = 32
+
+// Raw token sizing — distinct from `INVITE_TOKEN_HASH_LENGTH` in the schema
+// (that one strictly describes the DB column for the sha256 hex hash).
+// The equality below (`BYTE * 2 = 64`) is coincidental with the hash length
+// because sha256 hex is also 64 chars; the two constants stay independent
+// so a future change to either one does not silently drift the other.
+export const INVITE_TOKEN_BYTE_LENGTH = 32
+export const INVITE_TOKEN_HEX_LENGTH = INVITE_TOKEN_BYTE_LENGTH * 2
+
+// Thrown from inside the accept transaction to roll both writes back when the TOCTOU-safe
+// UPDATE loses the race (status changed or expiry passed between read and write).
+class InviteResolvedError extends Error {
+  override readonly name = 'InviteResolvedError'
+}
 
 export interface CreateInviteResponse {
   invite: CollaboratorDetail
@@ -45,19 +57,15 @@ export async function createListInvite(
     return serviceError(ErrorCode.COLLAB_SELF_INVITE)
   }
 
-  const now = new Date()
-  const [existingPendingInvite, existingEditor] = await Promise.all([
-    findPendingInviteForList(list.id, now),
-    findActiveEditorForList(list.id),
-  ])
-  if (existingPendingInvite || existingEditor) {
-    return serviceError(ErrorCode.COLLAB_ALREADY_MEMBER)
-  }
+  const existingEditor = await findActiveEditorForList(list.id)
+  if (existingEditor) return serviceError(ErrorCode.COLLAB_ALREADY_MEMBER)
 
   const rawToken = randomBytes(INVITE_TOKEN_BYTE_LENGTH).toString('hex')
   const tokenHash = hashSha256Hex(rawToken)
-  const expiresAt = new Date(now.getTime() + COLLAB_INVITE_TTL_MS)
+  const expiresAt = new Date(Date.now() + COLLAB_INVITE_TTL_MS)
 
+  // Partial unique index uniq_list_invites_pending_per_list catches a concurrent
+  // pending-invite via runWrite → CONFLICT; mapped to COLLAB_ALREADY_MEMBER below.
   const outcome = await runWrite(
     () =>
       insertListInvite({
@@ -103,28 +111,33 @@ export async function acceptListInvite(
     return serviceError(ErrorCode.COLLAB_EMAIL_MISMATCH)
   }
 
-  const outcome = await runWrite(
-    () =>
-      db.transaction(async (tx) => {
-        const acceptedAt = new Date()
-        const updated = await markInviteAccepted(invite.id, acceptor.id, acceptedAt, tx)
-        if (!updated) return undefined
-        const membership = await insertEditorListUser(invite.listId, acceptor.id, tx)
-        if (!membership) return undefined
-        return updated
-      }),
-    { fallbackErrorCode: ErrorCode.INTERNAL_ERROR },
-  )
-  if ('errorCode' in outcome) {
-    if (outcome.errorCode === ErrorCode.CONFLICT) return serviceError(ErrorCode.COLLAB_ALREADY_MEMBER)
-    return serviceError(outcome.errorCode)
+  // markInviteAccepted's WHERE filters on status='pending' AND expiry > now, so a
+  // concurrent accept/revoke/expiry returns undefined. Throwing InviteResolvedError
+  // inside the transaction rolls both writes back; the outer catch maps it to
+  // COLLAB_INVITE_ALREADY_RESOLVED rather than a generic fallback error.
+  let acceptedInvite
+  try {
+    acceptedInvite = await db.transaction(async (tx) => {
+      const acceptedAt = new Date()
+      const updated = await markInviteAccepted(invite.id, acceptor.id, acceptedAt, tx)
+      if (!updated) throw new InviteResolvedError('Invite was resolved or expired')
+      const membership = await insertEditorListUser(invite.listId, acceptor.id, tx)
+      if (!membership) throw new Error('insertEditorListUser returned no row')
+      return updated
+    })
+  } catch (error) {
+    if (error instanceof InviteResolvedError) {
+      return serviceError(ErrorCode.COLLAB_INVITE_ALREADY_RESOLVED)
+    }
+    if (isPgUniqueViolation(error)) return serviceError(ErrorCode.COLLAB_ALREADY_MEMBER)
+    logger.error({ error, inviteId: invite.id }, 'Collaborator invite accept failed')
+    return serviceError(ErrorCode.INTERNAL_ERROR)
   }
 
   logInviteAccepted(acceptor.id, invite.listId, invite.id)
 
-  const detail = toInviteDetail(outcome.row)
   return {
-    data: { invite: { ...detail, user: toUserDetail(acceptor) } },
+    data: { invite: toInviteDetail(acceptedInvite, acceptor) },
     httpStatus: HttpStatus.OK,
   }
 }

@@ -17,6 +17,7 @@ import type { ImageDetail } from '../../features/uploads/images.mapper.js'
 import type { UserDetail } from './user.js'
 import type { TagPublic } from './tag.js'
 import type { CollaboratorSummary } from './collaborator.js'
+import { ListUserRoles } from '../enums/list-user-role.js'
 
 export interface ListDetail {
   id: string
@@ -42,7 +43,7 @@ export interface ListRowWithOwner extends List {
 }
 
 export function extractOwnerDetail(row: ListRowWithOwner): UserDetail | null {
-  const ownerUser = row.listUsers[0]?.user ?? null
+  const ownerUser = row.listUsers.find((member) => member.role === ListUserRoles.OWNER)?.user ?? null
   return ownerUser ? toUserDetail(ownerUser) : null
 }
 
@@ -131,6 +132,8 @@ export interface PublicListRow extends List {
 }
 
 export function toPublicListDetail(row: PublicListRow, locale: Locale): PublicListDetail {
+  const ownerUser =
+    row.listUsers.find((member) => member.role === ListUserRoles.OWNER)?.user ?? null
   return {
     id: row.id,
     title: row.title,
@@ -138,7 +141,7 @@ export function toPublicListDetail(row: PublicListRow, locale: Locale): PublicLi
     description: row.description ?? null,
     listStatus: row.listStatus,
     occasionTypeId: row.occasionTypeId ?? null,
-    owner: toPublicOwner(row.listUsers[0]?.user ?? null),
+    owner: toPublicOwner(ownerUser),
     tags: row.listTags.map((link) => toTagPublic(link.tag)),
     items: row.listItems.map((listItem) => toPublicListItem(listItem, locale)),
     createdAt: row.createdAt,

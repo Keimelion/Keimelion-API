@@ -1,6 +1,8 @@
 import { toInviteDetail } from '../../../shared/types/collaborator.js'
 import type { CollaboratorDetail } from '../../../shared/types/collaborator.js'
-import type { AdminListInviteRow } from './admin-list-invites.repository.js'
+import type { ListInviteWithRelationsRow } from '../../../db/entities/list-invites/list-invites.repository.js'
+
+export type AdminListInviteRow = ListInviteWithRelationsRow
 
 export interface AdminListInviteList {
   id: string

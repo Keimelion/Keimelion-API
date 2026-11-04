@@ -17,16 +17,6 @@ export interface ListInviteWithRelationsRow extends ListInvite {
   acceptedByUser: User | null
 }
 
-export function findPendingInviteForList(listId: string, now: Date): Promise<ListInvite | undefined> {
-  return db.query.listInvites.findFirst({
-    where: and(
-      eq(listInvites.listId, listId),
-      eq(listInvites.inviteStatus, InviteStatuses.PENDING),
-      gt(listInvites.inviteTokenExpiresAt, now),
-    ),
-  })
-}
-
 export function findInviteByTokenHash(tokenHash: string): Promise<ListInvite | undefined> {
   return db.query.listInvites.findFirst({
     where: eq(listInvites.inviteToken, tokenHash),
@@ -72,6 +62,10 @@ export async function insertListInvite(
   return row
 }
 
+// Atomic claim: the WHERE narrows to "still pending AND not expired" so a concurrent
+// accept / revoke / expiry loses the race and returns undefined. Callers must treat
+// `undefined` as "the invite was resolved or expired between read and write" rather
+// than a generic failure.
 export async function markInviteAccepted(
   inviteId: string,
   acceptedByUserId: string,
@@ -86,7 +80,13 @@ export async function markInviteAccepted(
       acceptedByUserId,
       acceptedAt,
     })
-    .where(eq(listInvites.id, inviteId))
+    .where(
+      and(
+        eq(listInvites.id, inviteId),
+        eq(listInvites.inviteStatus, InviteStatuses.PENDING),
+        gt(listInvites.inviteTokenExpiresAt, acceptedAt),
+      ),
+    )
     .returning()
   return row
 }

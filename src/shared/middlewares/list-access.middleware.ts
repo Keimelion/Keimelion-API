@@ -4,13 +4,13 @@ import { HonoContextKey } from '../enums/context-key.js'
 import { sendError } from '../utils/response.js'
 import { logger } from '../utils/logger.js'
 import { findListWithOwner } from '../../db/entities/lists/lists.repository.js'
-import { findListContributor } from '../../db/entities/list-users/list-users.repository.js'
+import { CONTRIBUTOR_ROLE_VALUES, ListUserRoles } from '../enums/list-user-role.js'
 import { getAuthUser } from './auth.js'
 import type { AppVariables } from '../types/app.js'
 import type { ListRowWithOwner } from '../types/list.js'
 
 type AppContext = Context<{ Variables: AppVariables }>
-type AccessCheck = (list: ListRowWithOwner, userId: string) => Promise<boolean>
+type AccessCheck = (list: ListRowWithOwner, userId: string) => boolean
 
 export interface ListAccessMiddlewareOptions {
   paramName: string
@@ -42,8 +42,7 @@ function buildListAccessMiddleware(
       if (!list) return sendError(ErrorCode.NOT_FOUND)
 
       const user = getAuthUser(context)
-      const hasAccess = await checkAccess(list, user.id)
-      if (!hasAccess) return sendError(ErrorCode.FORBIDDEN)
+      if (!checkAccess(list, user.id)) return sendError(ErrorCode.FORBIDDEN)
 
       context.set(HonoContextKey.LIST, list)
       await next()
@@ -68,12 +67,14 @@ async function resolveListId(
   return paramValue ?? null
 }
 
-function isListOwner(list: ListRowWithOwner, userId: string): Promise<boolean> {
-  return Promise.resolve(list.listUsers[0]?.userId === userId)
+function isListOwner(list: ListRowWithOwner, userId: string): boolean {
+  return list.listUsers.some(
+    (member) => member.userId === userId && member.role === ListUserRoles.OWNER,
+  )
 }
 
-async function isListContributor(list: ListRowWithOwner, userId: string): Promise<boolean> {
-  if (list.listUsers[0]?.userId === userId) return true
-  const row = await findListContributor(list.id, userId)
-  return row !== undefined
+function isListContributor(list: ListRowWithOwner, userId: string): boolean {
+  return list.listUsers.some(
+    (member) => member.userId === userId && (CONTRIBUTOR_ROLE_VALUES as readonly string[]).includes(member.role),
+  )
 }

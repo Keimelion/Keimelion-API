@@ -93,9 +93,9 @@ function rowWithOwner(row: object, owner: unknown): object {
   return { ...row, listUsers: buildCollaborators(owner), listTags: [] }
 }
 
-function buildCollaborators(owner: unknown): { userId: string; user: unknown }[] {
+function buildCollaborators(owner: unknown): { userId: string; role: 'owner'; user: unknown }[] {
   if (owner === null) return []
-  return [{ userId: (owner as { id: string }).id, user: owner }]
+  return [{ userId: (owner as { id: string }).id, role: 'owner', user: owner }]
 }
 
 function mockCountChain(total: number): void {
@@ -796,7 +796,7 @@ describe('PATCH /v1/admin/lists/:id', () => {
     vi.mocked(db.query.tags.findMany).mockResolvedValueOnce([TAG_GAMING_ROW] as never)
     vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce({
       ...LIST_ROW,
-      listUsers: [{ userId: OWNER_USER.id, user: OWNER_USER }],
+      listUsers: [{ userId: OWNER_USER.id, role: "owner" as const, user: OWNER_USER }],
       listTags: [listTagLink(TAG_GAMING_ROW)],
     } as never)
 
