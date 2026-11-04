@@ -41,6 +41,21 @@ export async function rollbackImage(imageId: string | null, context: string): Pr
   }
 }
 
+export async function runWithImageRollback<T>(
+  imageId: string | null,
+  context: string,
+  write: () => Promise<T | undefined>,
+): Promise<T | undefined> {
+  try {
+    const result = await write()
+    if (result === undefined) await rollbackImage(imageId, context)
+    return result
+  } catch (error: unknown) {
+    await rollbackImage(imageId, context)
+    throw error
+  }
+}
+
 // Deletes the previous image row when a parent entity replaces or clears its image.
 // Files on disk stay (dedup makes them harmless; a separate orphan-file GC may sweep them).
 export async function cleanupReplacedImage(

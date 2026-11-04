@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { db } from '../../db/client.js'
 import { env } from '../../config/env.js'
 import { NodeEnvs } from '../../shared/enums/node-env.js'
-import { apiRequest } from '../../shared/test/api-request.js'
+import { apiMultipartRequest, apiRequest } from '../../shared/test/api-request.js'
 import { generateTestToken, makeAccessTokenEntry } from '../../shared/test/auth.js'
 
 const TEST_REFRESH_TOKEN_HASH = 'a'.repeat(64)
@@ -747,5 +747,40 @@ describe('POST /v1/auth/refresh', () => {
     })
 
     expect(response.status).toBe(422)
+  })
+})
+
+describe('POST /v1/auth/register — multipart guards', () => {
+  const UPLOAD_BODY_LIMIT_OVERFLOW_BYTES = 64 * 1024 + 1
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('returns 413 PAYLOAD_TOO_LARGE when the multipart body exceeds the upload body limit', async () => {
+    const oversized = Buffer.alloc(env.UPLOADS_MAX_SIZE_BYTES + UPLOAD_BODY_LIMIT_OVERFLOW_BYTES)
+
+    const response = await apiMultipartRequest('/v1/auth/register', {
+      method: 'POST',
+      fields: { email: 'user@example.com', password: 'securepassword123' },
+      image: { buffer: oversized },
+    })
+
+    const body = await response.json() as { code: string }
+    expect(response.status).toBe(413)
+    expect(body.code).toBe('PAYLOAD_TOO_LARGE')
+    expect(vi.mocked(db.insert)).not.toHaveBeenCalled()
+  })
+
+  it('returns 422 issues in the {path, message, code} shape for multipart bodies', async () => {
+    const response = await apiMultipartRequest('/v1/auth/register', {
+      method: 'POST',
+      fields: { email: 'not-an-email', password: 'securepassword123' },
+    })
+
+    const body = await response.json() as { metadata: { issues: { path: string; message: string; code: string }[] } }
+    expect(response.status).toBe(422)
+    expect(body.metadata.issues[0]).toMatchObject({ path: 'email', code: 'invalid_format' })
+    expect(typeof body.metadata.issues[0]?.message).toBe('string')
   })
 })

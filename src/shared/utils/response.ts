@@ -74,6 +74,8 @@ export const errorMap: Record<ErrorCode, { status: ContentfulStatusCode; message
   INVALID_IMAGE:           { status: HttpStatus.BAD_REQUEST,           message: 'The uploaded image is empty or could not be decoded' },
   INVALID_IMAGE_TYPE:      { status: HttpStatus.BAD_REQUEST,           message: 'The uploaded image must be a JPEG, PNG or WEBP file' },
   PAYLOAD_TOO_LARGE:       { status: HttpStatus.PAYLOAD_TOO_LARGE,     message: 'The uploaded file exceeds the maximum allowed size' },
+  ITEM_IMAGE_SOURCE_CONFLICT: { status: HttpStatus.UNPROCESSABLE_ENTITY, message: 'An item cannot receive both an uploaded image and an imageUrl in the same request' },
+  IMAGE_AND_CLEAR_CONFLICT: { status: HttpStatus.UNPROCESSABLE_ENTITY,  message: 'An image cannot be uploaded and cleared in the same request' },
   COLLAB_SELF_INVITE:            { status: HttpStatus.UNPROCESSABLE_ENTITY, message: COLLAB_SELF_INVITE_MESSAGE },
   COLLAB_ALREADY_MEMBER:         { status: HttpStatus.CONFLICT,            message: COLLAB_ALREADY_MEMBER_MESSAGE },
   COLLAB_INVITE_NOT_FOUND:       { status: HttpStatus.NOT_FOUND,           message: COLLAB_INVITE_NOT_FOUND_MESSAGE },

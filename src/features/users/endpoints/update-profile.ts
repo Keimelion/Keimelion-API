@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { authMiddleware, getAuthUser } from '../../../shared/middlewares/auth.js'
 import { multipartOnly, RATE_LIMITS } from '../../../shared/utils/rate-limiter.js'
-import { jsonResult, sendError } from '../../../shared/utils/response.js'
+import { jsonResult } from '../../../shared/utils/response.js'
 import type { FeatureRouter } from '../../../shared/types/app.js'
 import { updateProfile } from '../users.service.js'
 import { usernameSchema } from '../../../shared/schemas/username.js'
@@ -10,6 +10,7 @@ import { supportedCurrencyEnum } from '../../../shared/schemas/currency.js'
 import {
   multipartBoolSchema,
   parseJsonOrMultipart,
+  sendParseFailure,
 } from '../../uploads/multipart.js'
 import type { UpdateUserProfileInput } from '../users.service.js'
 
@@ -36,7 +37,7 @@ export function mountUpdateProfile(router: FeatureRouter): void {
       multipartSchema: multipartUpdateProfileSchema,
     })
     if (!parsed.ok) {
-      return sendError(parsed.errorCode, parsed.issues ? { issues: parsed.issues } : {})
+      return sendParseFailure(parsed)
     }
 
     const user = getAuthUser(context)

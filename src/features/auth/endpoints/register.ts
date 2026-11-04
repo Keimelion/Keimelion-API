@@ -1,10 +1,11 @@
 import { z } from 'zod'
 import { multipartOnly, RATE_LIMITS } from '../../../shared/utils/rate-limiter.js'
-import { jsonResult, sendError } from '../../../shared/utils/response.js'
+import { jsonResult } from '../../../shared/utils/response.js'
 import { registerUser } from '../auth.service.js'
 import {
   multipartBoolSchema,
   parseJsonOrMultipart,
+  sendParseFailure,
 } from '../../uploads/multipart.js'
 import { usernameSchema } from '../../../shared/schemas/username.js'
 import { passwordSchema } from '../../../shared/schemas/password.js'
@@ -42,7 +43,7 @@ export function mountRegister(router: FeatureRouter): void {
       multipartSchema: multipartRegisterSchema,
     })
     if (!parsed.ok) {
-      return sendError(parsed.errorCode, parsed.issues ? { issues: parsed.issues } : {})
+      return sendParseFailure(parsed)
     }
     return jsonResult(context, await registerUser(parsed.data, parsed.imageBuffer))
   })

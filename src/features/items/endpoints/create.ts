@@ -1,31 +1,41 @@
-import { zValidator } from '@hono/zod-validator'
 import { authMiddleware, getAuthUser } from '../../../shared/middlewares/auth.js'
-import { RATE_LIMITS } from '../../../shared/utils/rate-limiter.js'
-import { validationErrorHandler } from '../../../shared/utils/validation.js'
+import { multipartOnly, RATE_LIMITS } from '../../../shared/utils/rate-limiter.js'
 import { jsonResult } from '../../../shared/utils/response.js'
 import { getLocale } from '../../../shared/middlewares/resolve-locale.js'
-import { writableItemFieldsSchema } from '../items.schemas.js'
+import { parseJsonOrMultipart, sendParseFailure } from '../../uploads/multipart.js'
+import { multipartWritableItemFieldsSchema, writableItemFieldsSchema } from '../items.schemas.js'
 import type { z } from 'zod'
 import type { FeatureRouter } from '../../../shared/types/app.js'
 import { createUserItem } from '../items.service.js'
 
-const createItemSchema = writableItemFieldsSchema
+const jsonCreateItemSchema = writableItemFieldsSchema
   .partial()
   .required({ name: true })
   .strict()
 
-export type CreateItemInput = z.infer<typeof createItemSchema>
+const multipartCreateItemSchema = multipartWritableItemFieldsSchema
+  .partial()
+  .required({ name: true })
+  .strict()
+
+export type CreateItemFields = z.infer<typeof jsonCreateItemSchema>
 
 export function mountCreateItem(router: FeatureRouter): void {
   router.post(
     '/',
     authMiddleware,
     RATE_LIMITS.STANDARD(),
-    zValidator('json', createItemSchema, validationErrorHandler),
+    multipartOnly(RATE_LIMITS.UPLOAD()),
     async (context) => {
+      const parsed = await parseJsonOrMultipart(context, {
+        jsonSchema: jsonCreateItemSchema,
+        multipartSchema: multipartCreateItemSchema,
+      })
+      if (!parsed.ok) return sendParseFailure(parsed)
+
       const user = getAuthUser(context)
-      const input = context.req.valid('json')
       const locale = getLocale(context)
+      const input = { ...parsed.data, imageBuffer: parsed.imageBuffer }
       return jsonResult(context, await createUserItem(user.id, input, locale))
     },
   )

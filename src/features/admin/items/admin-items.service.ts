@@ -65,6 +65,7 @@ export async function createItem(
           name: input.name,
           description: input.description,
           imageUrl: input.imageUrl,
+          imageId: null,
           createdByUserId: null,
         },
         tx,

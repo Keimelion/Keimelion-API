@@ -13,10 +13,13 @@ interface InsertItemInput {
   name: string
   description: string | null
   imageUrl: string | null
+  imageId: string | null
   createdByUserId: string | null
 }
 
-type UpdateItemFields = Partial<Pick<typeof items.$inferInsert, 'name' | 'description' | 'imageUrl'>>
+type UpdateItemFields = Partial<
+  Pick<typeof items.$inferInsert, 'name' | 'description' | 'imageUrl' | 'imageId'>
+>
 
 const ITEM_WITH_SOURCES_WITH = {
   image: true,

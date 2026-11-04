@@ -114,3 +114,42 @@ describe('processImage', () => {
     expect(mockToFile).not.toHaveBeenCalled()
   })
 })
+
+describe('multipartJsonSchema', () => {
+  it('decodes a JSON-encoded string and validates it against the inner schema', async () => {
+    const { multipartJsonSchema } = await import('./multipart.js')
+    const { z } = await import('zod')
+    const schema = multipartJsonSchema(z.array(z.string()))
+
+    expect(schema.parse('["a","b,c"]')).toEqual(['a', 'b,c'])
+  })
+
+  it('reports invalid JSON as a Zod issue instead of throwing', async () => {
+    const { multipartJsonSchema } = await import('./multipart.js')
+    const { z } = await import('zod')
+    const result = multipartJsonSchema(z.array(z.string())).safeParse('[not json')
+
+    expect(result.success).toBe(false)
+    expect(result.error?.issues[0]?.message).toBe('Expected a JSON-encoded value')
+  })
+
+  it('reports inner schema mismatches after decoding', async () => {
+    const { multipartJsonSchema } = await import('./multipart.js')
+    const { z } = await import('zod')
+    const result = multipartJsonSchema(z.array(z.string())).safeParse('{"a":1}')
+
+    expect(result.success).toBe(false)
+    expect(result.error?.issues[0]?.code).toBe('invalid_type')
+  })
+})
+
+describe('multipartEmptyAsNullSchema', () => {
+  it('maps an empty string to null before the inner schema', async () => {
+    const { multipartEmptyAsNullSchema } = await import('./multipart.js')
+    const { z } = await import('zod')
+    const schema = multipartEmptyAsNullSchema(z.url().nullable())
+
+    expect(schema.parse('')).toBeNull()
+    expect(schema.parse('https://example.com')).toBe('https://example.com')
+  })
+})
