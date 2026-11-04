@@ -1,13 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { app } from '../../app.js'
 import { db } from '../../db/client.js'
-import { apiRequest } from '../../shared/test/api-request.js'
+import { images } from '../../db/entities/images/images.schema.js'
+import { env } from '../../config/env.js'
+import { ErrorCode } from '../../shared/enums/error-code.js'
+import { apiMultipartRequest, apiRequest } from '../../shared/test/api-request.js'
 import { generateTestToken, makeAccessTokenEntry } from '../../shared/test/auth.js'
+
+const { mockProcessImage } = vi.hoisted(() => ({ mockProcessImage: vi.fn() }))
+
+vi.mock('../uploads/image.pipeline.js', () => ({ processImage: mockProcessImage }))
 
 const ITEM_ROW = {
   id: '00000000-0000-0000-0000-000000000010',
   name: 'Test Item',
   description: 'A test item',
-  imageUrl: null,
   imageId: null,
   createdByUserId: null,
   createdAt: new Date('2024-01-01'),
@@ -225,7 +232,6 @@ const OWNER_USER = {
   passwordHash: 'hashed',
   authProvider: 'email' as const,
   role: 'user' as const,
-  avatarUrl: null,
   avatarImageId: null,
   isCgvAccepted: true,
   cgvAcceptedAt: new Date('2024-01-01'),
@@ -841,24 +847,18 @@ describe('PATCH /v1/items/:id', () => {
     expect(body.item.description).toBeNull()
   })
 
-  it('updates imageUrl when only imageUrl is sent', async () => {
+  it('returns 422 when imageUrl is sent (external image URLs are not accepted)', async () => {
     const token = await generateTestToken(OWNER_USER.id)
     mockOwnerAuth()
-    const newUrl = 'https://example.com/img.jpg'
-    vi.mocked(db.query.items.findFirst)
-      .mockResolvedValueOnce(OWNED_ITEM_ROW)
-      .mockResolvedValueOnce({ ...OWNED_ITEM_ROW, imageUrl: newUrl, sources: [], itemCategories: [], itemTags: [] } as never)
-    mockUpdateItemTagsTransaction([])
 
     const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}`, {
       method: 'PATCH',
       token,
-      body: { imageUrl: newUrl },
+      body: { imageUrl: 'https://example.com/img.jpg' },
     })
 
-    const body = await response.json() as { item: { imageUrl: string | null } }
-    expect(response.status).toBe(200)
-    expect(body.item.imageUrl).toBe(newUrl)
+    expect(response.status).toBe(422)
+    expect(vi.mocked(db.transaction)).not.toHaveBeenCalled()
   })
 
   it('updates name and tags together', async () => {
@@ -957,5 +957,575 @@ describe('items mapper hydrates tags', () => {
     const body = await response.json() as { items: { tags: { slug: string }[] }[] }
     expect(response.status).toBe(200)
     expect(body.items[0]?.tags[0]?.slug).toBe('reading')
+  })
+})
+
+const NEW_IMAGE_ROW = {
+  id: '00000000-0000-0000-0000-00000000b001',
+  hash: 'b'.repeat(64),
+  fileKey: 'bb/bb/' + 'b'.repeat(64),
+  mime: 'image/png',
+  sizeBytes: 4,
+  width: 640,
+  height: 480,
+  uploadedBy: OWNER_USER.id,
+  createdAt: new Date('2024-05-01'),
+  updatedAt: new Date('2024-05-01'),
+}
+
+const PREVIOUS_IMAGE_ID = '00000000-0000-0000-0000-00000000b000'
+const IMAGE_BUFFER = Buffer.from([0x89, 0x50, 0x4e, 0x47])
+const UPLOAD_BODY_LIMIT_OVERFLOW_BYTES = 64 * 1024 + 1
+
+interface ItemImageBody {
+  item: {
+    id: string
+    imageId: string | null
+    image: { id: string; urls: { sm: string; md: string; lg: string } } | null
+  }
+}
+
+interface ErrorBody {
+  code: string
+  metadata: { issues?: { path: string; message: string; code: string }[] }
+}
+
+interface ItemWriteSpies {
+  values: ReturnType<typeof vi.fn>
+  set: ReturnType<typeof vi.fn>
+}
+
+function mockItemWriteTransaction(writtenRow: unknown): ItemWriteSpies {
+  const values = vi.fn().mockReturnValue({
+    returning: vi.fn().mockResolvedValue(writtenRow === undefined ? [] : [writtenRow]),
+    onConflictDoNothing: vi.fn().mockResolvedValue([]),
+  })
+  const set = vi.fn().mockReturnValue({
+    where: vi.fn().mockReturnValue({
+      returning: vi.fn().mockResolvedValue(writtenRow === undefined ? [] : [writtenRow]),
+    }),
+  })
+  vi.mocked(db.transaction).mockImplementationOnce((callback) => {
+    const tx = {
+      insert: vi.fn().mockReturnValue({ values }),
+      update: vi.fn().mockReturnValue({ set }),
+      delete: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
+      query: { tags: { findMany: vi.fn().mockResolvedValue([TAG_GAMING_ROW]) } },
+    }
+    return callback(tx as never)
+  })
+  return { values, set }
+}
+
+function hydrated(row: object, image: typeof NEW_IMAGE_ROW | null): object {
+  return { ...row, image, sources: [], itemCategories: [], itemTags: [] }
+}
+
+async function sendMultipartForm(path: string, method: string, token: string, form: FormData): Promise<Response> {
+  return app.request(path, { method, headers: { Authorization: `Bearer ${token}` }, body: form })
+}
+
+function imageBlob(buffer: Buffer = IMAGE_BUFFER): Blob {
+  return new Blob([new Uint8Array(buffer)], { type: 'image/png' })
+}
+
+describe('POST /v1/items — multipart image upload', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(OWNER_ACCESS_TOKEN_ENTRY)
+    mockProcessImage.mockResolvedValue({ image: NEW_IMAGE_ROW })
+  })
+
+  it('returns 201 with the uploaded image linked to the item', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+    const createdRow = { ...OWNED_ITEM_ROW, imageId: NEW_IMAGE_ROW.id }
+    const spies = mockItemWriteTransaction(createdRow)
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(hydrated(createdRow, NEW_IMAGE_ROW) as never)
+
+    const response = await apiMultipartRequest('/v1/items', {
+      method: 'POST',
+      token,
+      fields: { name: 'Nintendo Switch' },
+      image: { buffer: IMAGE_BUFFER },
+    })
+
+    const body = await response.json() as ItemImageBody
+    expect(response.status).toBe(201)
+    expect(body.item.imageId).toBe(NEW_IMAGE_ROW.id)
+    expect(body.item.image?.urls.sm).toContain('-300.webp')
+    expect(body.item.image?.urls.md).toContain('-800.webp')
+    expect(body.item.image?.urls.lg).toContain('-1600.webp')
+    expect(mockProcessImage).toHaveBeenCalledWith(expect.any(Buffer), OWNER_USER.id)
+    expect(spies.values).toHaveBeenCalledWith(expect.objectContaining({
+      imageId: NEW_IMAGE_ROW.id,
+      createdByUserId: OWNER_USER.id,
+    }))
+  })
+
+  it('persists JSON-encoded tags and categories sent as multipart string fields', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+    vi.mocked(db.query.categories.findMany).mockResolvedValueOnce([CATEGORY_ONE] as never)
+    const spies = mockItemWriteTransaction(OWNED_ITEM_ROW)
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(hydrated(OWNED_ITEM_ROW, NEW_IMAGE_ROW) as never)
+
+    const response = await apiMultipartRequest('/v1/items', {
+      method: 'POST',
+      token,
+      fields: {
+        name: 'Nintendo Switch',
+        description: 'Console',
+        tags: '["Gaming","a,b"]',
+        categories: JSON.stringify([CATEGORY_ONE.id]),
+      },
+      image: { buffer: IMAGE_BUFFER },
+    })
+
+    expect(response.status).toBe(201)
+    expect(spies.values).toHaveBeenCalledWith(expect.objectContaining({ description: 'Console' }))
+    expect(spies.values).toHaveBeenCalledWith(expect.arrayContaining([
+      expect.objectContaining({ slug: 'gaming' }),
+    ]))
+    expect(spies.values).toHaveBeenCalledWith([{ itemId: OWNED_ITEM_ROW.id, categoryId: CATEGORY_ONE.id }])
+  })
+
+  it('returns 201 with imageId and image null when no image part is sent', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+    const spies = mockItemWriteTransaction(OWNED_ITEM_ROW)
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(hydrated(OWNED_ITEM_ROW, null) as never)
+
+    const response = await apiMultipartRequest('/v1/items', {
+      method: 'POST',
+      token,
+      fields: { name: 'Nintendo Switch' },
+    })
+
+    const body = await response.json() as ItemImageBody
+    expect(response.status).toBe(201)
+    expect(body.item.imageId).toBeNull()
+    expect(body.item.image).toBeNull()
+    expect(mockProcessImage).not.toHaveBeenCalled()
+    expect(spies.values).toHaveBeenCalledWith(expect.objectContaining({ imageId: null }))
+  })
+
+  it.each([
+    ['multipart', true],
+    ['JSON', false],
+  ])('returns 422 when imageUrl is sent (%s) — only uploaded images are accepted', async (_label, isMultipart) => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+    const imageUrl = 'https://cdn.example.com/a.png'
+
+    const response = isMultipart
+      ? await apiMultipartRequest('/v1/items', { method: 'POST', token, fields: { name: 'Nintendo Switch', imageUrl } })
+      : await apiRequest('/v1/items', { method: 'POST', token, body: { name: 'Nintendo Switch', imageUrl } })
+
+    const body = await response.json() as ErrorBody
+    expect(response.status).toBe(422)
+    expect(body.metadata.issues?.[0]?.code).toBe('unrecognized_keys')
+    expect(mockProcessImage).not.toHaveBeenCalled()
+    expect(vi.mocked(db.transaction)).not.toHaveBeenCalled()
+  })
+
+  it('returns 422 with a {path, message, code} issue when tags is not valid JSON', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+
+    const response = await apiMultipartRequest('/v1/items', {
+      method: 'POST',
+      token,
+      fields: { name: 'Nintendo Switch', tags: 'gaming,reading' },
+    })
+
+    const body = await response.json() as ErrorBody
+    expect(response.status).toBe(422)
+    expect(body.code).toBe(ErrorCode.UNPROCESSABLE_ENTITY)
+    expect(body.metadata.issues).toEqual([
+      { path: 'tags', message: 'Expected a JSON-encoded value', code: 'custom' },
+    ])
+    expect(mockProcessImage).not.toHaveBeenCalled()
+  })
+
+  it('returns 422 when tags decodes to a non-array JSON value', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+
+    const response = await apiMultipartRequest('/v1/items', {
+      method: 'POST',
+      token,
+      fields: { name: 'Nintendo Switch', tags: '"gaming"' },
+    })
+
+    const body = await response.json() as ErrorBody
+    expect(response.status).toBe(422)
+    expect(body.metadata.issues?.[0]?.path).toBe('tags')
+  })
+
+  it('returns 422 instead of dropping array keys (tags[]) and repeated keys', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+    const form = new FormData()
+    form.append('name', 'Nintendo Switch')
+    form.append('tags[]', 'gaming')
+    form.append('description', 'one')
+    form.append('description', 'two')
+
+    const response = await sendMultipartForm('/v1/items', 'POST', token, form)
+
+    const body = await response.json() as ErrorBody
+    expect(response.status).toBe(422)
+    expect(body.metadata.issues?.map((issue) => issue.path)).toEqual(['tags[]', 'description'])
+  })
+
+  it('returns 422 when a file is sent under a non-image key', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+    const form = new FormData()
+    form.append('name', 'Nintendo Switch')
+    form.append('avatar', imageBlob(), 'avatar.png')
+
+    const response = await sendMultipartForm('/v1/items', 'POST', token, form)
+
+    const body = await response.json() as ErrorBody
+    expect(response.status).toBe(422)
+    expect(body.metadata.issues?.[0]?.path).toBe('avatar')
+    expect(mockProcessImage).not.toHaveBeenCalled()
+  })
+
+  it('returns 422 when an unknown multipart field is sent (strict schema)', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+
+    const response = await apiMultipartRequest('/v1/items', {
+      method: 'POST',
+      token,
+      fields: { name: 'Nintendo Switch', imageId: NEW_IMAGE_ROW.id },
+    })
+
+    expect(response.status).toBe(422)
+  })
+
+  it('returns 422 with the validationErrorHandler issue shape on an invalid JSON body', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+
+    const response = await apiRequest('/v1/items', { method: 'POST', token, body: { description: 'x' } })
+
+    const body = await response.json() as ErrorBody
+    expect(response.status).toBe(422)
+    expect(body.metadata.issues?.[0]).toEqual({ path: 'name', message: expect.any(String) as string, code: 'invalid_type' })
+  })
+
+  it('returns 400 INVALID_IMAGE_TYPE when the sniffed MIME is not allowed', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+    mockProcessImage.mockResolvedValueOnce({ errorCode: ErrorCode.INVALID_IMAGE_TYPE })
+
+    const response = await apiMultipartRequest('/v1/items', {
+      method: 'POST',
+      token,
+      fields: { name: 'Nintendo Switch' },
+      image: { buffer: Buffer.from('plain text'), filename: 'fake.jpg', contentType: 'image/jpeg' },
+    })
+
+    const body = await response.json() as ErrorBody
+    expect(response.status).toBe(400)
+    expect(body.code).toBe(ErrorCode.INVALID_IMAGE_TYPE)
+    expect(vi.mocked(db.transaction)).not.toHaveBeenCalled()
+  })
+
+  it('returns 400 INVALID_IMAGE when the image part is empty', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+
+    const response = await apiMultipartRequest('/v1/items', {
+      method: 'POST',
+      token,
+      fields: { name: 'Nintendo Switch' },
+      image: { buffer: Buffer.alloc(0) },
+    })
+
+    const body = await response.json() as ErrorBody
+    expect(response.status).toBe(400)
+    expect(body.code).toBe(ErrorCode.INVALID_IMAGE)
+    expect(mockProcessImage).not.toHaveBeenCalled()
+  })
+
+  it('returns 413 PAYLOAD_TOO_LARGE when the pipeline rejects an oversized image', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+    mockProcessImage.mockResolvedValueOnce({ errorCode: ErrorCode.PAYLOAD_TOO_LARGE })
+
+    const response = await apiMultipartRequest('/v1/items', {
+      method: 'POST',
+      token,
+      fields: { name: 'Nintendo Switch' },
+      image: { buffer: IMAGE_BUFFER },
+    })
+
+    const body = await response.json() as ErrorBody
+    expect(response.status).toBe(413)
+    expect(body.code).toBe(ErrorCode.PAYLOAD_TOO_LARGE)
+  })
+
+  it('returns 413 PAYLOAD_TOO_LARGE from the body limit before parsing the multipart body', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+    const oversized = Buffer.alloc(env.UPLOADS_MAX_SIZE_BYTES + UPLOAD_BODY_LIMIT_OVERFLOW_BYTES)
+
+    const response = await apiMultipartRequest('/v1/items', {
+      method: 'POST',
+      token,
+      fields: { name: 'Nintendo Switch' },
+      image: { buffer: oversized },
+    })
+
+    const body = await response.json() as ErrorBody
+    expect(response.status).toBe(413)
+    expect(body.code).toBe(ErrorCode.PAYLOAD_TOO_LARGE)
+    expect(mockProcessImage).not.toHaveBeenCalled()
+  })
+
+  it('returns 400 BAD_REQUEST on a malformed multipart body', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+
+    const response = await app.request('/v1/items', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'multipart/form-data; boundary=missing',
+      },
+      body: 'not a multipart payload',
+    })
+
+    const body = await response.json() as ErrorBody
+    expect(response.status).toBe(400)
+    expect(body.code).toBe(ErrorCode.BAD_REQUEST)
+  })
+
+  it('returns 401 when not authenticated', async () => {
+    const response = await apiMultipartRequest('/v1/items', {
+      method: 'POST',
+      fields: { name: 'Nintendo Switch' },
+      image: { buffer: IMAGE_BUFFER },
+    })
+
+    expect(response.status).toBe(401)
+    expect(mockProcessImage).not.toHaveBeenCalled()
+  })
+
+  it('deletes the new images row when the item transaction throws', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+    vi.mocked(db.transaction).mockRejectedValueOnce(new Error('insert failed'))
+
+    const response = await apiMultipartRequest('/v1/items', {
+      method: 'POST',
+      token,
+      fields: { name: 'Nintendo Switch' },
+      image: { buffer: IMAGE_BUFFER },
+    })
+
+    expect(response.status).toBe(500)
+    expect(vi.mocked(db.delete)).toHaveBeenCalledWith(images)
+    expect(vi.mocked(db.query.items.findFirst)).not.toHaveBeenCalled()
+  })
+
+  it('deletes the new images row when the item insert returns no row', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+    mockItemWriteTransaction(undefined)
+
+    const response = await apiMultipartRequest('/v1/items', {
+      method: 'POST',
+      token,
+      fields: { name: 'Nintendo Switch' },
+      image: { buffer: IMAGE_BUFFER },
+    })
+
+    const body = await response.json() as ErrorBody
+    expect(response.status).toBe(500)
+    expect(body.code).toBe(ErrorCode.INTERNAL_ERROR)
+    expect(vi.mocked(db.delete)).toHaveBeenCalledWith(images)
+  })
+})
+
+describe('PATCH /v1/items/:id — image replace / clear', () => {
+  const ITEM_WITH_IMAGE_ROW = { ...OWNED_ITEM_ROW, imageId: PREVIOUS_IMAGE_ID }
+  const PATH = `/v1/items/${OWNED_ITEM_ROW.id}`
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(OWNER_ACCESS_TOKEN_ENTRY)
+    mockProcessImage.mockResolvedValue({ image: NEW_IMAGE_ROW })
+  })
+
+  it('sets the uploaded image on an item without image', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+    const updatedRow = { ...OWNED_ITEM_ROW, imageId: NEW_IMAGE_ROW.id }
+    vi.mocked(db.query.items.findFirst)
+      .mockResolvedValueOnce(OWNED_ITEM_ROW)
+      .mockResolvedValueOnce(hydrated(updatedRow, NEW_IMAGE_ROW) as never)
+    const spies = mockItemWriteTransaction(updatedRow)
+
+    const response = await apiMultipartRequest(PATH, { method: 'PATCH', token, image: { buffer: IMAGE_BUFFER } })
+
+    const body = await response.json() as ItemImageBody
+    expect(response.status).toBe(200)
+    expect(body.item.image?.urls.md).toContain('-800.webp')
+    expect(spies.set).toHaveBeenCalledWith({ imageId: NEW_IMAGE_ROW.id })
+    expect(vi.mocked(db.delete)).not.toHaveBeenCalled()
+  })
+
+  it('replaces an uploaded image and deletes the previous images row', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+    const updatedRow = { ...OWNED_ITEM_ROW, imageId: NEW_IMAGE_ROW.id }
+    vi.mocked(db.query.items.findFirst)
+      .mockResolvedValueOnce(ITEM_WITH_IMAGE_ROW)
+      .mockResolvedValueOnce(hydrated(updatedRow, NEW_IMAGE_ROW) as never)
+    mockItemWriteTransaction(updatedRow)
+
+    const response = await apiMultipartRequest(PATH, { method: 'PATCH', token, image: { buffer: IMAGE_BUFFER } })
+
+    const body = await response.json() as ItemImageBody
+    expect(response.status).toBe(200)
+    expect(body.item.imageId).toBe(NEW_IMAGE_ROW.id)
+    expect(vi.mocked(db.delete)).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(db.delete)).toHaveBeenCalledWith(images)
+  })
+
+  it.each([
+    ['multipart', true],
+    ['JSON', false],
+  ])('clears the uploaded image with clearImage=true (%s) and deletes the previous row', async (_label, isMultipart) => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+    const updatedRow = { ...OWNED_ITEM_ROW, imageId: null }
+    vi.mocked(db.query.items.findFirst)
+      .mockResolvedValueOnce(ITEM_WITH_IMAGE_ROW)
+      .mockResolvedValueOnce(hydrated(updatedRow, null) as never)
+    const spies = mockItemWriteTransaction(updatedRow)
+
+    const response = isMultipart
+      ? await apiMultipartRequest(PATH, { method: 'PATCH', token, fields: { clearImage: 'true' } })
+      : await apiRequest(PATH, { method: 'PATCH', token, body: { clearImage: true } })
+
+    const body = await response.json() as ItemImageBody
+    expect(response.status).toBe(200)
+    expect(body.item.imageId).toBeNull()
+    expect(body.item.image).toBeNull()
+    expect(spies.set).toHaveBeenCalledWith({ imageId: null })
+    expect(vi.mocked(db.delete)).toHaveBeenCalledWith(images)
+    expect(mockProcessImage).not.toHaveBeenCalled()
+  })
+
+  it('returns 422 NO_FIELDS_TO_UPDATE when only clearImage=false is sent', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+
+    const response = await apiMultipartRequest(PATH, { method: 'PATCH', token, fields: { clearImage: 'false' } })
+
+    const body = await response.json() as ErrorBody
+    expect(response.status).toBe(422)
+    expect(body.code).toBe(ErrorCode.NO_FIELDS_TO_UPDATE)
+  })
+
+  it('returns 422 IMAGE_AND_CLEAR_CONFLICT when image and clearImage=true are both sent', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+
+    const response = await apiMultipartRequest(PATH, {
+      method: 'PATCH',
+      token,
+      fields: { clearImage: 'true' },
+      image: { buffer: IMAGE_BUFFER },
+    })
+
+    const body = await response.json() as ErrorBody
+    expect(response.status).toBe(422)
+    expect(body.code).toBe(ErrorCode.IMAGE_AND_CLEAR_CONFLICT)
+    expect(mockProcessImage).not.toHaveBeenCalled()
+    expect(vi.mocked(db.transaction)).not.toHaveBeenCalled()
+  })
+
+  it('returns 403 for a non-owner without processing the image', async () => {
+    const token = await generateTestToken(OTHER_USER_ID)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(makeAccessTokenEntry(OTHER_USER_ID))
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce({ ...OWNER_USER, id: OTHER_USER_ID } as never)
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(OWNED_ITEM_ROW)
+
+    const response = await apiMultipartRequest(PATH, { method: 'PATCH', token, image: { buffer: IMAGE_BUFFER } })
+
+    expect(response.status).toBe(403)
+    expect(mockProcessImage).not.toHaveBeenCalled()
+  })
+
+  it('returns 403 when the item creator was deleted (createdByUserId NULL)', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce({ ...OWNED_ITEM_ROW, createdByUserId: null })
+
+    const response = await apiMultipartRequest(PATH, { method: 'PATCH', token, image: { buffer: IMAGE_BUFFER } })
+
+    expect(response.status).toBe(403)
+    expect(mockProcessImage).not.toHaveBeenCalled()
+  })
+
+  it('returns 404 for an unknown item without processing the image', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(undefined)
+
+    const response = await apiMultipartRequest(PATH, { method: 'PATCH', token, image: { buffer: IMAGE_BUFFER } })
+
+    expect(response.status).toBe(404)
+    expect(mockProcessImage).not.toHaveBeenCalled()
+  })
+
+  it('returns 401 when not authenticated', async () => {
+    const response = await apiMultipartRequest(PATH, { method: 'PATCH', image: { buffer: IMAGE_BUFFER } })
+
+    expect(response.status).toBe(401)
+  })
+
+  it('rolls back the new image and keeps the previous one when the transaction throws', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(ITEM_WITH_IMAGE_ROW)
+    vi.mocked(db.transaction).mockRejectedValueOnce(new Error('update failed'))
+
+    const response = await apiMultipartRequest(PATH, { method: 'PATCH', token, image: { buffer: IMAGE_BUFFER } })
+
+    expect(response.status).toBe(500)
+    expect(vi.mocked(db.delete)).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(db.delete)).toHaveBeenCalledWith(images)
+  })
+
+  it('rolls back the new image when the item vanished before the update', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(ITEM_WITH_IMAGE_ROW)
+    mockItemWriteTransaction(undefined)
+
+    const response = await apiMultipartRequest(PATH, { method: 'PATCH', token, image: { buffer: IMAGE_BUFFER } })
+
+    expect(response.status).toBe(404)
+    expect(vi.mocked(db.delete)).toHaveBeenCalledTimes(1)
+  })
+
+  it('returns 413 PAYLOAD_TOO_LARGE from the body limit', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+    const oversized = Buffer.alloc(env.UPLOADS_MAX_SIZE_BYTES + UPLOAD_BODY_LIMIT_OVERFLOW_BYTES)
+
+    const response = await apiMultipartRequest(PATH, { method: 'PATCH', token, image: { buffer: oversized } })
+
+    expect(response.status).toBe(413)
+    expect(vi.mocked(db.query.items.findFirst)).not.toHaveBeenCalled()
   })
 })

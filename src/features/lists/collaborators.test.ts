@@ -11,7 +11,6 @@ const OWNER_USER = {
   passwordHash: 'hashed',
   authProvider: 'email' as const,
   role: 'user' as const,
-  avatarUrl: null,
   avatarImageId: null,
   isCgvAccepted: true,
   cgvAcceptedAt: new Date('2024-01-01'),
@@ -324,6 +323,7 @@ describe('POST /v1/collaborators/invites/accept', () => {
         ]),
       }),
     } as never)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce({ ...INVITEE_USER, avatarImage: null } as never)
 
     const response = await apiRequest('/v1/collaborators/invites/accept', {
       method: 'POST',
@@ -589,7 +589,7 @@ describe('GET /v1/lists/:id — embeds collaborators for owner', () => {
     }
     expect(response.status).toBe(200)
     expect(body.list.collaborators.map((entry) => entry.role)).toEqual(['owner', 'editor'])
-    expect(Object.keys(body.list.owner ?? {}).sort()).toEqual(['avatar', 'avatarUrl', 'email', 'id', 'username'])
+    expect(Object.keys(body.list.owner ?? {}).sort()).toEqual(['avatar', 'email', 'id', 'username'])
     for (const entry of body.list.collaborators) {
       expect(entry.user).not.toHaveProperty('isMarketingOptedIn')
       expect(entry.user).not.toHaveProperty('role')

@@ -14,7 +14,7 @@ import type { List } from './lists.schema.js'
 export const LIST_WITH_OWNER = {
   listUsers: {
     orderBy: [asc(listUsers.createdAt)],
-    with: { user: true },
+    with: { user: { with: { avatarImage: true } } },
   },
   listTags: {
     with: { tag: true },

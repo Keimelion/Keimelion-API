@@ -10,6 +10,7 @@ import { runWrite } from '../../shared/utils/admin-write.js'
 import { isPgUniqueViolation } from '../../shared/db/pg-errors.js'
 import { serviceError } from '../../shared/utils/response.js'
 import { findActiveEditorForList, insertListUser } from '../../db/entities/list-users/list-users.repository.js'
+import { findUserByIdWithAvatar } from '../../db/entities/users/users.repository.js'
 import {
   deleteExpiredPendingListInvites,
   findInviteByTokenHash,
@@ -137,8 +138,9 @@ export async function acceptListInvite(
 
   logInviteAccepted(acceptor.id, invite.listId, invite.id)
 
+  const acceptorWithAvatar = (await findUserByIdWithAvatar(acceptor.id)) ?? null
   return {
-    data: { invite: toInviteDetail(acceptedInvite, acceptor) },
+    data: { invite: toInviteDetail(acceptedInvite, acceptorWithAvatar) },
     httpStatus: HttpStatus.OK,
   }
 }

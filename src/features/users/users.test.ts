@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { db } from '../../db/client.js'
-import { apiRequest } from '../../shared/test/api-request.js'
+import { env } from '../../config/env.js'
+import { apiMultipartRequest, apiRequest } from '../../shared/test/api-request.js'
 import { generateTestToken, makeAccessTokenEntry } from '../../shared/test/auth.js'
 import { EXPORT_ENTITY_REGISTRY } from './export/export-entities.js'
 
@@ -11,7 +12,6 @@ const SAFE_USER = {
   passwordHash: 'hashed',
   authProvider: 'email' as const,
   role: 'user' as const,
-  avatarUrl: null,
   avatarImageId: null,
   isCgvAccepted: true,
   cgvAcceptedAt: new Date('2024-01-01'),
@@ -31,6 +31,7 @@ const SAFE_USER = {
 }
 
 const ACCESS_TOKEN_ENTRY = makeAccessTokenEntry(SAFE_USER.id)
+const UPLOAD_BODY_LIMIT_OVERFLOW_BYTES = 64 * 1024 + 1
 
 describe('GET /v1/users/me', () => {
   beforeEach(() => {
@@ -124,14 +125,54 @@ describe('PATCH /v1/users/me', () => {
     expect(body.user.username).toBe('newusername')
   })
 
-  it('returns 422 when avatar_url is not a valid URL', async () => {
+  it('keeps returning the current avatar when the avatar is not changed', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    const avatarImage = {
+      id: '00000000-0000-0000-0000-00000000e001',
+      hash: 'e'.repeat(64),
+      fileKey: 'ee/ee/' + 'e'.repeat(64),
+      mime: 'image/png',
+      sizeBytes: 4,
+      width: 640,
+      height: 480,
+      uploadedBy: SAFE_USER.id,
+      createdAt: new Date('2024-05-01'),
+      updatedAt: new Date('2024-05-01'),
+    }
+    const userWithAvatar = { ...SAFE_USER, avatarImageId: avatarImage.id }
+
+    vi.mocked(db.query.users.findFirst)
+      .mockResolvedValueOnce(SAFE_USER)
+      .mockResolvedValueOnce({ ...userWithAvatar, avatarImage } as never)
+    vi.mocked(db.update).mockReturnValueOnce({
+      set: vi.fn().mockReturnValueOnce({
+        where: vi.fn().mockReturnValueOnce({
+          returning: vi.fn().mockResolvedValueOnce([{ ...userWithAvatar, username: 'newusername' }]),
+        }),
+      }),
+    } as never)
+
+    const response = await apiRequest('/v1/users/me', {
+      method: 'PATCH',
+      token,
+      body: { username: 'newusername' },
+    })
+
+    const body = await response.json() as { user: { avatar: { id: string; urls: { md: string } } | null } }
+    expect(response.status).toBe(200)
+    expect(body.user.avatar?.id).toBe(avatarImage.id)
+    expect(body.user.avatar?.urls.md).toContain('-800.webp')
+    expect(vi.mocked(db.delete)).not.toHaveBeenCalled()
+  })
+
+  it('returns 422 when avatarUrl is sent (avatars are upload-only)', async () => {
     const token = await generateTestToken(SAFE_USER.id)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
 
     const response = await apiRequest('/v1/users/me', {
       method: 'PATCH',
       token,
-      body: { avatarUrl: 'not-a-url' },
+      body: { avatarUrl: 'https://example.com/avatar.png' },
     })
 
     expect(response.status).toBe(422)
@@ -387,7 +428,7 @@ describe('DELETE /v1/users/me', () => {
 
     expect(setArgs.email).toMatch(/^deleted_.*@deleted\.keimelion\.fr$/)
     expect(setArgs.username).toBeNull()
-    expect(setArgs.avatarUrl).toBeNull()
+    expect(setArgs.avatarImageId).toBeNull()
     expect(setArgs.passwordHash).toBeNull()
     expect(setArgs.deletedAt).toBeInstanceOf(Date)
 
@@ -532,7 +573,6 @@ describe('GET /v1/users/me/export', () => {
       id: '00000000-0000-0000-0000-000000000020',
       name: 'Test Item',
       description: null,
-      imageUrl: null,
       imageId: null,
       createdByUserId: SAFE_USER.id,
       createdAt: new Date('2024-01-01'),
@@ -1317,7 +1357,6 @@ const RESERVATION_PROFILE_ROW = {
       id: '00000000-0000-0000-0000-00000001b100',
       name: 'Fancy vase',
       description: null,
-      imageUrl: null,
       imageId: '00000000-0000-0000-0000-00000001b200',
       createdByUserId: null,
       createdAt: new Date('2024-04-01'),
@@ -1568,5 +1607,123 @@ describe('GET /v1/users/me/reservations', () => {
   it('returns 401 when no authorization header is provided', async () => {
     const response = await apiRequest('/v1/users/me/reservations')
     expect(response.status).toBe(401)
+  })
+})
+
+describe('RGPD export — item images uploaded via /items', () => {
+  const ITEM_IMAGE_ROW = {
+    id: '00000000-0000-0000-0000-00000000f001',
+    hash: 'f'.repeat(64),
+    fileKey: 'ff/ff/' + 'f'.repeat(64),
+    mime: 'image/png',
+    sizeBytes: 2048,
+    width: 800,
+    height: 600,
+    uploadedBy: SAFE_USER.id,
+    createdAt: new Date('2024-06-01'),
+    updatedAt: new Date('2024-06-01'),
+  }
+
+  const ITEM_WITH_UPLOADED_IMAGE = {
+    id: '00000000-0000-0000-0000-00000000f010',
+    name: 'Item with uploaded image',
+    description: null,
+    imageId: ITEM_IMAGE_ROW.id,
+    createdByUserId: SAFE_USER.id,
+    createdAt: new Date('2024-06-01'),
+    updatedAt: new Date('2024-06-01'),
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
+    vi.mocked(db.query.items.findMany).mockResolvedValue([ITEM_WITH_UPLOADED_IMAGE] as never)
+    vi.mocked(db.query.images.findMany).mockResolvedValue([ITEM_IMAGE_ROW] as never)
+  })
+
+  it('lists the item image in the JSON images section, referenced by items[].imageId', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+
+    const response = await apiRequest('/v1/users/me/export?format=json', { token })
+
+    expect(response.status).toBe(200)
+    const body = await response.json() as {
+      items: { id: string; imageId: string | null }[]
+      images: { id: string }[]
+    }
+    const exportedItem = body.items.find((item) => item.id === ITEM_WITH_UPLOADED_IMAGE.id)
+    expect(exportedItem?.imageId).toBe(ITEM_IMAGE_ROW.id)
+    expect(body.images.map((image) => image.id)).toContain(ITEM_IMAGE_ROW.id)
+    const serialized = JSON.stringify(body)
+    expect(serialized).not.toContain('fileKey')
+    expect(serialized).not.toContain(env.UPLOADS_DIR)
+  })
+
+  it('references the images.csv row from the items.csv imageId column without leaking storage paths', async () => {
+    const itemsDescriptor = EXPORT_ENTITY_REGISTRY.find((descriptor) => descriptor.filename === 'items.csv')
+    const imagesDescriptor = EXPORT_ENTITY_REGISTRY.find((descriptor) => descriptor.filename === 'images.csv')
+
+    const itemRows = await itemsDescriptor?.fetchRows(SAFE_USER.id) ?? []
+    const imageRows = await imagesDescriptor?.fetchRows(SAFE_USER.id) ?? []
+
+    expect(itemsDescriptor?.columns).toContain('imageId')
+    expect(itemRows[0]).toMatchObject({ imageId: ITEM_IMAGE_ROW.id })
+    expect(imageRows[0]).toMatchObject({ id: ITEM_IMAGE_ROW.id })
+    expect(imageRows[0]).not.toHaveProperty('fileKey')
+    expect(imagesDescriptor?.columns).not.toContain('fileKey')
+  })
+})
+
+describe('PATCH /v1/users/me — multipart guards', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
+  })
+
+  it('returns 422 issues in the {path, message, code} shape', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+
+    const response = await apiRequest('/v1/users/me', { method: 'PATCH', token, body: { isMarketingOptedIn: 'yes' } })
+
+    const body = await response.json() as { metadata: { issues: { path: string; message: string; code: string }[] } }
+    expect(response.status).toBe(422)
+    expect(body.metadata.issues[0]).toEqual({
+      path: 'isMarketingOptedIn',
+      message: expect.any(String) as string,
+      code: 'invalid_type',
+    })
+  })
+
+  it('returns 413 PAYLOAD_TOO_LARGE when the multipart body exceeds the upload body limit', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    const oversized = Buffer.alloc(env.UPLOADS_MAX_SIZE_BYTES + UPLOAD_BODY_LIMIT_OVERFLOW_BYTES)
+
+    const response = await apiMultipartRequest('/v1/users/me', { method: 'PATCH', token, image: { buffer: oversized } })
+
+    const body = await response.json() as { code: string }
+    expect(response.status).toBe(413)
+    expect(body.code).toBe('PAYLOAD_TOO_LARGE')
+    expect(vi.mocked(db.update)).not.toHaveBeenCalled()
+  })
+
+  it('returns 422 IMAGE_AND_CLEAR_CONFLICT when an avatar and clearAvatar=true are both sent', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+
+    const response = await apiMultipartRequest('/v1/users/me', {
+      method: 'PATCH',
+      token,
+      fields: { clearAvatar: 'true' },
+      image: { buffer: Buffer.from([0x89, 0x50, 0x4e, 0x47]) },
+    })
+
+    const body = await response.json() as { code: string }
+    expect(response.status).toBe(422)
+    expect(body.code).toBe('IMAGE_AND_CLEAR_CONFLICT')
+    expect(vi.mocked(db.update)).not.toHaveBeenCalled()
   })
 })

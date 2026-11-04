@@ -17,7 +17,6 @@ export const ADMIN_USER_FIXTURE: User = {
   passwordHash: 'hashed',
   authProvider: 'email',
   role: 'admin',
-  avatarUrl: null,
   avatarImageId: null,
   isCgvAccepted: true,
   cgvAcceptedAt: new Date('2024-01-01'),

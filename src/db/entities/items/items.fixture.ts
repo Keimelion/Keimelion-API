@@ -20,7 +20,6 @@ interface ItemFixture {
   id: string
   name: string
   description: string | null
-  imageUrl: string | null
   createdByEmail: string
 }
 
@@ -29,84 +28,72 @@ const ITEM_FIXTURES: readonly ItemFixture[] = [
     id: ITEM_IDS.BIRTHDAY_BOOK,
     name: 'Paperback book',
     description: null,
-    imageUrl: null,
     createdByEmail: 'user@example.com',
   },
   {
     id: ITEM_IDS.BIRTHDAY_HEADPHONES,
     name: 'Bluetooth headphones',
     description: 'Wireless hi-fi headphones with active noise cancellation.',
-    imageUrl: null,
     createdByEmail: 'user@example.com',
   },
   {
     id: ITEM_IDS.BIRTHDAY_PLANT,
     name: 'Green plant',
     description: 'Monstera deliciosa to decorate the living room.',
-    imageUrl: null,
     createdByEmail: 'user@example.com',
   },
   {
     id: ITEM_IDS.BIRTHDAY_RUNNING_SHOES,
     name: 'Running shoes',
     description: 'Size 42, for road training sessions.',
-    imageUrl: null,
     createdByEmail: 'user@example.com',
   },
   {
     id: ITEM_IDS.HOUSEWARMING_COFFEE,
     name: 'Coffee machine',
     description: 'Espresso machine with built-in grinder.',
-    imageUrl: null,
     createdByEmail: 'user@example.com',
   },
   {
     id: ITEM_IDS.HOUSEWARMING_LAMP,
     name: 'Designer lamp',
     description: null,
-    imageUrl: null,
     createdByEmail: 'user@example.com',
   },
   {
     id: ITEM_IDS.WEDDING_DISHES,
     name: 'Dinnerware set',
     description: 'Dinnerware set for twelve, white porcelain.',
-    imageUrl: null,
     createdByEmail: 'moderator@example.com',
   },
   {
     id: ITEM_IDS.WEDDING_LINEN,
     name: 'Household linen',
     description: 'Washed linen sheets and towels.',
-    imageUrl: null,
     createdByEmail: 'moderator@example.com',
   },
   {
     id: ITEM_IDS.WEDDING_VASE,
     name: 'Artisan vase',
     description: 'Handmade ceramic vase.',
-    imageUrl: null,
     createdByEmail: 'moderator@example.com',
   },
   {
     id: ITEM_IDS.WEDDING_WINE,
     name: 'Bordeaux wine',
     description: 'Case of six bottles of Saint-Émilion.',
-    imageUrl: null,
     createdByEmail: 'moderator@example.com',
   },
   {
     id: ITEM_IDS.WEDDING_STAND_MIXER,
     name: 'Stand mixer',
     description: null,
-    imageUrl: null,
     createdByEmail: 'moderator@example.com',
   },
   {
     id: ITEM_IDS.DELETED_BOOK,
     name: 'Old book',
     description: null,
-    imageUrl: null,
     createdByEmail: 'user@example.com',
   },
 ]
@@ -122,7 +109,6 @@ export async function seedItems(db: typeof Db): Promise<void> {
         id: fixture.id,
         name: fixture.name,
         description: fixture.description,
-        imageUrl: fixture.imageUrl,
         createdByUserId,
       },
     ]

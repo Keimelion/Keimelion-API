@@ -41,7 +41,7 @@ export interface ListItemsScope {
 }
 
 const RESERVATION_HYDRATION = {
-  user: true,
+  user: { with: { avatarImage: true } },
   listItem: {
     with: {
       item: { with: { image: true } },
@@ -50,7 +50,7 @@ const RESERVATION_HYDRATION = {
           listUsers: {
             where: eq(listUsers.role, ListUserRoles.OWNER),
             limit: 1,
-            with: { user: true },
+            with: { user: { with: { avatarImage: true } } },
           },
         },
       },

@@ -5,7 +5,7 @@ import { errorMap } from './response.js'
 
 const ROOT_PATH = '<root>'
 
-interface ValidationIssue {
+export interface ValidationIssue {
   path: string
   message: string
   code: string
@@ -25,7 +25,7 @@ export function validationErrorHandler(result: ValidationResult, c: Context): Re
   return undefined
 }
 
-function mapZodIssues(error: $ZodError): ValidationIssue[] {
+export function mapZodIssues(error: $ZodError): ValidationIssue[] {
   return error.issues.map((issue) => ({
     path: formatIssuePath(issue.path),
     message: issue.message,

@@ -1,4 +1,4 @@
-import { findUserById } from '../../../db/entities/users/users.repository.js'
+import { findUserByIdWithAvatar } from '../../../db/entities/users/users.repository.js'
 import {
   findFeedbackByUser,
   findImagesByUploaderForExport,
@@ -118,7 +118,6 @@ const profileEntityDescriptor: ExportEntityDescriptor = {
     'username',
     'authProvider',
     'role',
-    'avatarUrl',
     'isCgvAccepted',
     'cgvAcceptedAt',
     'isMarketingOptedIn',
@@ -129,7 +128,7 @@ const profileEntityDescriptor: ExportEntityDescriptor = {
     'updatedAt',
   ],
   fetchRows: async (userId: string) => {
-    const user = await findUserById(userId)
+    const user = await findUserByIdWithAvatar(userId)
     if (!user) return []
     return [toUserDetail(user)]
   },
@@ -141,7 +140,6 @@ const itemsEntityDescriptor: ExportEntityDescriptor = {
     'id',
     'name',
     'description',
-    'imageUrl',
     'imageId',
     'createdAt',
     'updatedAt',

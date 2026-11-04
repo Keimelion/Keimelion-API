@@ -24,7 +24,6 @@ export interface ItemDetail {
   id: string
   name: string
   description: string | null
-  imageUrl: string | null
   imageId: string | null
   image: ImageDetail | null
   createdByUserId: string | null
@@ -36,12 +35,6 @@ export interface ItemWithSources extends ItemDetail {
   sources: ItemSourceDetail[]
   categories: CategoryPublic[]
   tags: TagPublic[]
-}
-
-export interface ItemWrite {
-  name: string
-  description: string | null
-  imageUrl: string | null
 }
 
 export interface ItemRowWithImage extends Item {
@@ -101,13 +94,12 @@ export interface ListItemWrite {
   sortOrder: number | null
 }
 
-export function toItemDetail(item: Item | ItemRowWithImage): ItemDetail {
-  const image = 'image' in item ? item.image : null
+export function toItemDetail(item: ItemRowWithImage): ItemDetail {
+  const { image } = item
   return {
     id: item.id,
     name: item.name,
     description: item.description ?? null,
-    imageUrl: item.imageUrl ?? null,
     imageId: item.imageId ?? null,
     image: image ? toImageDetail(image) : null,
     createdByUserId: item.createdByUserId ?? null,

@@ -10,7 +10,6 @@ const USER = {
   passwordHash: 'hashed',
   authProvider: 'email' as const,
   role: 'user' as const,
-  avatarUrl: null,
   avatarImageId: null,
   isCgvAccepted: true,
   cgvAcceptedAt: new Date('2024-01-01'),

@@ -1,5 +1,6 @@
 import { rateLimiter } from 'hono-rate-limiter'
-import type { Context, MiddlewareHandler } from 'hono'
+import { bodyLimit } from 'hono/body-limit'
+import type { Context, MiddlewareHandler, Next } from 'hono'
 import { ErrorCode } from '../enums/error-code.js'
 import { HonoContextKey } from '../enums/context-key.js'
 import { env } from '../../config/env.js'
@@ -11,6 +12,7 @@ import type { User } from '../../db/entities/users/users.schema.js'
 const ONE_MINUTE_MS = 60 * 1000
 const TEN_MINUTES_MS = 10 * 60 * 1000
 const ONE_HOUR_MS = 60 * 60 * 1000
+const MULTIPART_FIELDS_OVERHEAD_BYTES = 64 * 1024
 
 function ipKeyGenerator(context: Context): string {
   return context.req.header('x-forwarded-for') ?? context.req.header('cf-connecting-ip') ?? 'unknown'
@@ -40,12 +42,27 @@ export const RATE_LIMITS = {
   PUBLIC: () => createRateLimiter(10, ONE_MINUTE_MS),
 } as const
 
+const uploadBodyLimit = bodyLimit({
+  maxSize: env.UPLOADS_MAX_SIZE_BYTES + MULTIPART_FIELDS_OVERHEAD_BYTES,
+  onError: () => sendError(ErrorCode.PAYLOAD_TOO_LARGE),
+})
+
+// Multipart upload routes: the given middleware (typically RATE_LIMITS.UPLOAD) runs first, then the
+// body size cap rejects oversized bodies before Hono's parseBody buffers them in memory.
 export function multipartOnly(middleware: MiddlewareHandler): MiddlewareHandler {
   return async (context, next) => {
     const contentType = context.req.header('Content-Type') ?? ''
     if (!contentType.toLowerCase().startsWith('multipart/form-data')) return next()
-    return middleware(context, next)
+    return middleware(context, () => runUploadBodyLimit(context, next))
   }
+}
+
+async function runUploadBodyLimit(
+  context: Parameters<MiddlewareHandler>[0],
+  next: Next,
+): Promise<void> {
+  const outcome: unknown = await uploadBodyLimit(context, next)
+  if (outcome instanceof Response) context.res = outcome
 }
 
 // Per-user when authenticated (keyed on user.id so a single account cannot bypass by rotating IPs),

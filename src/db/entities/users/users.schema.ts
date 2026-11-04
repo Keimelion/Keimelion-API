@@ -17,7 +17,6 @@ export const users = pgTable('users', {
   passwordHash: text('password_hash'),
   authProvider: authProviderEnum('auth_provider').notNull(),
   role: userRoleEnum('role').notNull().default('user'),
-  avatarUrl: text('avatar_url'),
   avatarImageId: uuid('avatar_image_id').references((): AnyPgColumn => images.id, { onDelete: 'set null' }),
   isCgvAccepted: boolean('is_cgv_accepted').notNull().default(false),
   cgvAcceptedAt: timestamp('cgv_accepted_at', { withTimezone: true }),

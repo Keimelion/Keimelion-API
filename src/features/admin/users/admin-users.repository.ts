@@ -51,7 +51,7 @@ interface AdminInsertUserFields {
   passwordResetTokenExpiresAt: Date
 }
 
-type AdminUpdateUserFields = Partial<Pick<typeof users.$inferInsert, 'avatarUrl' | 'isMarketingOptedIn' | 'role'>>
+type AdminUpdateUserFields = Partial<Pick<typeof users.$inferInsert, 'avatarImageId' | 'isMarketingOptedIn' | 'role'>>
 
 function buildUsersWhere(filters: ListUsersFilters): SQL | undefined {
   const generic = filters.genericFilters ?? []

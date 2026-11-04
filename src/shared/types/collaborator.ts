@@ -1,7 +1,6 @@
 import type { ListInvite } from '../../db/entities/list-invites/list-invites.schema.js'
 import type { ListUserRole } from '../enums/list-user-role.js'
 import type { InviteStatus } from '../enums/invite-status.js'
-import type { User } from '../../db/entities/users/users.schema.js'
 import type { ListUserWithUser } from './list.js'
 import type { UserRowWithAvatar } from './user.js'
 import { toImageDetail } from '../../features/uploads/images.mapper.js'
@@ -14,7 +13,6 @@ export interface ListMemberUser {
   id: string
   email: string
   username: string | null
-  avatarUrl: string | null
   avatar: ImageDetail | null
 }
 
@@ -37,13 +35,12 @@ export interface CollaboratorDetail {
   updatedAt: Date
 }
 
-export function toListMemberUser(user: User | UserRowWithAvatar): ListMemberUser {
-  const avatarImage = 'avatarImage' in user ? user.avatarImage : null
+export function toListMemberUser(user: UserRowWithAvatar): ListMemberUser {
+  const { avatarImage } = user
   return {
     id: user.id,
     email: user.email,
     username: user.username ?? null,
-    avatarUrl: user.avatarUrl ?? null,
     avatar: avatarImage ? toImageDetail(avatarImage) : null,
   }
 }
@@ -66,7 +63,7 @@ export function toPendingInviteSummary(row: ListInvite): CollaboratorSummary {
   }
 }
 
-export function toInviteDetail(row: ListInvite, user: User | null = null): CollaboratorDetail {
+export function toInviteDetail(row: ListInvite, user: UserRowWithAvatar | null = null): CollaboratorDetail {
   return {
     id: row.id,
     listId: row.listId,

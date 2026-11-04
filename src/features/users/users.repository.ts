@@ -14,6 +14,7 @@ import { getOffset } from '../../shared/schemas/pagination.js'
 import { env } from '../../config/env.js'
 import { hashPassword } from '../../shared/utils/hash.js'
 import type { User } from '../../db/entities/users/users.schema.js'
+import type { UserRowWithAvatar } from '../../shared/types/user.js'
 import type { RegisterInput } from '../auth/endpoints/register.js'
 import type { ReservationProfileRow } from '../reservations/reservations.types.js'
 import type { PaginationInput } from '../../shared/schemas/pagination.js'
@@ -23,11 +24,11 @@ type SetPasswordResetTokenFields = Partial<Pick<typeof users.$inferInsert, 'pass
 type ResetPasswordFields = Pick<typeof users.$inferInsert, 'passwordHash' | 'passwordResetToken' | 'passwordResetTokenExpiresAt'>
 
 type UpdateUserProfileFields = Partial<
-  Pick<typeof users.$inferInsert, 'username' | 'avatarUrl' | 'avatarImageId' | 'isMarketingOptedIn' | 'defaultCurrencyCode'>
+  Pick<typeof users.$inferInsert, 'username' | 'avatarImageId' | 'isMarketingOptedIn' | 'defaultCurrencyCode'>
 >
 
-export function findUserByEmail(email: string): Promise<User | undefined> {
-  return db.query.users.findFirst({ where: eq(users.email, email) })
+export function findUserByEmail(email: string): Promise<UserRowWithAvatar | undefined> {
+  return db.query.users.findFirst({ where: eq(users.email, email), with: { avatarImage: true } })
 }
 
 export function findUserByEmailVerifyToken(token: string): Promise<User | undefined> {
@@ -101,13 +102,13 @@ export async function resetUserPassword(userId: string, input: ResetPasswordFiel
 const MY_RESERVATIONS_HYDRATION = {
   listItem: {
     with: {
-      item: true,
+      item: { with: { image: true } },
       list: {
         with: {
           listUsers: {
             where: eq(listUsers.role, ListUserRoles.OWNER),
             limit: 1,
-            with: { user: true },
+            with: { user: { with: { avatarImage: true } } },
           },
         },
       },

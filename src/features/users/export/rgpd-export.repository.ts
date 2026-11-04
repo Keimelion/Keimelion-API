@@ -15,7 +15,7 @@ import { users } from '../../../db/entities/users/users.schema.js'
 import { CONTRIBUTOR_ROLE_VALUES, ListUserRoles } from '../../../shared/enums/list-user-role.js'
 import type { Feedback } from '../../../db/entities/feedback/feedback.schema.js'
 import type { Image } from '../../../db/entities/images/images.schema.js'
-import type { Item } from '../../../db/entities/items/items.schema.js'
+import type { ItemRowWithImage } from '../../../shared/types/item.js'
 import type { ItemSource } from '../../../db/entities/item-sources/item-sources.schema.js'
 import type { ListUser } from '../../../db/entities/list-users/list-users.schema.js'
 import type { ListInvite } from '../../../db/entities/list-invites/list-invites.schema.js'
@@ -24,9 +24,10 @@ import type { ListTag } from '../../../db/entities/list-tags/list-tags.schema.js
 import type { List } from '../../../db/entities/lists/lists.schema.js'
 import type { Tag } from '../../../db/entities/tags/tags.schema.js'
 
-export async function findItemsByCreator(userId: string): Promise<Item[]> {
+export async function findItemsByCreator(userId: string): Promise<ItemRowWithImage[]> {
   return db.query.items.findMany({
     where: eq(items.createdByUserId, userId),
+    with: { image: true },
   })
 }
 

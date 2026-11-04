@@ -7,7 +7,7 @@ import { hashPassword, verifyPassword } from '../../shared/utils/hash.js'
 import { findUserById, findUserByIdWithAvatar, anonymizeUser, updatePasswordHash, insertDeletionAudit } from '../../db/entities/users/users.repository.js'
 import { deleteAllUserTokens } from '../../db/entities/access-tokens/access-tokens.repository.js'
 import { revokeAllUserSessions } from '../../shared/db/user-sessions.js'
-import { cleanupReplacedImage, processOptionalImage, rollbackImage } from '../uploads/images.service.js'
+import { cleanupReplacedImage, processOptionalImage, runWithImageRollback } from '../uploads/images.service.js'
 import {
   findFeedbackByUser,
   findImagesByUploaderForExport,
@@ -42,7 +42,9 @@ import {
 import { buildPaginatedResponse } from '../../shared/schemas/pagination.js'
 import { toReservationProfileEntry } from '../reservations/reservations.types.js'
 import type { ReservationProfileEntry } from '../reservations/reservations.types.js'
-import type { UserDetail, UserWrite } from '../../shared/types/user.js'
+import type { UserDetail, UserRowWithAvatar, UserWrite } from '../../shared/types/user.js'
+import type { User } from '../../db/entities/users/users.schema.js'
+import type { Image } from '../../db/entities/images/images.schema.js'
 import type { ServiceResult } from '../../shared/types/service.js'
 import type { PaginatedResponse } from '../../shared/types/api.js'
 import type { PartialWrite } from '../../shared/types/api.js'
@@ -94,10 +96,10 @@ export async function updateProfile(
   const fieldPatch = pickDefined(rest)
 
   if (avatarBuffer && clearAvatar) {
-    return serviceError(ErrorCode.UNPROCESSABLE_ENTITY)
+    return serviceError(ErrorCode.IMAGE_AND_CLEAR_CONFLICT)
   }
 
-  const previous = await findUserById(userId)
+  const previous = await findUserByIdWithAvatar(userId)
   const previousAvatarImageId = previous?.avatarImageId ?? null
 
   const imageOutcome = await processOptionalImage(avatarBuffer, userId)
@@ -109,11 +111,10 @@ export async function updateProfile(
     return serviceError(ErrorCode.NO_FIELDS_TO_UPDATE)
   }
 
-  const updatedUser = await updateUserProfile(userId, patch)
-  if (!updatedUser) {
-    await rollbackImage(newImageId, 'user.update_profile')
-    return serviceError(ErrorCode.USER_UPDATE_FAILED)
-  }
+  const updatedUser = await runWithImageRollback(newImageId, 'user.update_profile', () =>
+    updateUserProfile(userId, patch),
+  )
+  if (!updatedUser) return serviceError(ErrorCode.USER_UPDATE_FAILED)
 
   await cleanupReplacedImage(
     previousAvatarImageId,
@@ -122,9 +123,20 @@ export async function updateProfile(
   )
 
   return {
-    data: { user: toUserDetail({ ...updatedUser, avatarImage: imageOutcome.image }) },
+    data: { user: toUserDetail({ ...updatedUser, avatarImage: resolveAvatarImage(updatedUser, imageOutcome.image, previous) }) },
     httpStatus: HttpStatus.OK,
   }
+}
+
+// The avatar image row is only loaded for the previous state; reuse it when the avatar did not change.
+function resolveAvatarImage(
+  updatedUser: User,
+  uploadedImage: Image | null,
+  previous: UserRowWithAvatar | undefined,
+): Image | null {
+  if (uploadedImage) return uploadedImage
+  if (updatedUser.avatarImageId === null) return null
+  return previous?.avatarImage ?? null
 }
 
 function buildAvatarPatch(
@@ -206,7 +218,7 @@ export async function exportUserData(userId: string, format: ExportFormat): Prom
     }
   }
 
-  const user = await findUserById(userId)
+  const user = await findUserByIdWithAvatar(userId)
   const profile = user ? toUserDetail(user) : null
 
   const [

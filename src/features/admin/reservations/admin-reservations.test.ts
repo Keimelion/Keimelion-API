@@ -61,7 +61,6 @@ const RESERVATION_ROW = {
       id: ITEM_ID,
       name: 'Catalog Item',
       description: null,
-      imageUrl: null,
       imageId: null,
       image: null,
       createdByUserId: null,

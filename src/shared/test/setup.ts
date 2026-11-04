@@ -30,6 +30,8 @@ vi.mock('../../config/env.js', () => ({
     UPLOADS_DIR: '/tmp/keimelion-test-uploads',
     UPLOADS_MAX_SIZE_BYTES: 10_000_000,
     UPLOADS_PUBLIC_BASE_URL: 'http://localhost:3000/uploads',
+    IMAGE_ORPHAN_CLEANUP_INTERVAL_MS: 86_400_000,
+    IMAGE_ORPHAN_GRACE_HOURS: 24,
   },
 }))
 

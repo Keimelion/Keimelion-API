@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { db } from '../../db/client.js'
 import { env } from '../../config/env.js'
 import { NodeEnvs } from '../../shared/enums/node-env.js'
-import { apiRequest } from '../../shared/test/api-request.js'
+import { apiMultipartRequest, apiRequest } from '../../shared/test/api-request.js'
 import { generateTestToken, makeAccessTokenEntry } from '../../shared/test/auth.js'
 
 const TEST_REFRESH_TOKEN_HASH = 'a'.repeat(64)
@@ -14,7 +14,6 @@ const VALID_USER = {
   passwordHash: '$2a$04$somevalidhashvalue.thatislong.enoughfortest',
   authProvider: 'email' as const,
   role: 'user' as const,
-  avatarUrl: null,
   avatarImageId: null,
   isCgvAccepted: true,
   cgvAcceptedAt: new Date('2024-01-01'),
@@ -282,6 +281,40 @@ describe('POST /v1/auth/login', () => {
     expect(typeof body.refreshToken).toBe('string')
     expect(body.refreshToken.length).toBeGreaterThan(0)
     expect(body.user.email).toBe('user@example.com')
+  })
+
+  it('returns the uploaded avatar with the user on login', async () => {
+    const bcrypt = await import('bcryptjs')
+    const hash = await bcrypt.default.hash('securepassword123', 4)
+    const avatarImage = {
+      id: '00000000-0000-0000-0000-00000000e002',
+      hash: 'f'.repeat(64),
+      fileKey: 'ff/ff/' + 'f'.repeat(64),
+      mime: 'image/png',
+      sizeBytes: 4,
+      width: 640,
+      height: 480,
+      uploadedBy: VALID_USER.id,
+      createdAt: new Date('2024-05-01'),
+      updatedAt: new Date('2024-05-01'),
+    }
+
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce({
+      ...VALID_USER,
+      passwordHash: hash,
+      avatarImageId: avatarImage.id,
+      avatarImage,
+    } as never)
+    mockInsertNoReturning()
+
+    const response = await apiRequest('/v1/auth/login', {
+      method: 'POST',
+      body: { email: 'user@example.com', password: 'securepassword123' },
+    })
+
+    const body = await response.json() as { user: { avatar: { id: string } | null } }
+    expect(response.status).toBe(200)
+    expect(body.user.avatar?.id).toBe(avatarImage.id)
   })
 
   it('returns 401 when email is unknown', async () => {
@@ -747,5 +780,40 @@ describe('POST /v1/auth/refresh', () => {
     })
 
     expect(response.status).toBe(422)
+  })
+})
+
+describe('POST /v1/auth/register — multipart guards', () => {
+  const UPLOAD_BODY_LIMIT_OVERFLOW_BYTES = 64 * 1024 + 1
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('returns 413 PAYLOAD_TOO_LARGE when the multipart body exceeds the upload body limit', async () => {
+    const oversized = Buffer.alloc(env.UPLOADS_MAX_SIZE_BYTES + UPLOAD_BODY_LIMIT_OVERFLOW_BYTES)
+
+    const response = await apiMultipartRequest('/v1/auth/register', {
+      method: 'POST',
+      fields: { email: 'user@example.com', password: 'securepassword123' },
+      image: { buffer: oversized },
+    })
+
+    const body = await response.json() as { code: string }
+    expect(response.status).toBe(413)
+    expect(body.code).toBe('PAYLOAD_TOO_LARGE')
+    expect(vi.mocked(db.insert)).not.toHaveBeenCalled()
+  })
+
+  it('returns 422 issues in the {path, message, code} shape for multipart bodies', async () => {
+    const response = await apiMultipartRequest('/v1/auth/register', {
+      method: 'POST',
+      fields: { email: 'not-an-email', password: 'securepassword123' },
+    })
+
+    const body = await response.json() as { metadata: { issues: { path: string; message: string; code: string }[] } }
+    expect(response.status).toBe(422)
+    expect(body.metadata.issues[0]).toMatchObject({ path: 'email', code: 'invalid_format' })
+    expect(typeof body.metadata.issues[0]?.message).toBe('string')
   })
 })
