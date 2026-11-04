@@ -4,12 +4,12 @@ import { users } from '../../db/entities/users/users.schema.js'
 import { reservations } from '../../db/entities/reservations/reservations.schema.js'
 import { listItems } from '../../db/entities/list-items/list-items.schema.js'
 import { lists } from '../../db/entities/lists/lists.schema.js'
-import { listCollaborators } from '../../db/entities/list-collaborators/list-collaborators.schema.js'
+import { listUsers } from '../../db/entities/list-users/list-users.schema.js'
 import {
   userReservationsEntity,
   type UserReservationsSortField,
 } from '../../db/entities/reservations/reservations.repository.js'
-import { CollabRoles } from '../../shared/enums/collab-role.js'
+import { ListUserRoles } from '../../shared/enums/list-user-role.js'
 import { getOffset } from '../../shared/schemas/pagination.js'
 import { env } from '../../config/env.js'
 import { hashPassword } from '../../shared/utils/hash.js'
@@ -104,8 +104,8 @@ const MY_RESERVATIONS_HYDRATION = {
       item: true,
       list: {
         with: {
-          collaborators: {
-            where: eq(listCollaborators.collabRole, CollabRoles.OWNER),
+          listUsers: {
+            where: eq(listUsers.role, ListUserRoles.OWNER),
             limit: 1,
             with: { user: true },
           },

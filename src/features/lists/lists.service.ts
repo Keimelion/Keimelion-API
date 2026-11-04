@@ -18,12 +18,14 @@ import {
   updateList,
   softDeleteList,
 } from '../../db/entities/lists/lists.repository.js'
-import { insertOwnerCollaborator } from '../../db/entities/list-collaborators/list-collaborators.repository.js'
+import { insertListUser } from '../../db/entities/list-users/list-users.repository.js'
+import { ListUserRoles } from '../../shared/enums/list-user-role.js'
 import { upsertTagsBySlugs } from '../../db/entities/tags/tags.repository.js'
 import { replaceListTags } from '../../db/entities/list-tags/list-tags.repository.js'
 import { toItemDetail, toListItemDetail } from '../../shared/types/item.js'
-import { extractOwnerDetail, toListDetail } from '../../shared/types/list.js'
-import { findListsOwnedBy, countListsOwnedBy } from './lists.repository.js'
+import { toListDetail } from '../../shared/types/list.js'
+import { findListsAccessibleBy, countListsAccessibleBy } from './lists.repository.js'
+import { buildCollaboratorsByListId, buildCollaboratorsForList } from './collaborators.mapper.js'
 import type { User } from '../../db/entities/users/users.schema.js'
 import type { InsertList } from '../../db/entities/lists/lists.repository.js'
 import type { ListDetail, ListRowWithOwner } from '../../shared/types/list.js'
@@ -51,17 +53,12 @@ export async function createUserList(
   const outcome = await insertListWithSlugRetry(user, input, tagSlugs)
   if ('errorCode' in outcome) return serviceError(outcome.errorCode)
 
-  if (tagSlugs !== null && tagSlugs.length > 0) {
-    const refreshed = await findListWithOwner(outcome.row.id)
-    if (refreshed) {
-      return {
-        data: { list: toListDetail(refreshed, extractOwnerDetail(refreshed)) },
-        httpStatus: HttpStatus.CREATED,
-      }
-    }
-  }
+  const sourceRow =
+    tagSlugs !== null && tagSlugs.length > 0
+      ? (await findListWithOwner(outcome.row.id)) ?? outcome.row
+      : outcome.row
   return {
-    data: { list: toListDetail(outcome.row, extractOwnerDetail(outcome.row)) },
+    data: { list: toListDetail(sourceRow, await buildCollaboratorsForList(sourceRow)) },
     httpStatus: HttpStatus.CREATED,
   }
 }
@@ -71,20 +68,21 @@ export async function listUserLists(
   input: ListUserListsInput,
 ): Promise<ServiceResult<PaginatedResponse<ListDetail>>> {
   const [rows, total] = await Promise.all([
-    findListsOwnedBy(userId, input, input.sort),
-    countListsOwnedBy(userId),
+    findListsAccessibleBy(userId, input, input.sort),
+    countListsAccessibleBy(userId),
   ])
 
-  const items = rows.map((row) => toListDetail(row, extractOwnerDetail(row)))
+  const collaboratorsByListId = await buildCollaboratorsByListId(rows)
+  const items = rows.map((row) => toListDetail(row, collaboratorsByListId.get(row.id) ?? []))
   return {
     data: buildPaginatedResponse(items, input, total),
     httpStatus: HttpStatus.OK,
   }
 }
 
-export function getUserListById(list: ListRowWithOwner): ServiceResult<{ list: ListDetail }> {
+export async function getUserListById(list: ListRowWithOwner): Promise<ServiceResult<{ list: ListDetail }>> {
   return {
-    data: { list: toListDetail(list, extractOwnerDetail(list)) },
+    data: { list: toListDetail(list, await buildCollaboratorsForList(list)) },
     httpStatus: HttpStatus.OK,
   }
 }
@@ -126,11 +124,11 @@ export async function updateUserList(
   if (tagSlugs === null) {
     const refreshed: ListRowWithOwner = {
       ...writeOutcome.row,
-      collaborators: existing.collaborators,
+      listUsers: existing.listUsers,
       listTags: existing.listTags,
     }
     return {
-      data: { list: toListDetail(refreshed, extractOwnerDetail(refreshed)) },
+      data: { list: toListDetail(refreshed, await buildCollaboratorsForList(refreshed)) },
       httpStatus: HttpStatus.OK,
     }
   }
@@ -138,7 +136,7 @@ export async function updateUserList(
   const refreshed = await findListWithOwner(existing.id)
   if (!refreshed) return serviceError(ErrorCode.NOT_FOUND)
   return {
-    data: { list: toListDetail(refreshed, extractOwnerDetail(refreshed)) },
+    data: { list: toListDetail(refreshed, await buildCollaboratorsForList(refreshed)) },
     httpStatus: HttpStatus.OK,
   }
 }
@@ -206,17 +204,17 @@ async function tryInsertList(
     const created = await db.transaction(async (tx) => {
       const inserted = await insertList(buildCreatePayload(input, slug), tx)
       if (!inserted) throw new Error('List insert returned no row')
-      const collaborator = await insertOwnerCollaborator(inserted.id, user.id, tx)
-      if (!collaborator) throw new Error('Owner collaborator insert returned no row')
+      const ownerMembership = await insertListUser(inserted.id, user.id, ListUserRoles.OWNER, tx)
+      if (!ownerMembership) throw new Error('Owner list_users insert returned no row')
       if (tagSlugs !== null && tagSlugs.length > 0) {
         const tagIds = await upsertTagsBySlugs(tagSlugs, user.id, tx)
         await replaceListTags(inserted.id, tagIds, tx)
       }
-      return { list: inserted, collaborator }
+      return { list: inserted, ownerMembership }
     })
     const row: ListRowWithOwner = {
       ...created.list,
-      collaborators: [{ ...created.collaborator, user }],
+      listUsers: [{ ...created.ownerMembership, user }],
       listTags: [],
     }
     return { row }

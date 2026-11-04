@@ -1,6 +1,6 @@
 import { zValidator } from '@hono/zod-validator'
 import { authMiddleware } from '../../../shared/middlewares/auth.js'
-import { getList, listOwnershipMiddleware } from '../../../shared/middlewares/list-access.middleware.js'
+import { getList, listContributorMiddleware } from '../../../shared/middlewares/list-access.middleware.js'
 import { jsonResult } from '../../../shared/utils/response.js'
 import { validationErrorHandler } from '../../../shared/utils/validation.js'
 import { uuidParamSchema } from '../../../shared/schemas/params.js'
@@ -12,9 +12,9 @@ export function mountGetUserList(router: FeatureRouter): void {
     '/:id',
     authMiddleware,
     zValidator('param', uuidParamSchema, validationErrorHandler),
-    listOwnershipMiddleware({ paramName: 'id' }),
-    (context) => {
-      return jsonResult(context, getUserListById(getList(context)))
+    listContributorMiddleware({ paramName: 'id' }),
+    async (context) => {
+      return jsonResult(context, await getUserListById(getList(context)))
     },
   )
 }

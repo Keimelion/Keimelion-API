@@ -13,9 +13,11 @@ import {
   findImagesByUploaderForExport,
   findItemsByCreator,
   findItemSourcesByCreator,
+  findListInvitesForExport,
   findListItemsForContributor,
   findListsOwnedByForExport,
   findListTagsForOwner,
+  findListUsersForExport,
   findReservationsForExport,
   findTagsCreatedByUser,
 } from './export/rgpd-export.repository.js'
@@ -32,8 +34,10 @@ import { toImageDetail } from '../uploads/images.mapper.js'
 import { buildExportZipStream } from './export/csv-archive-writer.js'
 import {
   EXPORT_ENTITY_REGISTRY,
+  toExportListInviteRow,
   toExportListRow,
   toExportListTagRow,
+  toExportListUserRow,
 } from './export/export-entities.js'
 import { buildPaginatedResponse } from '../../shared/schemas/pagination.js'
 import { toReservationProfileEntry } from '../reservations/reservations.types.js'
@@ -212,6 +216,8 @@ export async function exportUserData(userId: string, format: ExportFormat): Prom
     rawLists,
     rawTags,
     rawListTags,
+    rawListUsers,
+    rawListInvites,
     rawFeedback,
     rawReservations,
     rawImages,
@@ -222,6 +228,8 @@ export async function exportUserData(userId: string, format: ExportFormat): Prom
     findListsOwnedByForExport(userId),
     findTagsCreatedByUser(userId),
     findListTagsForOwner(userId),
+    findListUsersForExport(userId),
+    findListInvitesForExport(userId),
     findFeedbackByUser(userId),
     findReservationsForExport(userId),
     findImagesByUploaderForExport(userId),
@@ -237,6 +245,8 @@ export async function exportUserData(userId: string, format: ExportFormat): Prom
       lists: rawLists.map(toExportListRow),
       tags: rawTags.map(toTagDetail),
       listTags: rawListTags.map(toExportListTagRow),
+      listUsers: rawListUsers.map(toExportListUserRow),
+      listInvites: rawListInvites.map(toExportListInviteRow),
       feedback: rawFeedback.map(toFeedbackDetail),
       reservations: rawReservations,
       images: rawImages.map(toImageDetail),

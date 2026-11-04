@@ -18,6 +18,7 @@ vi.mock('../../config/env.js', () => ({
     EMAIL_FROM: undefined,
     JWT_CLEANUP_INTERVAL_MS: 3_600_000,
     REFRESH_TOKEN_CLEANUP_INTERVAL_MS: 3_600_000,
+    LIST_INVITE_CLEANUP_INTERVAL_MS: 3_600_000,
     USER_HARD_DELETE_INTERVAL_MS: 3_600_000,
     USER_HARD_DELETE_GRACE_DAYS: 30,
     REFRESH_TOKEN_EXPIRES_IN: 2592000,
@@ -71,7 +72,7 @@ const applyDbMockDefaults = (db: Record<string, unknown>): void => {
   }))
   const passThrough = (async (callback: (tx: unknown) => Promise<unknown>) => callback(db)) as never
   vi.mocked(db.transaction as ReturnType<typeof vi.fn>).mockImplementation(passThrough)
-  const emptyFindMany = ['lists', 'listCollaborators', 'items', 'itemSources', 'listItems', 'shops', 'categories', 'itemCategories', 'tags', 'itemTags', 'listTags', 'feedback', 'images', 'reservations']
+  const emptyFindMany = ['lists', 'listUsers', 'listInvites', 'items', 'itemSources', 'listItems', 'shops', 'categories', 'itemCategories', 'tags', 'itemTags', 'listTags', 'feedback', 'images', 'reservations']
   for (const table of emptyFindMany) {
     const q = (db.query as Record<string, { findMany: ReturnType<typeof vi.fn> }>)[table]
     if (q !== undefined) q.findMany.mockResolvedValue([])
@@ -104,7 +105,11 @@ vi.mock('../../db/client.js', () => {
         findFirst: vi.fn(),
         findMany: vi.fn().mockResolvedValue([]),
       },
-      listCollaborators: {
+      listUsers: {
+        findFirst: vi.fn(),
+        findMany: vi.fn().mockResolvedValue([]),
+      },
+      listInvites: {
         findFirst: vi.fn(),
         findMany: vi.fn().mockResolvedValue([]),
       },

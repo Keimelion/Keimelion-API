@@ -2,7 +2,7 @@ import { and, count, eq, inArray, sql, type SQL } from 'drizzle-orm'
 import { z } from 'zod'
 import { db } from '../../../db/client.js'
 import { lists } from '../../../db/entities/lists/lists.schema.js'
-import { listCollaborators } from '../../../db/entities/list-collaborators/list-collaborators.schema.js'
+import { listUsers } from '../../../db/entities/list-users/list-users.schema.js'
 import { listItems } from '../../../db/entities/list-items/list-items.schema.js'
 import { itemSources } from '../../../db/entities/item-sources/item-sources.schema.js'
 import { currencies } from '../../../db/entities/currencies/currencies.schema.js'
@@ -14,7 +14,7 @@ import {
   findListById,
   findListWithOwner,
 } from '../../../db/entities/lists/lists.repository.js'
-import { CollabRoles } from '../../../shared/enums/collab-role.js'
+import { ListUserRoles } from '../../../shared/enums/list-user-role.js'
 import { defineEntity, buildSoftDeleteDefault } from '../../../shared/db/entity-descriptor.js'
 import { LIST_STATUS_VALUES } from '../../../shared/enums/list-status.js'
 import type { List } from '../../../db/entities/lists/lists.schema.js'
@@ -157,9 +157,9 @@ export async function findListAggregatesByIds(
 
 export async function findListIdsByOwnerUserId(ownerUserId: string): Promise<string[]> {
   const rows = await db
-    .select({ listId: listCollaborators.listId })
-    .from(listCollaborators)
-    .where(and(eq(listCollaborators.userId, ownerUserId), eq(listCollaborators.collabRole, CollabRoles.OWNER)))
+    .select({ listId: listUsers.listId })
+    .from(listUsers)
+    .where(and(eq(listUsers.userId, ownerUserId), eq(listUsers.role, ListUserRoles.OWNER)))
   return rows.map((row) => row.listId)
 }
 

@@ -28,6 +28,21 @@ export const TAG_INVALID_NAME_MESSAGE =
 
 export const FEEDBACK_NOT_FOUND_MESSAGE = 'Feedback not found'
 
+export const COLLAB_SELF_INVITE_MESSAGE = 'You cannot invite yourself to collaborate on your own list'
+
+export const COLLAB_ALREADY_MEMBER_MESSAGE =
+  'This list already has an active editor invitation or collaborator'
+
+export const COLLAB_INVITE_NOT_FOUND_MESSAGE = 'Invitation not found'
+
+export const COLLAB_INVITE_EXPIRED_MESSAGE = 'This invitation has expired'
+
+export const COLLAB_INVITE_ALREADY_RESOLVED_MESSAGE =
+  'This invitation has already been accepted or revoked'
+
+export const COLLAB_EMAIL_MISMATCH_MESSAGE =
+  'This invitation was issued to a different email address'
+
 export const errorMap: Record<ErrorCode, { status: ContentfulStatusCode; message: string }> = {
   BAD_REQUEST:             { status: HttpStatus.BAD_REQUEST,           message: 'Bad request' },
   UNAUTHORIZED:            { status: HttpStatus.UNAUTHORIZED,          message: 'Unauthorized' },
@@ -59,6 +74,12 @@ export const errorMap: Record<ErrorCode, { status: ContentfulStatusCode; message
   INVALID_IMAGE:           { status: HttpStatus.BAD_REQUEST,           message: 'The uploaded image is empty or could not be decoded' },
   INVALID_IMAGE_TYPE:      { status: HttpStatus.BAD_REQUEST,           message: 'The uploaded image must be a JPEG, PNG or WEBP file' },
   PAYLOAD_TOO_LARGE:       { status: HttpStatus.PAYLOAD_TOO_LARGE,     message: 'The uploaded file exceeds the maximum allowed size' },
+  COLLAB_SELF_INVITE:            { status: HttpStatus.UNPROCESSABLE_ENTITY, message: COLLAB_SELF_INVITE_MESSAGE },
+  COLLAB_ALREADY_MEMBER:         { status: HttpStatus.CONFLICT,            message: COLLAB_ALREADY_MEMBER_MESSAGE },
+  COLLAB_INVITE_NOT_FOUND:       { status: HttpStatus.NOT_FOUND,           message: COLLAB_INVITE_NOT_FOUND_MESSAGE },
+  COLLAB_INVITE_EXPIRED:         { status: HttpStatus.GONE,                message: COLLAB_INVITE_EXPIRED_MESSAGE },
+  COLLAB_INVITE_ALREADY_RESOLVED: { status: HttpStatus.CONFLICT,           message: COLLAB_INVITE_ALREADY_RESOLVED_MESSAGE },
+  COLLAB_EMAIL_MISMATCH:         { status: HttpStatus.FORBIDDEN,           message: COLLAB_EMAIL_MISMATCH_MESSAGE },
   INTERNAL_ERROR:          { status: HttpStatus.INTERNAL_SERVER_ERROR, message: 'An unexpected error occurred' },
 }
 

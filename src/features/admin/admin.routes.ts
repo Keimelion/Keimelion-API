@@ -8,6 +8,7 @@ import { adminCategoriesRouter } from './categories/admin-categories.routes.js'
 import { adminTagsRouter } from './tags/admin-tags.routes.js'
 import { adminFeedbackRouter } from './feedback/admin-feedback.routes.js'
 import { adminReservationsRouter } from './reservations/admin-reservations.routes.js'
+import { adminListInvitesRouter } from './list-invites/admin-list-invites.routes.js'
 
 export const adminRouter = createFeatureRouter()
 
@@ -20,3 +21,4 @@ adminRouter.route('/categories', adminCategoriesRouter)
 adminRouter.route('/tags', adminTagsRouter)
 adminRouter.route('/feedback', adminFeedbackRouter)
 adminRouter.route('/reservations', adminReservationsRouter)
+adminRouter.route('/collaborator-invites', adminListInvitesRouter)

@@ -44,13 +44,13 @@ const PUBLIC_LIST_ROW = {
   deletedAt: null,
   createdAt: new Date('2024-01-01'),
   updatedAt: new Date('2024-01-01'),
-  collaborators: [
+  listUsers: [
     {
       id: '00000000-0000-0000-0000-000000000040',
       listId: LIST_ID,
       userId: OWNER_USER.id,
       invitedEmail: null,
-      collabRole: 'owner' as const,
+      role: 'owner' as const,
       inviteStatus: 'accepted',
       inviteToken: null,
       inviteTokenExpiresAt: null,

@@ -4,7 +4,7 @@ import { authRouter } from './auth/auth.routes.js'
 import { usersRouter } from './users/users.routes.js'
 import { adminRouter } from './admin/admin.routes.js'
 import { occasionTypesRouter } from './occasion-types/occasion-types.routes.js'
-import { listsRouter } from './lists/lists.routes.js'
+import { collaboratorsRouter, listsRouter } from './lists/lists.routes.js'
 import { listItemsRouter } from './list-items/list-items.routes.js'
 import { itemsRouter } from './items/items.routes.js'
 import { categoriesRouter } from './categories/categories.routes.js'
@@ -21,6 +21,7 @@ export function mountRoutes(app: Hono): void {
   v1.route('/admin', adminRouter)
   v1.route('/occasion-types', occasionTypesRouter)
   v1.route('/lists', listsRouter)
+  v1.route('/collaborators', collaboratorsRouter)
   v1.route('/list-items', listItemsRouter)
   v1.route('/items', itemsRouter)
   v1.route('/categories', categoriesRouter)

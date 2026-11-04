@@ -44,26 +44,6 @@ const MOCK_LIST = {
   updatedAt: new Date('2024-01-01'),
 }
 
-const MOCK_COLLABORATOR = {
-  id: '00000000-0000-0000-0000-000000000040',
-  listId: LIST_ID,
-  userId: AUTH_USER.id,
-  invitedEmail: null,
-  collabRole: 'owner' as const,
-  inviteStatus: 'accepted',
-  inviteToken: null,
-  inviteTokenExpiresAt: null,
-  acceptedAt: new Date('2024-01-01'),
-  createdAt: new Date('2024-01-01'),
-  updatedAt: new Date('2024-01-01'),
-}
-
-const MOCK_EDITOR_COLLABORATOR = {
-  ...MOCK_COLLABORATOR,
-  id: '00000000-0000-0000-0000-000000000041',
-  collabRole: 'editor' as const,
-}
-
 const MOCK_LIST_ITEM = {
   id: LIST_ITEM_ID,
   listId: LIST_ID,
@@ -98,9 +78,8 @@ function mockAuthChain(): void {
 function mockListItemOwnershipChain(): void {
   vi.mocked(db.query.listItems.findFirst).mockResolvedValue(MOCK_LIST_ITEM as never)
   vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(
-    { ...MOCK_LIST, collaborators: [{ userId: AUTH_USER.id, user: AUTH_USER }] } as never,
+    { ...MOCK_LIST, listUsers: [{ userId: AUTH_USER.id, role: "owner" as const, user: AUTH_USER }] } as never,
   )
-  vi.mocked(db.query.listCollaborators.findFirst).mockResolvedValueOnce(MOCK_COLLABORATOR as never)
 }
 
 describe('POST /v1/list-items', () => {
@@ -112,9 +91,8 @@ describe('POST /v1/list-items', () => {
     const token = await generateTestToken(AUTH_USER.id)
     mockAuthChain()
     vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(
-      { ...MOCK_LIST, collaborators: [{ userId: AUTH_USER.id, user: AUTH_USER }] } as never,
+      { ...MOCK_LIST, listUsers: [{ userId: AUTH_USER.id, role: "owner" as const, user: AUTH_USER }] } as never,
     )
-    vi.mocked(db.query.listCollaborators.findFirst).mockResolvedValueOnce(MOCK_COLLABORATOR as never)
     vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(MOCK_ITEM)
     vi.mocked(db.insert).mockReturnValueOnce({
       values: vi.fn().mockReturnValueOnce({
@@ -139,9 +117,8 @@ describe('POST /v1/list-items', () => {
     const token = await generateTestToken(AUTH_USER.id)
     mockAuthChain()
     vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(
-      { ...MOCK_LIST, collaborators: [{ userId: AUTH_USER.id, user: AUTH_USER }] } as never,
+      { ...MOCK_LIST, listUsers: [{ userId: AUTH_USER.id, role: "owner" as const, user: AUTH_USER }] } as never,
     )
-    vi.mocked(db.query.listCollaborators.findFirst).mockResolvedValueOnce(MOCK_COLLABORATOR as never)
     vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(undefined)
 
     const response = await apiRequest('/v1/list-items', {
@@ -156,8 +133,9 @@ describe('POST /v1/list-items', () => {
   it('returns 403 when the user is not a contributor of the list', async () => {
     const token = await generateTestToken(AUTH_USER.id)
     mockAuthChain()
-    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(MOCK_LIST as never)
-    vi.mocked(db.query.listCollaborators.findFirst).mockResolvedValueOnce(undefined)
+    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(
+      { ...MOCK_LIST, listUsers: [], listTags: [] } as never,
+    )
 
     const response = await apiRequest('/v1/list-items', {
       method: 'POST',
@@ -181,9 +159,8 @@ describe('POST /v1/list-items', () => {
     const token = await generateTestToken(AUTH_USER.id)
     mockAuthChain()
     vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(
-      { ...MOCK_LIST, collaborators: [{ userId: AUTH_USER.id, user: AUTH_USER }] } as never,
+      { ...MOCK_LIST, listUsers: [{ userId: AUTH_USER.id, role: "owner" as const, user: AUTH_USER }] } as never,
     )
-    vi.mocked(db.query.listCollaborators.findFirst).mockResolvedValueOnce(MOCK_COLLABORATOR as never)
 
     const response = await apiRequest('/v1/list-items', {
       method: 'POST',
@@ -252,8 +229,13 @@ describe('PATCH /v1/list-items/:id', () => {
     const token = await generateTestToken(AUTH_USER.id)
     mockAuthChain()
     vi.mocked(db.query.listItems.findFirst).mockResolvedValue(MOCK_LIST_ITEM as never)
-    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(MOCK_LIST as never)
-    vi.mocked(db.query.listCollaborators.findFirst).mockResolvedValueOnce(MOCK_EDITOR_COLLABORATOR as never)
+    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(
+      {
+        ...MOCK_LIST,
+        listUsers: [{ userId: AUTH_USER.id, role: 'editor' as const, user: AUTH_USER }],
+        listTags: [],
+      } as never,
+    )
 
     const updatedListItem = { ...MOCK_LIST_ITEM, quantityDesired: 5 }
     vi.mocked(db.update).mockReturnValueOnce({
@@ -279,8 +261,9 @@ describe('PATCH /v1/list-items/:id', () => {
     const token = await generateTestToken(AUTH_USER.id)
     mockAuthChain()
     vi.mocked(db.query.listItems.findFirst).mockResolvedValueOnce(MOCK_LIST_ITEM as never)
-    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(MOCK_LIST as never)
-    vi.mocked(db.query.listCollaborators.findFirst).mockResolvedValueOnce(undefined)
+    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(
+      { ...MOCK_LIST, listUsers: [], listTags: [] } as never,
+    )
 
     const response = await apiRequest(`/v1/list-items/${LIST_ITEM_ID}`, {
       method: 'PATCH',
@@ -371,12 +354,37 @@ describe('DELETE /v1/list-items/:id', () => {
     expect(body.message).toBe('Item removed from list')
   })
 
-  it('returns 403 when user is not owner of the list', async () => {
+  it('returns 200 when user is an editor of the list', async () => {
     const token = await generateTestToken(AUTH_USER.id)
     mockAuthChain()
     vi.mocked(db.query.listItems.findFirst).mockResolvedValueOnce(MOCK_LIST_ITEM as never)
     vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(
-      { ...MOCK_LIST, collaborators: [] } as never,
+      {
+        ...MOCK_LIST,
+        listUsers: [{ userId: AUTH_USER.id, role: 'editor' as const, user: AUTH_USER }],
+        listTags: [],
+      } as never,
+    )
+    vi.mocked(db.delete).mockReturnValueOnce({
+      where: vi.fn().mockReturnValueOnce({
+        returning: vi.fn().mockResolvedValueOnce([MOCK_LIST_ITEM]),
+      }),
+    } as never)
+
+    const response = await apiRequest(`/v1/list-items/${LIST_ITEM_ID}`, {
+      method: 'DELETE',
+      token,
+    })
+
+    expect(response.status).toBe(200)
+  })
+
+  it('returns 403 when user is not a contributor of the list', async () => {
+    const token = await generateTestToken(AUTH_USER.id)
+    mockAuthChain()
+    vi.mocked(db.query.listItems.findFirst).mockResolvedValueOnce(MOCK_LIST_ITEM as never)
+    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(
+      { ...MOCK_LIST, listUsers: [] } as never,
     )
 
     const response = await apiRequest(`/v1/list-items/${LIST_ITEM_ID}`, {

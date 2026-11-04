@@ -161,7 +161,7 @@ export async function updateListById(
   if (tagSlugs === null) {
     const updatedRow = {
       ...outcome.row,
-      collaborators: existingRow.collaborators,
+      listUsers: existingRow.listUsers,
       listTags: existingRow.listTags,
     }
     return {
@@ -204,7 +204,7 @@ export async function restoreListById(
 
   const restoredRow = {
     ...restored,
-    collaborators: existingRow.collaborators,
+    listUsers: existingRow.listUsers,
     listTags: existingRow.listTags,
   }
   return {

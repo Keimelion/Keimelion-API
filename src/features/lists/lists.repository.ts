@@ -6,8 +6,8 @@ import {
   LIST_SORTABLE_FIELDS,
   LIST_WITH_OWNER,
 } from '../../db/entities/lists/lists.repository.js'
-import { listCollaborators } from '../../db/entities/list-collaborators/list-collaborators.schema.js'
-import { CollabRoles } from '../../shared/enums/collab-role.js'
+import { listUsers } from '../../db/entities/list-users/list-users.schema.js'
+import { CONTRIBUTOR_ROLE_VALUES } from '../../shared/enums/list-user-role.js'
 import { defineEntity } from '../../shared/db/entity-descriptor.js'
 import type { ListRowWithOwner } from '../../shared/types/list.js'
 import { getOffset } from '../../shared/schemas/pagination.js'
@@ -22,14 +22,14 @@ export const userListsEntity = defineEntity({
 
 export type UserListsSortField = keyof typeof userListsEntity.sortable
 
-export async function findListsOwnedBy(
+export async function findListsAccessibleBy(
   userId: string,
   pagination: PaginationInput,
   sort: SortInput<UserListsSortField> | undefined,
 ): Promise<ListRowWithOwner[]> {
   const offset = getOffset(pagination)
   return db.query.lists.findMany({
-    where: ownedListsWhere(userId),
+    where: accessibleListsWhere(userId),
     orderBy: userListsEntity.buildOrderBy(sort),
     limit: pagination.limit,
     offset,
@@ -37,18 +37,23 @@ export async function findListsOwnedBy(
   })
 }
 
-export async function countListsOwnedBy(userId: string): Promise<number> {
+export async function countListsAccessibleBy(userId: string): Promise<number> {
   const [row] = await db
     .select({ count: count() })
     .from(lists)
-    .where(ownedListsWhere(userId))
+    .where(accessibleListsWhere(userId))
   return row?.count ?? 0
 }
 
-function ownedListsWhere(userId: string): SQL | undefined {
-  const ownedListIds = db
-    .select({ id: listCollaborators.listId })
-    .from(listCollaborators)
-    .where(and(eq(listCollaborators.userId, userId), eq(listCollaborators.collabRole, CollabRoles.OWNER)))
-  return and(isNull(lists.deletedAt), inArray(lists.id, ownedListIds))
+function accessibleListsWhere(userId: string): SQL | undefined {
+  const accessibleListIds = db
+    .select({ id: listUsers.listId })
+    .from(listUsers)
+    .where(
+      and(
+        eq(listUsers.userId, userId),
+        inArray(listUsers.role, [...CONTRIBUTOR_ROLE_VALUES]),
+      ),
+    )
+  return and(isNull(lists.deletedAt), inArray(lists.id, accessibleListIds))
 }
