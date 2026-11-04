@@ -1,10 +1,13 @@
 import { Hono } from 'hono'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { multipartOnly } from './rate-limiter.js'
+import { authAwareRateLimiter, multipartOnly } from './rate-limiter.js'
 import { sendError } from './response.js'
 import { ErrorCode } from '../enums/error-code.js'
 import { HttpStatus } from '../enums/http.js'
+import { HonoContextKey } from '../enums/context-key.js'
+import { makeAdminUser } from '../test/fixtures/users.js'
 import type { MiddlewareHandler } from 'hono'
+import type { AppVariables } from '../types/app.js'
 
 describe('multipartOnly', () => {
   const rejectingLimiter = vi.fn<MiddlewareHandler>()
@@ -50,5 +53,47 @@ describe('multipartOnly', () => {
 
     expect(response.status).toBe(HttpStatus.OK)
     expect(await response.text()).toBe('ok')
+  })
+})
+
+describe('authAwareRateLimiter', () => {
+  const authenticatedLimiter = vi.fn<MiddlewareHandler>()
+  const anonymousLimiter = vi.fn<MiddlewareHandler>()
+
+  function buildApp(isAuthenticated: boolean): Hono<{ Variables: AppVariables }> {
+    return new Hono<{ Variables: AppVariables }>().post(
+      '/',
+      async (context, next) => {
+        if (isAuthenticated) context.set(HonoContextKey.USER, makeAdminUser())
+        await next()
+      },
+      authAwareRateLimiter(authenticatedLimiter, anonymousLimiter),
+      (context) => context.text('ok'),
+    )
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    const passThrough: MiddlewareHandler = async (_context, next) => {
+      await next()
+    }
+    authenticatedLimiter.mockImplementation(passThrough)
+    anonymousLimiter.mockImplementation(passThrough)
+  })
+
+  it('applies the authenticated limiter when a user is on the context', async () => {
+    const response = await buildApp(true).request('/', { method: 'POST' })
+
+    expect(response.status).toBe(HttpStatus.OK)
+    expect(authenticatedLimiter).toHaveBeenCalledOnce()
+    expect(anonymousLimiter).not.toHaveBeenCalled()
+  })
+
+  it('applies the anonymous limiter when no user is on the context', async () => {
+    const response = await buildApp(false).request('/', { method: 'POST' })
+
+    expect(response.status).toBe(HttpStatus.OK)
+    expect(anonymousLimiter).toHaveBeenCalledOnce()
+    expect(authenticatedLimiter).not.toHaveBeenCalled()
   })
 })

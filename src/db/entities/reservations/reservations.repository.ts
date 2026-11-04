@@ -1,10 +1,13 @@
-import { and, count, desc, eq, inArray } from 'drizzle-orm'
+import { and, count, desc, eq, inArray, or, sql } from 'drizzle-orm'
 import { db } from '../../client.js'
 import { defineEntity } from '../../../shared/db/entity-descriptor.js'
 import { getOffset } from '../../../shared/schemas/pagination.js'
+import { ListUserRoles } from '../../../shared/enums/list-user-role.js'
 import { listItems } from '../list-items/list-items.schema.js'
+import { listUsers } from '../list-users/list-users.schema.js'
 import { reservations } from './reservations.schema.js'
 import type { Reservation } from './reservations.schema.js'
+import type { ReservationRowHydrated } from '../../../shared/types/reservation.js'
 import type { PaginationInput } from '../../../shared/schemas/pagination.js'
 import type { SortInput } from '../../../shared/schemas/sort.js'
 
@@ -26,19 +29,60 @@ export const userReservationsEntity = defineEntity({
 
 export type UserReservationsSortField = keyof typeof userReservationsEntity.sortable
 
-interface CreateReservationInput {
-  listItemId: string
-  userId: string
-  quantityBooked: number
+export const RESERVATION_LIST_ITEM_HYDRATION = {
+  listItem: {
+    with: {
+      item: { with: { image: true } },
+      list: {
+        with: {
+          listUsers: {
+            where: eq(listUsers.role, ListUserRoles.OWNER),
+            limit: 1,
+            with: { user: { with: { avatarImage: true } } },
+          },
+        },
+      },
+    },
+  },
+} as const
+
+type InsertNamedReservationFields = Pick<
+  typeof reservations.$inferInsert,
+  'listItemId' | 'quantityBooked' | 'reserverName' | 'reserverEmail' | 'anonymousTokenHash'
+>
+
+export async function insertNamedReservation(
+  input: InsertNamedReservationFields,
+  tx: DbOrTx,
+): Promise<Reservation | undefined> {
+  const [row] = await tx.insert(reservations).values(input).returning()
+  return row
 }
 
-export async function createReservation(
-  input: CreateReservationInput,
-  tx?: DbOrTx,
+export interface NamedReservationIdentity {
+  listItemId: string
+  reserverName: string
+  reserverEmail: string | null
+}
+
+export function findNamedReservationDuplicate(
+  identity: NamedReservationIdentity,
+  tx: DbOrTx,
 ): Promise<Reservation | undefined> {
-  const executor = tx ?? db
-  const [row] = await executor.insert(reservations).values(input).returning()
-  return row
+  const sameName = sql`lower(${reservations.reserverName}) = lower(${identity.reserverName})`
+  const sameEmail = identity.reserverEmail === null
+    ? undefined
+    : eq(reservations.reserverEmail, identity.reserverEmail)
+  return tx.query.reservations.findFirst({
+    where: and(eq(reservations.listItemId, identity.listItemId), or(sameName, sameEmail)),
+  })
+}
+
+export function findReservationByIdWithListItem(id: string): Promise<ReservationRowHydrated | undefined> {
+  return db.query.reservations.findFirst({
+    where: eq(reservations.id, id),
+    with: RESERVATION_LIST_ITEM_HYDRATION,
+  })
 }
 
 export function findReservationById(id: string): Promise<Reservation | undefined> {
@@ -152,7 +196,7 @@ export async function countReservationsByUserIds(userIds: string[]): Promise<Map
     .groupBy(reservations.userId)
 
   for (const row of rows) {
-    map.set(row.userId, row.total)
+    if (row.userId !== null) map.set(row.userId, row.total)
   }
   return map
 }

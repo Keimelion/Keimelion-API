@@ -28,6 +28,6 @@ export function mountRoutes(app: Hono): void {
   v1.route('/tags', tagsRouter)
   v1.route('/feedback', feedbackRouter)
   v1.route('/public', publicRouter)
-  v1.route('/', reservationsRouter)
+  v1.route('/reservations', reservationsRouter)
   app.route('/v1', v1)
 }

@@ -11,7 +11,9 @@ import type { ListUserWithUser } from '../../shared/types/list.js'
 export interface ReservationSummary {
   id: string
   listItemId: string
-  userId: string
+  userId: string | null
+  reserverName: string | null
+  reserverEmail: string | null
   quantityBooked: number
   createdAt: Date
 }
@@ -27,11 +29,17 @@ export interface ReservationActionResponse {
   listItem: ListItemReservationSummary
 }
 
+export interface AnonymousReservationActionResponse extends ReservationActionResponse {
+  token: string
+}
+
 export function toReservationSummary(row: Reservation): ReservationSummary {
   return {
     id: row.id,
     listItemId: row.listItemId,
     userId: row.userId,
+    reserverName: row.reserverName,
+    reserverEmail: row.reserverEmail,
     quantityBooked: row.quantityBooked,
     createdAt: row.createdAt,
   }

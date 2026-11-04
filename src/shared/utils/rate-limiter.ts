@@ -42,6 +42,19 @@ export const RATE_LIMITS = {
   PUBLIC: () => createRateLimiter(10, ONE_MINUTE_MS),
 } as const
 
+// Picks the limiter according to the caller's auth state. Must be mounted AFTER
+// optionalAuthMiddleware so that HonoContextKey.USER is populated.
+export function authAwareRateLimiter(
+  authenticated: MiddlewareHandler,
+  anonymous: MiddlewareHandler,
+): MiddlewareHandler<{ Variables: AppVariables }> {
+  return async (context, next) => {
+    const user = context.get(HonoContextKey.USER) as User | undefined
+    const limiter = user ? authenticated : anonymous
+    return limiter(context, next)
+  }
+}
+
 const uploadBodyLimit = bodyLimit({
   maxSize: env.UPLOADS_MAX_SIZE_BYTES + MULTIPART_FIELDS_OVERHEAD_BYTES,
   onError: () => sendError(ErrorCode.PAYLOAD_TOO_LARGE),

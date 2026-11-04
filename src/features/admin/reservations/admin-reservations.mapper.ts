@@ -4,16 +4,16 @@ import type { ReservationDetail, ReservationRowHydrated } from '../../../shared/
 import type { UserDetail, UserRowWithAvatar } from '../../../shared/types/user.js'
 
 export interface AdminReservationRow extends ReservationRowHydrated {
-  user: UserRowWithAvatar
+  user: UserRowWithAvatar | null
 }
 
 export interface AdminReservation extends ReservationDetail {
-  user: UserDetail
+  user: UserDetail | null
 }
 
 export function toAdminReservation(row: AdminReservationRow): AdminReservation {
   return {
     ...toReservationDetail(row),
-    user: toUserDetail(row.user),
+    user: row.user ? toUserDetail(row.user) : null,
   }
 }

@@ -36,6 +36,8 @@ export interface ReservationListSummary {
 
 export interface ReservationDetail {
   id: string
+  reserverName: string | null
+  reserverEmail: string | null
   quantityBooked: number
   createdAt: Date
   listItem: ReservationListItemSummary
@@ -46,6 +48,8 @@ export function toReservationDetail(row: ReservationRowHydrated): ReservationDet
   const ownerUser = findOwnerUser(row.listItem.list.listUsers)
   return {
     id: row.id,
+    reserverName: row.reserverName,
+    reserverEmail: row.reserverEmail,
     quantityBooked: row.quantityBooked,
     createdAt: row.createdAt,
     listItem: {

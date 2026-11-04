@@ -43,6 +43,14 @@ export const COLLAB_INVITE_ALREADY_RESOLVED_MESSAGE =
 export const COLLAB_EMAIL_MISMATCH_MESSAGE =
   'This invitation was issued to a different email address'
 
+export const RESERVATION_TOKEN_INVALID_MESSAGE = 'The reservation token is invalid for this reservation'
+
+export const RESERVATION_REQUIRES_RESERVER_NAME_MESSAGE =
+  'reserverName is required when reserving without an account'
+
+export const RESERVATION_INCONSISTENT_INTENT_MESSAGE =
+  'Only the list owner may reserve on behalf of someone else (reserverName)'
+
 export const errorMap: Record<ErrorCode, { status: ContentfulStatusCode; message: string }> = {
   BAD_REQUEST:             { status: HttpStatus.BAD_REQUEST,           message: 'Bad request' },
   UNAUTHORIZED:            { status: HttpStatus.UNAUTHORIZED,          message: 'Unauthorized' },
@@ -81,6 +89,9 @@ export const errorMap: Record<ErrorCode, { status: ContentfulStatusCode; message
   COLLAB_INVITE_EXPIRED:         { status: HttpStatus.GONE,                message: COLLAB_INVITE_EXPIRED_MESSAGE },
   COLLAB_INVITE_ALREADY_RESOLVED: { status: HttpStatus.CONFLICT,           message: COLLAB_INVITE_ALREADY_RESOLVED_MESSAGE },
   COLLAB_EMAIL_MISMATCH:         { status: HttpStatus.FORBIDDEN,           message: COLLAB_EMAIL_MISMATCH_MESSAGE },
+  RESERVATION_TOKEN_INVALID:          { status: HttpStatus.FORBIDDEN,            message: RESERVATION_TOKEN_INVALID_MESSAGE },
+  RESERVATION_REQUIRES_RESERVER_NAME: { status: HttpStatus.UNPROCESSABLE_ENTITY, message: RESERVATION_REQUIRES_RESERVER_NAME_MESSAGE },
+  RESERVATION_INCONSISTENT_INTENT:    { status: HttpStatus.UNPROCESSABLE_ENTITY, message: RESERVATION_INCONSISTENT_INTENT_MESSAGE },
   INTERNAL_ERROR:          { status: HttpStatus.INTERNAL_SERVER_ERROR, message: 'An unexpected error occurred' },
 }
 
