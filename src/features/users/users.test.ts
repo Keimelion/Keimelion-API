@@ -849,7 +849,7 @@ describe('GET /v1/users/me/export', () => {
     expect(descriptor?.columns).not.toContain('inviteTokenExpiresAt')
   })
 
-  it('fetches owner-scoped list_users for RGPD without userId', async () => {
+  it('fetches list_users for RGPD without userId', async () => {
     const descriptor = EXPORT_ENTITY_REGISTRY.find((d) => d.filename === 'list-users.csv')
     const ownedListId = '00000000-0000-0000-0000-00000000e001'
     const listUserRow = {
@@ -871,7 +871,7 @@ describe('GET /v1/users/me/export', () => {
     expect(rows[0]).not.toHaveProperty('id')
   })
 
-  it('fetches owner-scoped list_invites for RGPD and omits inviteToken / inviteTokenExpiresAt from rows', async () => {
+  it('fetches list_invites for RGPD and omits inviteToken / inviteTokenExpiresAt from rows', async () => {
     const descriptor = EXPORT_ENTITY_REGISTRY.find((d) => d.filename === 'list-invites.csv')
     const ownedListId = '00000000-0000-0000-0000-00000000e003'
     const inviteRow = {
@@ -889,7 +889,6 @@ describe('GET /v1/users/me/export', () => {
       updatedAt: new Date('2024-02-01'),
     }
 
-    vi.mocked(db.query.listUsers.findMany).mockResolvedValueOnce([{ listId: ownedListId }] as never)
     vi.mocked(db.query.listInvites.findMany).mockResolvedValueOnce([inviteRow] as never)
 
     expect(descriptor).toBeDefined()
@@ -907,6 +906,53 @@ describe('GET /v1/users/me/export', () => {
     expect(rows[0]).not.toHaveProperty('id')
   })
 
+  it('exports the user\'s editor membership on someone else\'s list', async () => {
+    const descriptor = EXPORT_ENTITY_REGISTRY.find((d) => d.filename === 'list-users.csv')
+    const foreignListId = '00000000-0000-0000-0000-00000000e030'
+    vi.mocked(db.query.listUsers.findMany).mockResolvedValueOnce([
+      {
+        id: '00000000-0000-0000-0000-00000000e031',
+        listId: foreignListId,
+        userId: SAFE_USER.id,
+        role: 'editor' as const,
+        createdAt: new Date('2024-03-01'),
+        updatedAt: new Date('2024-03-01'),
+      },
+    ] as never)
+
+    const rows = await (descriptor as { fetchRows: (userId: string) => Promise<object[]> }).fetchRows(SAFE_USER.id)
+    expect(rows).toEqual([
+      { listId: foreignListId, role: 'editor', createdAt: new Date('2024-03-01'), updatedAt: new Date('2024-03-01') },
+    ])
+  })
+
+  it('exports an invite the user accepted on someone else\'s list', async () => {
+    const descriptor = EXPORT_ENTITY_REGISTRY.find((d) => d.filename === 'list-invites.csv')
+    const foreignListId = '00000000-0000-0000-0000-00000000e040'
+    vi.mocked(db.query.listInvites.findMany).mockResolvedValueOnce([
+      {
+        id: '00000000-0000-0000-0000-00000000e041',
+        listId: foreignListId,
+        invitedByUserId: '00000000-0000-0000-0000-00000000e042',
+        invitedEmail: SAFE_USER.email,
+        role: 'editor' as const,
+        inviteToken: 'c'.repeat(64),
+        inviteTokenExpiresAt: new Date('2024-10-01'),
+        inviteStatus: 'accepted' as const,
+        acceptedAt: new Date('2024-03-02'),
+        acceptedByUserId: SAFE_USER.id,
+        createdAt: new Date('2024-03-01'),
+        updatedAt: new Date('2024-03-02'),
+      },
+    ] as never)
+
+    const rows = await (descriptor as { fetchRows: (userId: string) => Promise<object[]> }).fetchRows(SAFE_USER.id)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ listId: foreignListId, inviteStatus: 'accepted' })
+    expect(rows[0]).not.toHaveProperty('invitedByUserId')
+    expect(rows[0]).not.toHaveProperty('acceptedByUserId')
+  })
+
   it('includes listUsers and listInvites keys in the JSON export payload', async () => {
     const token = await generateTestToken(SAFE_USER.id)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
@@ -921,9 +967,6 @@ describe('GET /v1/users/me/export', () => {
         createdAt: new Date('2024-02-01'),
         updatedAt: new Date('2024-02-01'),
       },
-    ] as never)
-    vi.mocked(db.query.listUsers.findMany).mockResolvedValueOnce([
-      { listId: '00000000-0000-0000-0000-00000000e010' },
     ] as never)
     vi.mocked(db.query.listInvites.findMany).mockResolvedValueOnce([
       {

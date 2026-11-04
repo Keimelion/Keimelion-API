@@ -4,7 +4,7 @@ import { HonoContextKey } from '../enums/context-key.js'
 import { sendError } from '../utils/response.js'
 import { logger } from '../utils/logger.js'
 import { findListWithOwner } from '../../db/entities/lists/lists.repository.js'
-import { CONTRIBUTOR_ROLE_VALUES, ListUserRoles } from '../enums/list-user-role.js'
+import { isListContributor, isListOwner } from '../types/list.js'
 import { getAuthUser } from './auth.js'
 import type { AppVariables } from '../types/app.js'
 import type { ListRowWithOwner } from '../types/list.js'
@@ -20,13 +20,13 @@ export interface ListAccessMiddlewareOptions {
 export function listOwnershipMiddleware(
   options: ListAccessMiddlewareOptions,
 ): MiddlewareHandler<{ Variables: AppVariables }> {
-  return buildListAccessMiddleware(options, isListOwner)
+  return buildListAccessMiddleware(options, (list, userId) => isListOwner(list.listUsers, userId))
 }
 
 export function listContributorMiddleware(
   options: ListAccessMiddlewareOptions,
 ): MiddlewareHandler<{ Variables: AppVariables }> {
-  return buildListAccessMiddleware(options, isListContributor)
+  return buildListAccessMiddleware(options, (list, userId) => isListContributor(list.listUsers, userId))
 }
 
 function buildListAccessMiddleware(
@@ -65,16 +65,4 @@ async function resolveListId(
   if (options.resolveListId) return options.resolveListId(context)
   const paramValue = context.req.param(options.paramName)
   return paramValue ?? null
-}
-
-function isListOwner(list: ListRowWithOwner, userId: string): boolean {
-  return list.listUsers.some(
-    (member) => member.userId === userId && member.role === ListUserRoles.OWNER,
-  )
-}
-
-function isListContributor(list: ListRowWithOwner, userId: string): boolean {
-  return list.listUsers.some(
-    (member) => member.userId === userId && (CONTRIBUTOR_ROLE_VALUES as readonly string[]).includes(member.role),
-  )
 }

@@ -53,12 +53,7 @@ const OWNER_COLLABORATOR = {
   id: '00000000-0000-0000-0000-000000000050',
   listId: LIST_ID,
   userId: OWNER_USER_ID,
-  invitedEmail: null,
   role: 'owner' as const,
-  inviteStatus: 'accepted',
-  inviteToken: null,
-  inviteTokenExpiresAt: null,
-  acceptedAt: new Date('2024-01-01'),
   createdAt: new Date('2024-01-01'),
   updatedAt: new Date('2024-01-01'),
 }
@@ -87,11 +82,17 @@ function mockListItemLookup(listItem: typeof MOCK_LIST_ITEM = MOCK_LIST_ITEM): v
   vi.mocked(db.query.listItems.findFirst).mockResolvedValueOnce(listItem)
 }
 
-function mockListWithOwnerLookup(options: { deleted?: boolean; ownerUserId?: string } = {}): void {
+function mockListWithOwnerLookup(
+  options: { deleted?: boolean; ownerUserId?: string; editorUserId?: string } = {},
+): void {
+  const owner = { ...OWNER_COLLABORATOR, userId: options.ownerUserId ?? OWNER_USER_ID }
+  const editor = options.editorUserId === undefined
+    ? []
+    : [{ ...OWNER_COLLABORATOR, role: 'editor' as const, userId: options.editorUserId }]
   const list = {
     ...MOCK_LIST,
     deletedAt: options.deleted ? new Date('2024-01-02') : null,
-    listUsers: [{ ...OWNER_COLLABORATOR, userId: options.ownerUserId ?? OWNER_USER_ID }],
+    listUsers: [owner, ...editor],
     listTags: [],
   }
   vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(list)
@@ -226,6 +227,21 @@ describe('POST /v1/list-items/:id/reserve', () => {
     mockAuth()
     mockListItemLookup()
     mockListWithOwnerLookup({ ownerUserId: AUTH_USER.id })
+
+    const response = await apiRequest(`/v1/list-items/${LIST_ITEM_ID}/reserve`, {
+      method: 'POST',
+      token,
+      body: { quantityBooked: 1 },
+    })
+
+    expect(response.status).toBe(403)
+  })
+
+  it('returns 403 when the caller is an editor of the list', async () => {
+    const token = await generateTestToken(AUTH_USER.id)
+    mockAuth()
+    mockListItemLookup()
+    mockListWithOwnerLookup({ editorUserId: AUTH_USER.id })
 
     const response = await apiRequest(`/v1/list-items/${LIST_ITEM_ID}/reserve`, {
       method: 'POST',

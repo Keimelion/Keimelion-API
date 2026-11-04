@@ -1,30 +1,28 @@
-import { findListUsersForListsWithUser } from '../../db/entities/list-users/list-users.repository.js'
 import { findActivePendingInvitesForLists } from '../../db/entities/list-invites/list-invites.repository.js'
 import { toMemberSummary, toPendingInviteSummary } from '../../shared/types/collaborator.js'
 import { ListUserRoles } from '../../shared/enums/list-user-role.js'
 import { InviteStatuses } from '../../shared/enums/invite-status.js'
 import type { CollaboratorSummary } from '../../shared/types/collaborator.js'
+import type { ListRowWithOwner } from '../../shared/types/list.js'
 
 interface CollaboratorSortable {
   summary: CollaboratorSummary
   createdAt: Date
 }
 
-export async function fetchCollaboratorsSummariesByListId(
-  listIds: string[],
+// Members come from the already-hydrated `row.listUsers`; only pending invites need a query.
+export async function buildCollaboratorsByListId(
+  rows: ListRowWithOwner[],
   now: Date = new Date(),
 ): Promise<Map<string, CollaboratorSummary[]>> {
-  const [memberRows, pendingInvites] = await Promise.all([
-    findListUsersForListsWithUser(listIds),
-    findActivePendingInvitesForLists(listIds, now),
-  ])
+  const pendingInvites = await findActivePendingInvitesForLists(rows.map((row) => row.id), now)
 
   const buckets = new Map<string, CollaboratorSortable[]>()
-  for (const listId of listIds) {
-    buckets.set(listId, [])
-  }
-  for (const row of memberRows) {
-    buckets.get(row.listId)?.push({ summary: toMemberSummary(row), createdAt: row.createdAt })
+  for (const row of rows) {
+    buckets.set(
+      row.id,
+      row.listUsers.map((member) => ({ summary: toMemberSummary(member), createdAt: member.createdAt })),
+    )
   }
   for (const invite of pendingInvites) {
     buckets.get(invite.listId)?.push({
@@ -41,12 +39,12 @@ export async function fetchCollaboratorsSummariesByListId(
   return result
 }
 
-export async function fetchCollaboratorsSummariesForList(
-  listId: string,
+export async function buildCollaboratorsForList(
+  row: ListRowWithOwner,
   now: Date = new Date(),
 ): Promise<CollaboratorSummary[]> {
-  const byListId = await fetchCollaboratorsSummariesByListId([listId], now)
-  return byListId.get(listId) ?? []
+  const byListId = await buildCollaboratorsByListId([row], now)
+  return byListId.get(row.id) ?? []
 }
 
 function compareSortable(left: CollaboratorSortable, right: CollaboratorSortable): number {

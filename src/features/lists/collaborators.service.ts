@@ -9,16 +9,16 @@ import { logger } from '../../shared/utils/logger.js'
 import { runWrite } from '../../shared/utils/admin-write.js'
 import { isPgUniqueViolation } from '../../shared/db/pg-errors.js'
 import { serviceError } from '../../shared/utils/response.js'
+import { findActiveEditorForList, insertListUser } from '../../db/entities/list-users/list-users.repository.js'
 import {
-  findActiveEditorForList,
-  insertEditorListUser,
-} from '../../db/entities/list-users/list-users.repository.js'
-import {
+  deleteExpiredPendingListInvites,
   findInviteByTokenHash,
   insertListInvite,
   markInviteAccepted,
 } from '../../db/entities/list-invites/list-invites.repository.js'
+import { findListById } from '../../db/entities/lists/lists.repository.js'
 import { InviteStatuses } from '../../shared/enums/invite-status.js'
+import { ListUserRoles } from '../../shared/enums/list-user-role.js'
 import { toInviteDetail } from '../../shared/types/collaborator.js'
 import type { CollaboratorDetail } from '../../shared/types/collaborator.js'
 import type { User } from '../../db/entities/users/users.schema.js'
@@ -29,11 +29,7 @@ import type { AcceptInviteInput } from './endpoints/collaborators/accept-invite.
 
 export const COLLAB_INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
-// Raw token sizing — distinct from `INVITE_TOKEN_HASH_LENGTH` in the schema
-// (that one strictly describes the DB column for the sha256 hex hash).
-// The equality below (`BYTE * 2 = 64`) is coincidental with the hash length
-// because sha256 hex is also 64 chars; the two constants stay independent
-// so a future change to either one does not silently drift the other.
+// Raw token sent to the invitee; independent from the stored hash width (INVITE_TOKEN_HASH_LENGTH).
 export const INVITE_TOKEN_BYTE_LENGTH = 32
 export const INVITE_TOKEN_HEX_LENGTH = INVITE_TOKEN_BYTE_LENGTH * 2
 
@@ -59,6 +55,9 @@ export async function createListInvite(
 
   const existingEditor = await findActiveEditorForList(list.id)
   if (existingEditor) return serviceError(ErrorCode.COLLAB_ALREADY_MEMBER)
+
+  // Frees the single pending slot if the previous invite expired since the last cron run.
+  await deleteExpiredPendingListInvites({ listId: list.id })
 
   const rawToken = randomBytes(INVITE_TOKEN_BYTE_LENGTH).toString('hex')
   const tokenHash = hashSha256Hex(rawToken)
@@ -110,6 +109,8 @@ export async function acceptListInvite(
   if (invite.invitedEmail.toLowerCase() !== acceptor.email.toLowerCase()) {
     return serviceError(ErrorCode.COLLAB_EMAIL_MISMATCH)
   }
+  const list = await findListById(invite.listId)
+  if (!list) return serviceError(ErrorCode.COLLAB_INVITE_NOT_FOUND)
 
   // markInviteAccepted's WHERE filters on status='pending' AND expiry > now, so a
   // concurrent accept/revoke/expiry returns undefined. Throwing InviteResolvedError
@@ -121,8 +122,8 @@ export async function acceptListInvite(
       const acceptedAt = new Date()
       const updated = await markInviteAccepted(invite.id, acceptor.id, acceptedAt, tx)
       if (!updated) throw new InviteResolvedError('Invite was resolved or expired')
-      const membership = await insertEditorListUser(invite.listId, acceptor.id, tx)
-      if (!membership) throw new Error('insertEditorListUser returned no row')
+      const membership = await insertListUser(invite.listId, acceptor.id, ListUserRoles.EDITOR, tx)
+      if (!membership) throw new Error('Editor list_users insert returned no row')
       return updated
     })
   } catch (error) {

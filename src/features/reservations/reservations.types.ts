@@ -3,9 +3,8 @@ import type { Reservation } from '../../db/entities/reservations/reservations.sc
 import type { ListItem } from '../../db/entities/list-items/list-items.schema.js'
 import type { List } from '../../db/entities/lists/lists.schema.js'
 import type { Item } from '../../db/entities/items/items.schema.js'
-import type { ListUser } from '../../db/entities/list-users/list-users.schema.js'
-import type { User } from '../../db/entities/users/users.schema.js'
-import { ListUserRoles } from '../../shared/enums/list-user-role.js'
+import { findOwnerUser } from '../../shared/types/list.js'
+import type { ListUserWithUser } from '../../shared/types/list.js'
 
 export interface ReservationSummary {
   id: string
@@ -36,12 +35,8 @@ export function toReservationSummary(row: Reservation): ReservationSummary {
   }
 }
 
-export interface ReservationProfileListUserRow extends ListUser {
-  user: User | null
-}
-
 export interface ReservationProfileListRow extends List {
-  listUsers: ReservationProfileListUserRow[]
+  listUsers: ListUserWithUser[]
 }
 
 export interface ReservationProfileListItemRow extends ListItem {
@@ -74,8 +69,7 @@ export interface ReservationProfileEntry {
 }
 
 export function toReservationProfileEntry(row: ReservationProfileRow): ReservationProfileEntry {
-  const ownerUser =
-    row.listItem.list.listUsers.find((member) => member.role === ListUserRoles.OWNER)?.user ?? null
+  const ownerUser = findOwnerUser(row.listItem.list.listUsers)
   return {
     reservation: {
       id: row.id,

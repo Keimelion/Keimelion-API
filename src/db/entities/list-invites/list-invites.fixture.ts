@@ -1,11 +1,10 @@
 import type { db as Db } from '../../client.js'
-import { createHash } from 'crypto'
+import { hashSha256Hex } from '../../../shared/utils/hash.js'
 import { InviteStatuses } from '../../../shared/enums/invite-status.js'
 import { ListUserRoles } from '../../../shared/enums/list-user-role.js'
 import { LIST_IDS } from '../lists/lists.fixture.js'
 import { listInvites } from './list-invites.schema.js'
-
-const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000
+import { COLLAB_INVITE_TTL_MS } from '../../../features/lists/collaborators.service.js'
 
 interface ListInviteFixture {
   id: string
@@ -42,7 +41,6 @@ export async function seedListInvites(db: typeof Db): Promise<void> {
   const values = LIST_INVITE_FIXTURES.flatMap((fixture) => {
     const invitedByUserId = userIdByEmail.get(fixture.inviterEmail)
     if (!invitedByUserId) return []
-    const tokenHash = createHash('sha256').update(fixture.rawToken).digest('hex')
     return [
       {
         id: fixture.id,
@@ -50,8 +48,8 @@ export async function seedListInvites(db: typeof Db): Promise<void> {
         invitedByUserId,
         invitedEmail: fixture.invitedEmail,
         role: ListUserRoles.EDITOR,
-        inviteToken: tokenHash,
-        inviteTokenExpiresAt: new Date(now.getTime() + SEVEN_DAYS_MS),
+        inviteToken: hashSha256Hex(fixture.rawToken),
+        inviteTokenExpiresAt: new Date(now.getTime() + COLLAB_INVITE_TTL_MS),
         inviteStatus: InviteStatuses.PENDING,
       },
     ]

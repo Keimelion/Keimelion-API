@@ -1,17 +1,18 @@
-import { and, desc, eq, inArray } from 'drizzle-orm'
+import { and, desc, eq, inArray, or, sql } from 'drizzle-orm'
 import { db } from '../../../db/client.js'
 import { feedback } from '../../../db/entities/feedback/feedback.schema.js'
 import { images } from '../../../db/entities/images/images.schema.js'
 import { items } from '../../../db/entities/items/items.schema.js'
 import { itemSources } from '../../../db/entities/item-sources/item-sources.schema.js'
 import { listUsers } from '../../../db/entities/list-users/list-users.schema.js'
+import { listInvites } from '../../../db/entities/list-invites/list-invites.schema.js'
 import { listItems } from '../../../db/entities/list-items/list-items.schema.js'
 import { listTags } from '../../../db/entities/list-tags/list-tags.schema.js'
 import { lists } from '../../../db/entities/lists/lists.schema.js'
 import { reservations } from '../../../db/entities/reservations/reservations.schema.js'
 import { tags } from '../../../db/entities/tags/tags.schema.js'
+import { users } from '../../../db/entities/users/users.schema.js'
 import { CONTRIBUTOR_ROLE_VALUES, ListUserRoles } from '../../../shared/enums/list-user-role.js'
-import { findInvitesForOwnerListsExport } from '../../../db/entities/list-invites/list-invites.repository.js'
 import type { Feedback } from '../../../db/entities/feedback/feedback.schema.js'
 import type { Image } from '../../../db/entities/images/images.schema.js'
 import type { Item } from '../../../db/entities/items/items.schema.js'
@@ -52,13 +53,16 @@ export async function findListItemsForContributor(userId: string): Promise<ListI
   })
 }
 
-export async function findListsOwnedByForExport(userId: string): Promise<List[]> {
-  const ownedListIds = db
+function ownedListIds(userId: string) {
+  return db
     .select({ id: listUsers.listId })
     .from(listUsers)
     .where(and(eq(listUsers.userId, userId), eq(listUsers.role, ListUserRoles.OWNER)))
+}
+
+export async function findListsOwnedByForExport(userId: string): Promise<List[]> {
   return db.query.lists.findMany({
-    where: inArray(lists.id, ownedListIds),
+    where: inArray(lists.id, ownedListIds(userId)),
   })
 }
 
@@ -81,31 +85,33 @@ export async function findImagesByUploaderForExport(userId: string): Promise<Ima
 }
 
 export async function findListTagsForOwner(userId: string): Promise<ListTag[]> {
-  const ownedListIds = db
-    .select({ id: listUsers.listId })
-    .from(listUsers)
-    .where(and(eq(listUsers.userId, userId), eq(listUsers.role, ListUserRoles.OWNER)))
   return db.query.listTags.findMany({
-    where: inArray(listTags.listId, ownedListIds),
+    where: inArray(listTags.listId, ownedListIds(userId)),
   })
 }
 
-export async function findListUsersForOwnerExport(userId: string): Promise<ListUser[]> {
-  const ownedListIds = db
-    .select({ id: listUsers.listId })
-    .from(listUsers)
-    .where(and(eq(listUsers.userId, userId), eq(listUsers.role, ListUserRoles.OWNER)))
+// Memberships on the user's own lists + the user's memberships on other people's lists.
+export async function findListUsersForExport(userId: string): Promise<ListUser[]> {
   return db.query.listUsers.findMany({
-    where: inArray(listUsers.listId, ownedListIds),
+    where: or(inArray(listUsers.listId, ownedListIds(userId)), eq(listUsers.userId, userId)),
   })
 }
 
-export async function findListInvitesForOwnerExport(userId: string): Promise<ListInvite[]> {
-  const ownedRows = await db.query.listUsers.findMany({
-    columns: { listId: true },
-    where: and(eq(listUsers.userId, userId), eq(listUsers.role, ListUserRoles.OWNER)),
+// Invites sent on the user's lists + invites the user received (by email) or accepted.
+export async function findListInvitesForExport(userId: string): Promise<ListInvite[]> {
+  // Built with the query builder (not a raw sql template): the relational API would rewrite
+  // `users.*` columns of a raw template to the outer `listInvites` alias.
+  const userEmail = db
+    .select({ email: sql<string>`lower(${users.email})` })
+    .from(users)
+    .where(eq(users.id, userId))
+  return db.query.listInvites.findMany({
+    where: or(
+      inArray(listInvites.listId, ownedListIds(userId)),
+      eq(listInvites.acceptedByUserId, userId),
+      inArray(listInvites.invitedEmail, userEmail),
+    ),
   })
-  return findInvitesForOwnerListsExport(ownedRows.map((row) => row.listId))
 }
 
 export interface ReservationExportRow {

@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, gt, inArray, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gt, inArray, lte, type SQL } from 'drizzle-orm'
 import { db } from '../../client.js'
 import { InviteStatuses } from '../../../shared/enums/invite-status.js'
 import type { InviteStatus } from '../../../shared/enums/invite-status.js'
@@ -117,11 +117,23 @@ export async function countListInvites(filters: ListInviteFilters): Promise<numb
   return row?.count ?? 0
 }
 
-export async function findInvitesForOwnerListsExport(listIds: string[]): Promise<ListInvite[]> {
-  if (listIds.length === 0) return []
-  return db.query.listInvites.findMany({
-    where: inArray(listInvites.listId, listIds),
-  })
+// Expired invites stay `pending` in DB, and the partial unique index allows a single pending
+// invite per list — so they must be purged (cron + before each new invite on that list).
+export async function deleteExpiredPendingListInvites(
+  options: { listId?: string; now?: Date } = {},
+): Promise<number> {
+  const now = options.now ?? new Date()
+  const deleted = await db
+    .delete(listInvites)
+    .where(
+      and(
+        eq(listInvites.inviteStatus, InviteStatuses.PENDING),
+        lte(listInvites.inviteTokenExpiresAt, now),
+        options.listId === undefined ? undefined : eq(listInvites.listId, options.listId),
+      ),
+    )
+    .returning({ id: listInvites.id })
+  return deleted.length
 }
 
 function buildInviteWhere(filters: ListInviteFilters): SQL | undefined {

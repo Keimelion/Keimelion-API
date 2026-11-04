@@ -1,13 +1,15 @@
 import { extractOwnerDetail, toListDetail } from '../../../shared/types/list.js'
 import type { ListDetail, ListRowWithOwner } from '../../../shared/types/list.js'
 import type { SupportedCurrency } from '../../../shared/enums/currency.js'
+import type { UserDetail } from '../../../shared/types/user.js'
 
 export interface AdminListAggregate {
   itemCount: number
   totalEstimatedPrice: string | null
 }
 
-export interface AdminListDetail extends ListDetail {
+export interface AdminListDetail extends Omit<ListDetail, 'owner'> {
+  owner: UserDetail | null
   deletedAt: Date | null
   itemCount: number
   totalEstimatedPrice: string | null
@@ -22,7 +24,8 @@ export function toAdminListDetail(
   aggregate: AdminListAggregate = DEFAULT_AGGREGATE,
 ): AdminListDetail {
   return {
-    ...toListDetail(row, extractOwnerDetail(row)),
+    ...toListDetail(row),
+    owner: extractOwnerDetail(row),
     deletedAt: row.deletedAt ?? null,
     itemCount: aggregate.itemCount,
     totalEstimatedPrice: aggregate.totalEstimatedPrice,

@@ -10,7 +10,7 @@ import type { List } from './lists.schema.js'
 
 // Hydrates every list_users row so callers can treat `row.listUsers` as the full membership
 // array (e.g. `.some(…)` on it is safe). Owner-only filtering is done at the mapper level
-// via `extractOwnerDetail`.
+// via `findOwnerUser`.
 export const LIST_WITH_OWNER = {
   listUsers: {
     orderBy: [asc(listUsers.createdAt)],

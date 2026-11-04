@@ -18,16 +18,14 @@ import {
   updateList,
   softDeleteList,
 } from '../../db/entities/lists/lists.repository.js'
-import { insertOwnerListUser } from '../../db/entities/list-users/list-users.repository.js'
+import { insertListUser } from '../../db/entities/list-users/list-users.repository.js'
+import { ListUserRoles } from '../../shared/enums/list-user-role.js'
 import { upsertTagsBySlugs } from '../../db/entities/tags/tags.repository.js'
 import { replaceListTags } from '../../db/entities/list-tags/list-tags.repository.js'
 import { toItemDetail, toListItemDetail } from '../../shared/types/item.js'
-import { extractOwnerDetail, toListDetail } from '../../shared/types/list.js'
+import { toListDetail } from '../../shared/types/list.js'
 import { findListsAccessibleBy, countListsAccessibleBy } from './lists.repository.js'
-import {
-  fetchCollaboratorsSummariesByListId,
-  fetchCollaboratorsSummariesForList,
-} from './collaborators.mapper.js'
+import { buildCollaboratorsByListId, buildCollaboratorsForList } from './collaborators.mapper.js'
 import type { User } from '../../db/entities/users/users.schema.js'
 import type { InsertList } from '../../db/entities/lists/lists.repository.js'
 import type { ListDetail, ListRowWithOwner } from '../../shared/types/list.js'
@@ -59,9 +57,8 @@ export async function createUserList(
     tagSlugs !== null && tagSlugs.length > 0
       ? (await findListWithOwner(outcome.row.id)) ?? outcome.row
       : outcome.row
-  const collaborators = await fetchCollaboratorsSummariesForList(sourceRow.id)
   return {
-    data: { list: toListDetail(sourceRow, extractOwnerDetail(sourceRow), collaborators) },
+    data: { list: toListDetail(sourceRow, await buildCollaboratorsForList(sourceRow)) },
     httpStatus: HttpStatus.CREATED,
   }
 }
@@ -75,10 +72,8 @@ export async function listUserLists(
     countListsAccessibleBy(userId),
   ])
 
-  const collaboratorsByListId = await fetchCollaboratorsSummariesByListId(rows.map((row) => row.id))
-  const items = rows.map((row) =>
-    toListDetail(row, extractOwnerDetail(row), collaboratorsByListId.get(row.id) ?? []),
-  )
+  const collaboratorsByListId = await buildCollaboratorsByListId(rows)
+  const items = rows.map((row) => toListDetail(row, collaboratorsByListId.get(row.id) ?? []))
   return {
     data: buildPaginatedResponse(items, input, total),
     httpStatus: HttpStatus.OK,
@@ -86,9 +81,8 @@ export async function listUserLists(
 }
 
 export async function getUserListById(list: ListRowWithOwner): Promise<ServiceResult<{ list: ListDetail }>> {
-  const collaborators = await fetchCollaboratorsSummariesForList(list.id)
   return {
-    data: { list: toListDetail(list, extractOwnerDetail(list), collaborators) },
+    data: { list: toListDetail(list, await buildCollaboratorsForList(list)) },
     httpStatus: HttpStatus.OK,
   }
 }
@@ -133,18 +127,16 @@ export async function updateUserList(
       listUsers: existing.listUsers,
       listTags: existing.listTags,
     }
-    const collaborators = await fetchCollaboratorsSummariesForList(refreshed.id)
     return {
-      data: { list: toListDetail(refreshed, extractOwnerDetail(refreshed), collaborators) },
+      data: { list: toListDetail(refreshed, await buildCollaboratorsForList(refreshed)) },
       httpStatus: HttpStatus.OK,
     }
   }
 
   const refreshed = await findListWithOwner(existing.id)
   if (!refreshed) return serviceError(ErrorCode.NOT_FOUND)
-  const collaborators = await fetchCollaboratorsSummariesForList(refreshed.id)
   return {
-    data: { list: toListDetail(refreshed, extractOwnerDetail(refreshed), collaborators) },
+    data: { list: toListDetail(refreshed, await buildCollaboratorsForList(refreshed)) },
     httpStatus: HttpStatus.OK,
   }
 }
@@ -212,7 +204,7 @@ async function tryInsertList(
     const created = await db.transaction(async (tx) => {
       const inserted = await insertList(buildCreatePayload(input, slug), tx)
       if (!inserted) throw new Error('List insert returned no row')
-      const ownerMembership = await insertOwnerListUser(inserted.id, user.id, tx)
+      const ownerMembership = await insertListUser(inserted.id, user.id, ListUserRoles.OWNER, tx)
       if (!ownerMembership) throw new Error('Owner list_users insert returned no row')
       if (tagSlugs !== null && tagSlugs.length > 0) {
         const tagIds = await upsertTagsBySlugs(tagSlugs, user.id, tx)

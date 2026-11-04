@@ -9,9 +9,7 @@ import { users } from '../users/users.schema.js'
 
 export const inviteStatusEnum = pgEnum('invite_status', INVITE_STATUS_VALUES)
 
-// Column width for the sha256 hex hash of raw invite tokens. Strictly for the DB column —
-// callers validating the raw hex token on the way in must import INVITE_TOKEN_HEX_LENGTH
-// from collaborators.service.ts instead (they happen to match by construction).
+// Width of the stored sha256 hex hash — the raw token's length is INVITE_TOKEN_HEX_LENGTH.
 export const INVITE_TOKEN_HASH_LENGTH = 64
 
 // Interpolated via sql.raw so renaming InviteStatuses.PENDING breaks the build.

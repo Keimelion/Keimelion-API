@@ -4,11 +4,11 @@ import {
   findImagesByUploaderForExport,
   findItemsByCreator,
   findItemSourcesByCreator,
-  findListInvitesForOwnerExport,
+  findListInvitesForExport,
   findListItemsForContributor,
   findListsOwnedByForExport,
   findListTagsForOwner,
-  findListUsersForOwnerExport,
+  findListUsersForExport,
   findReservationsForExport,
   findTagsCreatedByUser,
 } from './rgpd-export.repository.js'
@@ -78,7 +78,7 @@ export interface ExportListRow extends ListDetail {
 
 export function toExportListRow(list: List): ExportListRow {
   const row = { ...list, listUsers: [], listTags: [] }
-  return { ...toListDetail(row, null), deletedAt: list.deletedAt }
+  return { ...toListDetail(row), deletedAt: list.deletedAt }
 }
 
 /**
@@ -236,7 +236,7 @@ const listUsersEntityDescriptor: ExportEntityDescriptor = {
   filename: 'list-users.csv',
   columns: ['listId', 'role', 'createdAt', 'updatedAt'],
   fetchRows: async (userId: string) => {
-    const rows = await findListUsersForOwnerExport(userId)
+    const rows = await findListUsersForExport(userId)
     return rows.map(toExportListUserRow)
   },
 }
@@ -252,7 +252,7 @@ const listInvitesEntityDescriptor: ExportEntityDescriptor = {
     'createdAt',
   ],
   fetchRows: async (userId: string) => {
-    const rows = await findListInvitesForOwnerExport(userId)
+    const rows = await findListInvitesForExport(userId)
     return rows.map(toExportListInviteRow)
   },
 }

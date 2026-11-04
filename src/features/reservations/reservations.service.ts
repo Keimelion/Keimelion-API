@@ -2,7 +2,7 @@ import { db } from '../../db/client.js'
 import { HttpStatus } from '../../shared/enums/http.js'
 import { ErrorCode } from '../../shared/enums/error-code.js'
 import { ItemStatuses } from '../../shared/enums/item-status.js'
-import { ListUserRoles } from '../../shared/enums/list-user-role.js'
+import { isListContributor } from '../../shared/types/list.js'
 import { serviceError } from '../../shared/utils/response.js'
 import { findListWithOwner } from '../../db/entities/lists/lists.repository.js'
 import {
@@ -44,9 +44,8 @@ export async function createOrUpdateReservation(
   const list = await findListWithOwner(listItem.listId, { excludeDeleted: true })
   if (!list) return serviceError(ErrorCode.NOT_FOUND)
 
-  const ownerUserId =
-    list.listUsers.find((member) => member.role === ListUserRoles.OWNER)?.userId ?? null
-  if (ownerUserId === input.userId) return serviceError(ErrorCode.FORBIDDEN)
+  // Owner and editor manage the list together: neither may reserve on it.
+  if (isListContributor(list.listUsers, input.userId)) return serviceError(ErrorCode.FORBIDDEN)
 
   if (input.quantityBooked > listItem.quantityDesired) {
     return serviceError(ErrorCode.UNPROCESSABLE_ENTITY, {

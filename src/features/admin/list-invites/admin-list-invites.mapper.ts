@@ -1,5 +1,5 @@
-import { toInviteDetail } from '../../../shared/types/collaborator.js'
-import type { CollaboratorDetail } from '../../../shared/types/collaborator.js'
+import { toInviteDetail, toListMemberUser } from '../../../shared/types/collaborator.js'
+import type { CollaboratorDetail, ListMemberUser } from '../../../shared/types/collaborator.js'
 import type { ListInviteWithRelationsRow } from '../../../db/entities/list-invites/list-invites.repository.js'
 
 export type AdminListInviteRow = ListInviteWithRelationsRow
@@ -12,6 +12,7 @@ export interface AdminListInviteList {
 
 export interface AdminListInviteDetail extends CollaboratorDetail {
   list: AdminListInviteList
+  invitedBy: ListMemberUser | null
   isExpired: boolean
 }
 
@@ -19,10 +20,10 @@ export function toAdminListInviteDetail(
   row: AdminListInviteRow,
   now: Date,
 ): AdminListInviteDetail {
-  const base = toInviteDetail(row)
   return {
-    ...base,
+    ...toInviteDetail(row, row.acceptedByUser),
     list: { id: row.list.id, title: row.list.title, slug: row.list.slug },
+    invitedBy: row.invitedByUser ? toListMemberUser(row.invitedByUser) : null,
     isExpired: row.inviteTokenExpiresAt.getTime() <= now.getTime(),
   }
 }
