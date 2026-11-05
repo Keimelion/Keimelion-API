@@ -2,108 +2,165 @@ import { db } from '../../db/client.js'
 import { HttpStatus } from '../../shared/enums/http.js'
 import { ErrorCode } from '../../shared/enums/error-code.js'
 import { ItemStatuses } from '../../shared/enums/item-status.js'
-import { isListContributor } from '../../shared/types/list.js'
+import { findOwnerUser, isListOwner } from '../../shared/types/list.js'
+import { toReservationDetail } from '../../shared/types/reservation.js'
 import { serviceError } from '../../shared/utils/response.js'
+import { logger } from '../../shared/utils/logger.js'
 import { findListWithOwner } from '../../db/entities/lists/lists.repository.js'
 import {
   findListItemById,
   findListItemByIdForUpdate,
+  findListItemOwnerUserId,
   updateListItemReservationState,
 } from '../../db/entities/list-items/list-items.repository.js'
 import {
   deleteReservation,
+  findNamedReservationDuplicate,
   findReservationByIdForUpdate,
+  findReservationByIdWithListItem,
   findReservationByListItemAndUser,
   findReservationsByUserId,
+  insertNamedReservation,
   upsertReservationQuantity,
 } from '../../db/entities/reservations/reservations.repository.js'
 import { toReservationSummary } from './reservations.types.js'
+import { generateReservationToken, isReservationTokenMatch } from './reservations.token.js'
 import type { ItemStatus } from '../../shared/enums/item-status.js'
 import type { ListItem } from '../../db/entities/list-items/list-items.schema.js'
 import type { Reservation } from '../../db/entities/reservations/reservations.schema.js'
+import type { ListUserWithUser } from '../../shared/types/list.js'
+import type { ReservationDetail } from '../../shared/types/reservation.js'
 import type { ServiceResult } from '../../shared/types/service.js'
 import type {
+  AnonymousReservationActionResponse,
   ListItemReservationSummary,
   ReservationActionResponse,
 } from './reservations.types.js'
 
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
+const ReservationModes = {
+  SELF: 'self',
+  PROXY: 'proxy',
+  ANONYMOUS: 'anonymous',
+} as const
+
+type ReservationIntent =
+  | { mode: typeof ReservationModes.SELF; userId: string }
+  | { mode: typeof ReservationModes.PROXY; ownerUserId: string; reserverName: string }
+  | { mode: typeof ReservationModes.ANONYMOUS; reserverName: string }
+
+const ReservationAccessLevels = {
+  HOLDER: 'holder',
+  LIST_OWNER: 'list_owner',
+} as const
+
+type ReservationAccessLevel = (typeof ReservationAccessLevels)[keyof typeof ReservationAccessLevels]
+
+type ReservationPermission = { accessLevel: ReservationAccessLevel } | { errorCode: ErrorCode }
+
+type NamedReservationOutcome = ReservationActionResponse | ErrorCode
+
 export interface CreateReservationInput {
   listItemId: string
-  userId: string
+  authUserId: string | null
+  reserverName: string | null
+  reserverEmail: string | null
   quantityBooked: number
+}
+
+export interface ReservationCaller {
+  authUserId: string | null
+  rawReservationToken: string | null
+}
+
+interface NamedReservationValues {
+  listItemId: string
+  quantityBooked: number
+  reserverName: string
+  reserverEmail: string | null
+  anonymousTokenHash: string | null
+}
+
+interface ReservationTotals {
+  listItemId: string
+  newTotal: number
+  quantityDesired: number
+}
+
+interface ReservationPermissionTarget {
+  reservation: Reservation
+  ownerUserId: string | null
+}
+
+interface CancelOutcome {
+  result: ServiceResult<null>
+  ownerCancelledReservation: Reservation | null
 }
 
 export async function createOrUpdateReservation(
   input: CreateReservationInput,
-): Promise<ServiceResult<ReservationActionResponse>> {
+): Promise<ServiceResult<ReservationActionResponse | AnonymousReservationActionResponse>> {
   const listItem = await findListItemById(input.listItemId)
   if (!listItem) return serviceError(ErrorCode.NOT_FOUND)
 
   const list = await findListWithOwner(listItem.listId, { excludeDeleted: true })
   if (!list) return serviceError(ErrorCode.NOT_FOUND)
 
-  // Owner and editor manage the list together: neither may reserve on it.
-  if (isListContributor(list.listUsers, input.userId)) return serviceError(ErrorCode.FORBIDDEN)
+  const intent = resolveReservationIntent(input, list.listUsers)
+  if (typeof intent === 'string') return serviceError(intent)
 
   if (input.quantityBooked > listItem.quantityDesired) {
-    return serviceError(ErrorCode.UNPROCESSABLE_ENTITY, {
-      issues: [
-        {
-          path: 'quantityBooked',
-          code: 'too_big',
-          message: `quantityBooked must not exceed quantity_desired (${String(listItem.quantityDesired)})`,
-        },
-      ],
-    })
+    return quantityExceedsDesiredError(listItem.quantityDesired)
   }
 
-  return db.transaction(async (tx) => {
-    const current = await findListItemByIdForUpdate(input.listItemId, tx)
-    if (!current) return serviceError(ErrorCode.NOT_FOUND)
+  switch (intent.mode) {
+    case ReservationModes.SELF:
+      return reserveForSelf(input, intent.userId)
+    case ReservationModes.PROXY:
+      return reserveAsProxy(input, intent.ownerUserId, intent.reserverName)
+    case ReservationModes.ANONYMOUS:
+      return reserveAnonymously(input, intent.reserverName)
+  }
+}
 
-    const existing = await findReservationByListItemAndUser(input.listItemId, input.userId, tx)
-    const previousQty = existing?.quantityBooked ?? 0
-    const delta = input.quantityBooked - previousQty
-    const newTotal = current.quantityReservedTotal + delta
+export async function getReservation(
+  reservationId: string,
+  caller: ReservationCaller,
+): Promise<ServiceResult<{ reservation: ReservationDetail }>> {
+  const row = await findReservationByIdWithListItem(reservationId)
+  if (!row) return serviceError(ErrorCode.NOT_FOUND)
 
-    if (newTotal > current.quantityDesired) return serviceError(ErrorCode.CONFLICT)
+  const ownerUserId = findOwnerUser(row.listItem.list.listUsers)?.id ?? null
+  const permission = resolveReservationPermission({ reservation: row, ownerUserId }, caller)
+  if ('errorCode' in permission) return serviceError(permission.errorCode)
 
-    const reservation = await upsertReservationQuantity(
-      { listItemId: input.listItemId, userId: input.userId, quantityBooked: input.quantityBooked },
-      tx,
-    )
-    if (!reservation) return serviceError(ErrorCode.INTERNAL_ERROR)
-
-    const updatedListItem = await applyReservationTotal(
-      input.listItemId,
-      newTotal,
-      current.quantityDesired,
-      tx,
-    )
-    if (!updatedListItem) return serviceError(ErrorCode.INTERNAL_ERROR)
-
-    return {
-      data: {
-        reservation: toReservationSummary(reservation),
-        listItem: toListItemReservationSummary(updatedListItem),
-      },
-      httpStatus: existing ? HttpStatus.OK : HttpStatus.CREATED,
-    }
-  })
+  return { data: { reservation: toReservationDetail(row) }, httpStatus: HttpStatus.OK }
 }
 
 export async function cancelReservation(
   reservationId: string,
-  userId: string,
+  caller: ReservationCaller,
 ): Promise<ServiceResult<null>> {
-  return db.transaction(async (tx) => {
+  const { result, ownerCancelledReservation } = await db.transaction<CancelOutcome>(async (tx) => {
     const reservation = await findReservationByIdForUpdate(reservationId, tx)
-    if (!reservation) return serviceError(ErrorCode.NOT_FOUND)
-    if (reservation.userId !== userId) return serviceError(ErrorCode.FORBIDDEN)
-    return cancelReservationAtomic(tx, reservation)
+    if (!reservation) return { result: serviceError(ErrorCode.NOT_FOUND), ownerCancelledReservation: null }
+
+    const ownerUserId = await findListItemOwnerUserId(reservation.listItemId, tx)
+    const permission = resolveReservationPermission({ reservation, ownerUserId }, caller)
+    if ('errorCode' in permission) {
+      return { result: serviceError(permission.errorCode), ownerCancelledReservation: null }
+    }
+
+    const outcome = await cancelReservationAtomic(tx, reservation)
+    const isOwnerCancel = permission.accessLevel === ReservationAccessLevels.LIST_OWNER
+    return { result: outcome, ownerCancelledReservation: isOwnerCancel ? reservation : null }
   })
+
+  if (ownerCancelledReservation && result.httpStatus === HttpStatus.NO_CONTENT) {
+    logOwnerCancel(caller.authUserId, ownerCancelledReservation)
+  }
+  return result
 }
 
 /**
@@ -122,7 +179,10 @@ export async function cancelReservationAtomic(
   if (!removed) return serviceError(ErrorCode.INTERNAL_ERROR)
 
   const newTotal = Math.max(0, listItem.quantityReservedTotal - reservation.quantityBooked)
-  await applyReservationTotal(reservation.listItemId, newTotal, listItem.quantityDesired, tx)
+  await applyReservationTotal(
+    { listItemId: reservation.listItemId, newTotal, quantityDesired: listItem.quantityDesired },
+    tx,
+  )
 
   return { data: null, httpStatus: HttpStatus.NO_CONTENT }
 }
@@ -145,20 +205,181 @@ export async function reconcileListItemsForUserHardDelete(
     if (!current) continue
     const newTotal = Math.max(0, current.quantityReservedTotal - quantityToRelease)
     if (newTotal === current.quantityReservedTotal) continue
-    await applyReservationTotal(listItemId, newTotal, current.quantityDesired, tx)
+    await applyReservationTotal({ listItemId, newTotal, quantityDesired: current.quantityDesired }, tx)
   }
 }
 
+function resolveReservationIntent(
+  input: CreateReservationInput,
+  listUsers: readonly ListUserWithUser[],
+): ReservationIntent | ErrorCode {
+  if (input.authUserId === null) {
+    if (input.reserverName === null) return ErrorCode.RESERVATION_REQUIRES_RESERVER_NAME
+    return { mode: ReservationModes.ANONYMOUS, reserverName: input.reserverName }
+  }
+  if (input.reserverName === null) return { mode: ReservationModes.SELF, userId: input.authUserId }
+  if (!isListOwner(listUsers, input.authUserId)) return ErrorCode.RESERVATION_INCONSISTENT_INTENT
+  return {
+    mode: ReservationModes.PROXY,
+    ownerUserId: input.authUserId,
+    reserverName: input.reserverName,
+  }
+}
+
+function quantityExceedsDesiredError(quantityDesired: number): ServiceResult<never> {
+  return serviceError(ErrorCode.UNPROCESSABLE_ENTITY, {
+    issues: [
+      {
+        path: 'quantityBooked',
+        code: 'too_big',
+        message: `quantityBooked must not exceed quantity_desired (${String(quantityDesired)})`,
+      },
+    ],
+  })
+}
+
+async function reserveForSelf(
+  input: CreateReservationInput,
+  userId: string,
+): Promise<ServiceResult<ReservationActionResponse>> {
+  return db.transaction(async (tx) => {
+    const current = await findListItemByIdForUpdate(input.listItemId, tx)
+    if (!current) return serviceError(ErrorCode.NOT_FOUND)
+
+    const existing = await findReservationByListItemAndUser(input.listItemId, userId, tx)
+    const previousQuantity = existing?.quantityBooked ?? 0
+    const newTotal = current.quantityReservedTotal + input.quantityBooked - previousQuantity
+    if (newTotal > current.quantityDesired) return serviceError(ErrorCode.CONFLICT)
+
+    const reservation = await upsertReservationQuantity(
+      { listItemId: input.listItemId, userId, quantityBooked: input.quantityBooked },
+      tx,
+    )
+    const totals = { listItemId: input.listItemId, newTotal, quantityDesired: current.quantityDesired }
+    const response = await summarizeReservation(tx, reservation, totals)
+    if (!response) return serviceError(ErrorCode.INTERNAL_ERROR)
+
+    return { data: response, httpStatus: existing ? HttpStatus.OK : HttpStatus.CREATED }
+  })
+}
+
+async function reserveAsProxy(
+  input: CreateReservationInput,
+  ownerUserId: string,
+  reserverName: string,
+): Promise<ServiceResult<ReservationActionResponse>> {
+  const outcome = await reserveNamed(toNamedReservationValues(input, reserverName, null))
+  if (typeof outcome === 'string') return serviceError(outcome)
+
+  logger.info({
+    event: 'owner_proxy_create_reservation',
+    ownerUserId,
+    reservationId: outcome.reservation.id,
+    listItemId: input.listItemId,
+    reserverName,
+  })
+  return { data: outcome, httpStatus: HttpStatus.CREATED }
+}
+
+async function reserveAnonymously(
+  input: CreateReservationInput,
+  reserverName: string,
+): Promise<ServiceResult<AnonymousReservationActionResponse>> {
+  const { rawToken, tokenHash } = generateReservationToken()
+  const outcome = await reserveNamed(toNamedReservationValues(input, reserverName, tokenHash))
+  if (typeof outcome === 'string') return serviceError(outcome)
+
+  return { data: { ...outcome, token: rawToken }, httpStatus: HttpStatus.CREATED }
+}
+
+function toNamedReservationValues(
+  input: CreateReservationInput,
+  reserverName: string,
+  anonymousTokenHash: string | null,
+): NamedReservationValues {
+  return {
+    listItemId: input.listItemId,
+    quantityBooked: input.quantityBooked,
+    reserverName,
+    reserverEmail: input.reserverEmail,
+    anonymousTokenHash,
+  }
+}
+
+// Shared by proxy and anonymous modes: a named reservation is unique per (item, name or email)
+// regardless of who created it, so an owner proxy and a guest cannot book twice for one person.
+async function reserveNamed(values: NamedReservationValues): Promise<NamedReservationOutcome> {
+  return db.transaction<NamedReservationOutcome>(async (tx) => {
+    const current = await findListItemByIdForUpdate(values.listItemId, tx)
+    if (!current) return ErrorCode.NOT_FOUND
+
+    const duplicate = await findNamedReservationDuplicate(values, tx)
+    if (duplicate) return ErrorCode.CONFLICT
+
+    const newTotal = current.quantityReservedTotal + values.quantityBooked
+    if (newTotal > current.quantityDesired) return ErrorCode.CONFLICT
+
+    const reservation = await insertNamedReservation(values, tx)
+    const totals = { listItemId: current.id, newTotal, quantityDesired: current.quantityDesired }
+    const response = await summarizeReservation(tx, reservation, totals)
+    return response ?? ErrorCode.INTERNAL_ERROR
+  })
+}
+
+async function summarizeReservation(
+  tx: DbTransaction,
+  reservation: Reservation | undefined,
+  totals: ReservationTotals,
+): Promise<ReservationActionResponse | null> {
+  if (!reservation) return null
+  const updatedListItem = await applyReservationTotal(totals, tx)
+  if (!updatedListItem) return null
+  return {
+    reservation: toReservationSummary(reservation),
+    listItem: toListItemReservationSummary(updatedListItem),
+  }
+}
+
+function resolveReservationPermission(
+  target: ReservationPermissionTarget,
+  caller: ReservationCaller,
+): ReservationPermission {
+  const { reservation, ownerUserId } = target
+  if (caller.authUserId !== null) {
+    if (reservation.userId === caller.authUserId) return { accessLevel: ReservationAccessLevels.HOLDER }
+    if (ownerUserId === caller.authUserId) return { accessLevel: ReservationAccessLevels.LIST_OWNER }
+    return { errorCode: ErrorCode.FORBIDDEN }
+  }
+  if (caller.rawReservationToken === null) return { errorCode: ErrorCode.FORBIDDEN }
+  if (!isAnonymousHolder(reservation, caller.rawReservationToken)) {
+    return { errorCode: ErrorCode.RESERVATION_TOKEN_INVALID }
+  }
+  return { accessLevel: ReservationAccessLevels.HOLDER }
+}
+
+function isAnonymousHolder(reservation: Reservation, rawReservationToken: string): boolean {
+  if (reservation.anonymousTokenHash === null) return false
+  return isReservationTokenMatch(rawReservationToken, reservation.anonymousTokenHash)
+}
+
+function logOwnerCancel(ownerUserId: string | null, reservation: Reservation): void {
+  logger.info({
+    event: 'owner_cancel_reservation',
+    ownerUserId,
+    reservationId: reservation.id,
+    listItemId: reservation.listItemId,
+    reserverName: reservation.reserverName,
+  })
+}
+
 async function applyReservationTotal(
-  listItemId: string,
-  newTotal: number,
-  quantityDesired: number,
+  totals: ReservationTotals,
   tx: DbTransaction,
 ): Promise<ListItem | undefined> {
-  const nextStatus = computeNextItemStatus(newTotal, quantityDesired)
+  const nextStatus = computeNextItemStatus(totals.newTotal, totals.quantityDesired)
   return updateListItemReservationState(
-    listItemId,
-    { quantityReservedTotal: newTotal, itemStatus: nextStatus },
+    totals.listItemId,
+    { quantityReservedTotal: totals.newTotal, itemStatus: nextStatus },
     tx,
   )
 }

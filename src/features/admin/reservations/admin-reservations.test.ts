@@ -43,6 +43,9 @@ const RESERVATION_ROW = {
   id: RESERVATION_ID,
   listItemId: LIST_ITEM_ID,
   userId: RESERVER_USER.id,
+  reserverName: null,
+  reserverEmail: null,
+  anonymousTokenHash: null,
   quantityBooked: 2,
   createdAt: new Date('2024-02-01'),
   user: RESERVER_USER,
@@ -95,6 +98,25 @@ const RESERVATION_ROW = {
       ],
     },
   },
+}
+
+const ANONYMOUS_RESERVATION_ROW = {
+  ...RESERVATION_ROW,
+  id: '00000000-0000-0000-0000-000000000041',
+  userId: null,
+  user: null,
+  reserverName: 'Aunt Marie',
+  reserverEmail: 'aunt.marie@example.com',
+  anonymousTokenHash: 'f'.repeat(64),
+}
+
+const PROXY_RESERVATION_ROW = {
+  ...RESERVATION_ROW,
+  id: '00000000-0000-0000-0000-000000000042',
+  userId: null,
+  user: null,
+  reserverName: 'Grandpa Joe',
+  reserverEmail: null,
 }
 
 const ACCESS_TOKEN_ENTRY = makeAccessTokenEntry(ADMIN_USER.id)
@@ -221,6 +243,26 @@ describe('GET /v1/admin/reservations', () => {
     expect(body.items[0]?.listItem.item.name).toBe('Catalog Item')
     expect(body.items[0]?.list.slug).toBe('wishlist')
     expect(body.items[0]?.list.owner?.id).toBe(OWNER_USER.id)
+  })
+
+  it('returns anonymous and proxy reservations with user null and reserver identity', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockListReservations([ANONYMOUS_RESERVATION_ROW, PROXY_RESERVATION_ROW])
+    mockCountReservationsChain(2)
+
+    const response = await apiRequest('/v1/admin/reservations', { token })
+
+    const rawBody = await response.text()
+    const body = JSON.parse(rawBody) as {
+      items: { user: unknown; reserverName: string | null; reserverEmail: string | null }[]
+    }
+    expect(response.status).toBe(200)
+    expect(body.items.map((item) => item.user)).toEqual([null, null])
+    expect(body.items.map((item) => item.reserverName)).toEqual(['Aunt Marie', 'Grandpa Joe'])
+    expect(body.items[0]?.reserverEmail).toBe('aunt.marie@example.com')
+    expect(rawBody).not.toContain('anonymousTokenHash')
+    expect(rawBody).not.toContain('f'.repeat(64))
   })
 
   it('returns empty paginated response when no reservations match', async () => {
@@ -352,6 +394,22 @@ describe('GET /v1/admin/reservations/:id', () => {
     expect(body.reservation.list.owner?.id).toBe(OWNER_USER.id)
   })
 
+  it('returns 200 with user null for an anonymous reservation', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindReservationFirst(ANONYMOUS_RESERVATION_ROW)
+
+    const response = await apiRequest(`/v1/admin/reservations/${ANONYMOUS_RESERVATION_ROW.id}`, { token })
+
+    const body = await response.json() as {
+      reservation: { user: unknown; reserverName: string; reserverEmail: string }
+    }
+    expect(response.status).toBe(200)
+    expect(body.reservation.user).toBeNull()
+    expect(body.reservation.reserverName).toBe('Aunt Marie')
+    expect(body.reservation).not.toHaveProperty('anonymousTokenHash')
+  })
+
   it('returns 404 when the reservation does not exist', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
@@ -450,6 +508,36 @@ describe('DELETE /v1/admin/reservations/:id', () => {
         listItemId: LIST_ITEM_ID,
         reserverUserId: RESERVER_USER.id,
       }),
+    )
+  })
+
+  it('returns 204 and logs a null reserverUserId when cancelling a proxy reservation', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    const reservation = {
+      id: PROXY_RESERVATION_ROW.id,
+      listItemId: LIST_ITEM_ID,
+      userId: null,
+      reserverName: PROXY_RESERVATION_ROW.reserverName,
+      reserverEmail: null,
+      anonymousTokenHash: null,
+      quantityBooked: 2,
+      createdAt: new Date('2024-02-01'),
+    }
+    mockAdminCancelTransaction({
+      reservation,
+      listItem: PROXY_RESERVATION_ROW.listItem,
+      deletedReservation: reservation,
+    })
+
+    const response = await apiRequest(`/v1/admin/reservations/${PROXY_RESERVATION_ROW.id}`, {
+      method: 'DELETE',
+      token,
+    })
+
+    expect(response.status).toBe(204)
+    expect(vi.mocked(logger.warn)).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'admin_delete_reservation', reserverUserId: null }),
     )
   })
 

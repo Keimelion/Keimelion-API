@@ -7,6 +7,7 @@ import { HonoContextKey } from '../enums/context-key.js'
 import type { AppVariables } from '../types/app.js'
 import type { User } from '../../db/entities/users/users.schema.js'
 import { logger } from '../utils/logger.js'
+import { extractBearerToken } from '../utils/bearer.js'
 
 export function getOptionalAuthUser(context: Context<{ Variables: AppVariables }>): User | null {
   const user = context.get(HonoContextKey.USER) as User | undefined
@@ -52,9 +53,4 @@ async function resolveTokenPayload(authHeader: string | undefined): Promise<JwtP
   const token = extractBearerToken(authHeader)
   if (!token) return null
   return verifyJwt(token)
-}
-
-function extractBearerToken(authHeader: string | undefined): string | null {
-  if (!authHeader?.startsWith('Bearer ')) return null
-  return authHeader.slice(7)
 }

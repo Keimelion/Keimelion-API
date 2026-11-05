@@ -4,6 +4,8 @@ import { env } from '../../config/env.js'
 import { apiMultipartRequest, apiRequest } from '../../shared/test/api-request.js'
 import { generateTestToken, makeAccessTokenEntry } from '../../shared/test/auth.js'
 import { EXPORT_ENTITY_REGISTRY } from './export/export-entities.js'
+import { PgDialect } from 'drizzle-orm/pg-core'
+import type { SQL } from 'drizzle-orm'
 
 const SAFE_USER = {
   id: '00000000-0000-0000-0000-000000000001',
@@ -1285,7 +1287,7 @@ describe('GET /v1/users/me/export', () => {
       },
     ]
 
-    vi.mocked(db.query.reservations.findMany).mockResolvedValueOnce(rows)
+    vi.mocked(db.query.reservations.findMany).mockResolvedValueOnce(rows as never)
 
     const response = await apiRequest('/v1/users/me/export?format=json', { token })
 
@@ -1296,6 +1298,47 @@ describe('GET /v1/users/me/export', () => {
       rows[0]?.id,
       rows[1]?.id,
     ])
+  })
+
+  it('scopes the reservations export to the caller user_id so anonymous and proxy rows never leak', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    vi.mocked(db.query.reservations.findMany).mockResolvedValueOnce([])
+
+    await apiRequest('/v1/users/me/export?format=json', { token })
+
+    const exportQuery = vi.mocked(db.query.reservations.findMany).mock.calls[0]?.[0]
+    const whereClause = new PgDialect().sqlToQuery(exportQuery?.where as SQL)
+    expect(whereClause.sql).toBe('"reservations"."user_id" = $1')
+    expect(whereClause.params).toEqual([SAFE_USER.id])
+  })
+
+  it('never serialises reserver identity or the anonymous token hash in the reservations export', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    vi.mocked(db.query.reservations.findMany).mockResolvedValueOnce([
+      {
+        id: '00000000-0000-0000-0000-00000000f401',
+        listItemId: '00000000-0000-0000-0000-00000000f501',
+        userId: SAFE_USER.id,
+        reserverName: 'Leaky Name',
+        reserverEmail: 'leaky@example.com',
+        anonymousTokenHash: 'a'.repeat(64),
+        quantityBooked: 1,
+        createdAt: new Date('2024-05-12'),
+        listItem: { list: { title: 'List C' }, item: { name: 'Item C' } },
+      },
+    ] as never)
+
+    const response = await apiRequest('/v1/users/me/export?format=json', { token })
+
+    const rawBody = await response.text()
+    expect(response.status).toBe(200)
+    expect(rawBody).not.toContain('Leaky Name')
+    expect(rawBody).not.toContain('leaky@example.com')
+    expect(rawBody).not.toContain('a'.repeat(64))
   })
 
   it('fetches uploader-scoped images for RGPD', async () => {

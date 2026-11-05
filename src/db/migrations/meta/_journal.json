@@ -183,6 +183,13 @@
       "when": 1793808092073,
       "tag": "0025_upload_only_images",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1793819032002,
+      "tag": "0026_reservations_anonymous",
+      "breakpoints": true
     }
   ]
 }
