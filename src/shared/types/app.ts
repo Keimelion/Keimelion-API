@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import type { User } from '../../db/entities/users/users.schema.js'
 import type { JwtPayload } from '../../features/auth/jwt.service.js'
-import type { Locale } from '../enums/locale.js'
+import type { Locale } from '@keimelion/sdk/enums'
 import type { ListRowWithOwner } from './list.js'
 
 export interface AppVariables {

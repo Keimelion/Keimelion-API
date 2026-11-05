@@ -1,11 +1,15 @@
 import { db } from '../../db/client.js'
-import { HttpStatus } from '../../shared/enums/http.js'
-import { ErrorCode } from '../../shared/enums/error-code.js'
-import { ItemStatuses } from '../../shared/enums/item-status.js'
-import { ListStatuses } from '../../shared/enums/list-status.js'
+import { buildPaginatedResponse } from '../../shared/utils/pagination.js'
+import {
+  ErrorCode,
+  HttpStatus,
+  ItemStatuses,
+  ListStatuses,
+  ListUserRoles,
+} from '@keimelion/sdk/enums'
+import type { PaginatedResponse } from '@keimelion/sdk/schemas'
 import { serviceError } from '../../shared/utils/response.js'
 import { runWrite } from '../../shared/utils/admin-write.js'
-import { buildPaginatedResponse } from '../../shared/schemas/pagination.js'
 import { buildSlugFromTitle, normalizeTagSlugs } from '../../shared/utils/slug.js'
 import { isPgForeignKeyViolation, isPgUniqueViolation } from '../../shared/db/pg-errors.js'
 import { logger } from '../../shared/utils/logger.js'
@@ -20,7 +24,6 @@ import {
 } from '../../db/entities/lists/lists.repository.js'
 import { insertListUser } from '../../db/entities/list-users/list-users.repository.js'
 import { findUserByIdWithAvatar } from '../../db/entities/users/users.repository.js'
-import { ListUserRoles } from '../../shared/enums/list-user-role.js'
 import { upsertTagsBySlugs } from '../../db/entities/tags/tags.repository.js'
 import { replaceListTags } from '../../db/entities/list-tags/list-tags.repository.js'
 import { toItemDetail, toListItemDetail } from '../../shared/types/item.js'
@@ -32,7 +35,6 @@ import type { InsertList } from '../../db/entities/lists/lists.repository.js'
 import type { ListDetail, ListRowWithOwner } from '../../shared/types/list.js'
 import type { ListItemResponse } from './lists.types.js'
 import type { ServiceResult } from '../../shared/types/service.js'
-import type { PaginatedResponse } from '../../shared/types/api.js'
 import type { AddItemInput } from './endpoints/add-item.js'
 import type { CreateListInput } from './endpoints/create.js'
 import type { ListUserListsInput } from './endpoints/list.js'

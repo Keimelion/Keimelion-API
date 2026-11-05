@@ -4,6 +4,10 @@ node_modules/
 # Build output
 dist/
 
+# Local @keimelion/sdk linking (npx yalc link @keimelion/sdk)
+.yalc/
+yalc.lock
+
 # Environment
 .env
 .env.local

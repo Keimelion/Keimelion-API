@@ -1,8 +1,8 @@
 import { and, asc, eq, inArray, sql } from 'drizzle-orm'
 import { db } from '../../client.js'
-import { DEFAULT_LOCALE } from '../../../shared/enums/locale.js'
+import { DEFAULT_LOCALE } from '@keimelion/sdk/enums'
+import type { Locale } from '@keimelion/sdk/enums'
 import { categories, categoryTranslations } from './categories.schema.js'
-import type { Locale } from '../../../shared/enums/locale.js'
 import type { Category, CategoryTranslation } from './categories.schema.js'
 import type {
   CategoryRowWithResolvedName,

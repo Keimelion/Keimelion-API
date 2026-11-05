@@ -1,6 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { db } from '../../db/client.js'
 import { env } from '../../config/env.js'
+import { ErrorCode } from '@keimelion/sdk/enums'
+import {
+  apiErrorBodySchema,
+  forgotPasswordResponseSchema,
+  loginResponseSchema,
+  logoutResponseSchema,
+  refreshResponseSchema,
+  registerResponseSchema,
+  resetPasswordResponseSchema,
+  validationErrorMetadataSchema,
+  verifyEmailResponseSchema,
+} from '@keimelion/sdk/schemas'
 import { NodeEnvs } from '../../shared/enums/node-env.js'
 import { apiMultipartRequest, apiRequest } from '../../shared/test/api-request.js'
 import { generateTestToken, makeAccessTokenEntry } from '../../shared/test/auth.js'
@@ -76,7 +88,7 @@ describe('POST /v1/auth/register', () => {
       },
     })
 
-    const body = await response.json() as { user: { id: string; email: string }; refreshToken: string }
+    const body = registerResponseSchema.parse(await response.json())
     expect(response.status).toBe(201)
     expect(body.user.email).toBe('user@example.com')
     expect(typeof body.refreshToken).toBe('string')
@@ -213,7 +225,7 @@ describe('POST /v1/auth/verify-email', () => {
       body: { token: validToken },
     })
 
-    const body = await response.json() as { message: string }
+    const body = verifyEmailResponseSchema.parse(await response.json())
     expect(response.status).toBe(200)
     expect(body.message).toBe('Email verified successfully')
   })
@@ -275,8 +287,9 @@ describe('POST /v1/auth/login', () => {
       body: { email: 'user@example.com', password: 'securepassword123' },
     })
 
-    const body = await response.json() as { accessToken: string; refreshToken: string; user: { email: string } }
+    const body = loginResponseSchema.parse(await response.json())
     expect(response.status).toBe(200)
+    expect(body.user.createdAt).toEqual(VALID_USER.createdAt)
     expect(typeof body.accessToken).toBe('string')
     expect(typeof body.refreshToken).toBe('string')
     expect(body.refreshToken.length).toBeGreaterThan(0)
@@ -312,9 +325,23 @@ describe('POST /v1/auth/login', () => {
       body: { email: 'user@example.com', password: 'securepassword123' },
     })
 
-    const body = await response.json() as { user: { avatar: { id: string } | null } }
+    const body = loginResponseSchema.parse(await response.json())
     expect(response.status).toBe(200)
     expect(body.user.avatar?.id).toBe(avatarImage.id)
+    expect(body.user.avatar?.createdAt).toEqual(avatarImage.createdAt)
+  })
+
+  it('returns 422 with the SDK error envelope and metadata.issues when the body is invalid', async () => {
+    const response = await apiRequest('/v1/auth/login', {
+      method: 'POST',
+      body: { email: 'not-an-email', password: '' },
+    })
+
+    const body = apiErrorBodySchema.parse(await response.json())
+    const { issues } = validationErrorMetadataSchema.parse(body.metadata)
+    expect(response.status).toBe(422)
+    expect(body.code).toBe(ErrorCode.UNPROCESSABLE_ENTITY)
+    expect(issues.map((issue) => issue.path)).toEqual(['email', 'password'])
   })
 
   it('returns 401 when email is unknown', async () => {
@@ -383,7 +410,7 @@ describe('POST /v1/auth/logout', () => {
 
     const response = await apiRequest('/v1/auth/logout', { method: 'POST', token })
 
-    const body = await response.json() as { message: string }
+    const body = logoutResponseSchema.parse(await response.json())
     expect(response.status).toBe(200)
     expect(body.message).toBe('Logged out successfully')
     expect(vi.mocked(db.transaction)).toHaveBeenCalledOnce()
@@ -506,7 +533,7 @@ describe('POST /v1/auth/forgot-password', () => {
 
     const body = await response.json() as { message: string; passwordResetToken?: string }
     expect(response.status).toBe(200)
-    expect(body.message).toBe('If this email is registered, a reset link has been sent')
+    expect(forgotPasswordResponseSchema.parse(body).message).toBe('If this email is registered, a reset link has been sent')
     expect(body.passwordResetToken).toMatch(/^[a-f0-9]{64}$/)
   })
 
@@ -618,7 +645,7 @@ describe('POST /v1/auth/reset-password', () => {
       body: { passwordResetToken: 'valid-raw-token-64-chars-long-at-least-to-pass', password: 'newpassword123' },
     })
 
-    const body = await response.json() as { message: string }
+    const body = resetPasswordResponseSchema.parse(await response.json())
     expect(response.status).toBe(200)
     expect(body.message).toBe('Password reset successfully')
   })
@@ -705,7 +732,7 @@ describe('POST /v1/auth/refresh', () => {
       body: { refreshToken: submittedRefreshToken },
     })
 
-    const body = await response.json() as { accessToken: string; refreshToken: string }
+    const body = refreshResponseSchema.parse(await response.json())
     expect(response.status).toBe(200)
     expect(typeof body.accessToken).toBe('string')
     expect(body.accessToken.length).toBeGreaterThan(0)

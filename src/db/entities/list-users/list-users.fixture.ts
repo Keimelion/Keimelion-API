@@ -1,6 +1,6 @@
 import type { db as Db } from '../../client.js'
-import { ListUserRoles } from '../../../shared/enums/list-user-role.js'
-import type { ListUserRole } from '../../../shared/enums/list-user-role.js'
+import { ListUserRoles } from '@keimelion/sdk/enums'
+import type { ListUserRole } from '@keimelion/sdk/enums'
 import { LIST_IDS } from '../lists/lists.fixture.js'
 import { listUsers } from './list-users.schema.js'
 

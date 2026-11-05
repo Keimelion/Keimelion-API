@@ -1,7 +1,7 @@
 import { zValidator } from '@hono/zod-validator'
 import { adminOnly } from '../../../../shared/middlewares/admin-only.js'
 import { jsonResult } from '../../../../shared/utils/response.js'
-import { paginationQuerySchema } from '../../../../shared/schemas/pagination.js'
+import { paginationQuerySchema } from '@keimelion/sdk/schemas'
 import { validationErrorHandler } from '../../../../shared/utils/validation.js'
 import type { FeatureRouter } from '../../../../shared/types/app.js'
 import { listOccasionTypes } from '../admin-occasion-types.service.js'

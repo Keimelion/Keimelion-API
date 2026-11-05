@@ -1,6 +1,6 @@
 import { db } from '../../db/client.js'
 import { sql } from 'drizzle-orm'
-import { HttpStatus } from '../../shared/enums/http.js'
+import { HttpStatus } from '@keimelion/sdk/enums'
 import pkg from '../../../package.json' with { type: 'json' }
 
 const HealthStatus = {

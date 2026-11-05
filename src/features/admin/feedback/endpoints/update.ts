@@ -5,7 +5,7 @@ import { getAuthUser } from '../../../../shared/middlewares/auth.js'
 import { uuidParamSchema } from '../../../../shared/schemas/params.js'
 import { jsonResult } from '../../../../shared/utils/response.js'
 import { validationErrorHandler } from '../../../../shared/utils/validation.js'
-import { FEEDBACK_STATUS_VALUES } from '../../../../shared/enums/feedback-status.js'
+import { FEEDBACK_STATUS_VALUES } from '@keimelion/sdk/enums'
 import type { FeatureRouter } from '../../../../shared/types/app.js'
 import { updateFeedbackStatusById } from '../admin-feedback.service.js'
 

@@ -1,0 +1,13 @@
+# Local @keimelion/sdk linking (yalc) must never reach the repo: `npm ci` would break in CI.
+staged_files=$(git diff --cached --name-only --diff-filter=ACMR)
+
+if printf '%s\n' "$staged_files" | grep -Eq '^(yalc\.lock|\.yalc/)'; then
+  echo "pre-commit: yalc.lock or .yalc/ is staged. Unstage it (git restore --staged yalc.lock .yalc)." >&2
+  exit 1
+fi
+
+if git show :package.json 2>/dev/null | grep -q 'file:\.yalc'; then
+  echo "pre-commit: package.json references file:.yalc. Use 'npx yalc link' instead of 'yalc add'," >&2
+  echo "then restore the registry version of the dependency." >&2
+  exit 1
+fi

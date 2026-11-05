@@ -6,7 +6,10 @@ import { listUsers } from '../../../db/entities/list-users/list-users.schema.js'
 import { listItems } from '../../../db/entities/list-items/list-items.schema.js'
 import { itemSources } from '../../../db/entities/item-sources/item-sources.schema.js'
 import { currencies } from '../../../db/entities/currencies/currencies.schema.js'
-import type { SupportedCurrency } from '../../../shared/enums/currency.js'
+import { getOffset } from '../../../shared/utils/pagination.js'
+import { LIST_STATUS_VALUES, ListUserRoles } from '@keimelion/sdk/enums'
+import type { SupportedCurrency } from '@keimelion/sdk/enums'
+import type { PaginationQueryParsed, SortInput } from '@keimelion/sdk/schemas'
 import {
   LIST_DEFAULT_SORT,
   LIST_SORTABLE_FIELDS,
@@ -14,14 +17,9 @@ import {
   findListById,
   findListWithOwner,
 } from '../../../db/entities/lists/lists.repository.js'
-import { ListUserRoles } from '../../../shared/enums/list-user-role.js'
 import { defineEntity, buildSoftDeleteDefault } from '../../../shared/db/entity-descriptor.js'
-import { LIST_STATUS_VALUES } from '../../../shared/enums/list-status.js'
 import type { List } from '../../../db/entities/lists/lists.schema.js'
 import type { ListRowWithOwner } from '../../../shared/types/list.js'
-import { getOffset } from '../../../shared/schemas/pagination.js'
-import type { PaginationInput } from '../../../shared/schemas/pagination.js'
-import type { SortInput } from '../../../shared/schemas/sort.js'
 import type { FilterInput } from '../../../shared/db/filter-parser.js'
 
 const listStatusSchema = z.enum(LIST_STATUS_VALUES)
@@ -50,7 +48,7 @@ export interface ListListsFilters {
 }
 
 export function findAllListsWithOwner(
-  input: PaginationInput,
+  input: PaginationQueryParsed,
   filters: ListListsFilters,
 ): Promise<ListRowWithOwner[]> {
   const offset = getOffset(input)

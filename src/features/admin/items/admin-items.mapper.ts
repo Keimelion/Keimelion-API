@@ -1,6 +1,6 @@
 import { toItemWithSources } from '../../../shared/types/item.js'
 import type { ItemRowWithSources, ItemWithSources } from '../../../shared/types/item.js'
-import type { Locale } from '../../../shared/enums/locale.js'
+import type { Locale } from '@keimelion/sdk/enums'
 
 export interface AdminItem extends ItemWithSources {
   reservationCount: number

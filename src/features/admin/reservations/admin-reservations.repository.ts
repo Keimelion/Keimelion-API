@@ -8,10 +8,9 @@ import {
   RESERVATION_DEFAULT_SORT,
 } from '../../../db/entities/reservations/reservations.repository.js'
 import { defineEntity } from '../../../shared/db/entity-descriptor.js'
-import { getOffset } from '../../../shared/schemas/pagination.js'
+import { getOffset } from '../../../shared/utils/pagination.js'
+import type { PaginationQueryParsed, SortInput } from '@keimelion/sdk/schemas'
 import type { AdminReservationRow } from './admin-reservations.mapper.js'
-import type { PaginationInput } from '../../../shared/schemas/pagination.js'
-import type { SortInput } from '../../../shared/schemas/sort.js'
 
 export const adminReservationsEntity = defineEntity({
   sortable: RESERVATION_SORTABLE_FIELDS,
@@ -70,7 +69,7 @@ function buildWhere(filters: AdminReservationsScopedFilters): SQL | undefined {
 
 export async function findReservationsPaged(
   filters: AdminReservationsScopedFilters,
-  pagination: PaginationInput,
+  pagination: PaginationQueryParsed,
   sort: SortInput<AdminReservationsSortField> | undefined,
 ): Promise<AdminReservationRow[]> {
   const offset = getOffset(pagination)

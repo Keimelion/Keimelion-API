@@ -1,5 +1,5 @@
-import { DEFAULT_LOCALE } from '../enums/locale.js'
-import type { Locale } from '../enums/locale.js'
+import { DEFAULT_LOCALE } from '@keimelion/sdk/enums'
+import type { Locale } from '@keimelion/sdk/enums'
 import type {
   Category,
   CategoryTranslation,

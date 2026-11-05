@@ -1,11 +1,11 @@
 import { z } from 'zod'
 import type { Context } from 'hono'
 import type { ZodType, infer as zInfer } from 'zod'
-import { ErrorCode } from '../../shared/enums/error-code.js'
+import { ErrorCode } from '@keimelion/sdk/enums'
+import type { ValidationIssueParsed } from '@keimelion/sdk/schemas'
 import { logger } from '../../shared/utils/logger.js'
 import { sendError } from '../../shared/utils/response.js'
 import { mapZodIssues } from '../../shared/utils/validation.js'
-import type { ValidationIssue } from '../../shared/utils/validation.js'
 
 const MULTIPART_CONTENT_TYPE = 'multipart/form-data'
 const DEFAULT_IMAGE_FIELD = 'image'
@@ -46,7 +46,7 @@ interface ParsedMultipartFields {
 
 interface MultipartParseError {
   errorCode: ErrorCode
-  issues?: ValidationIssue[]
+  issues?: ValidationIssueParsed[]
 }
 
 type MultipartParseResult = ParsedMultipartFields | MultipartParseError
@@ -87,7 +87,7 @@ function isSupportedFieldValue(key: string, value: unknown, imageFieldName: stri
   return key === imageFieldName || typeof value === 'string'
 }
 
-function toUnsupportedFieldIssue(key: string): ValidationIssue {
+function toUnsupportedFieldIssue(key: string): ValidationIssueParsed {
   return { path: key, message: UNSUPPORTED_FIELD_VALUE_MESSAGE, code: UNSUPPORTED_FIELD_VALUE_CODE }
 }
 
@@ -123,7 +123,7 @@ export type ParsedJsonOrMultipart<JsonSchema extends ZodType, MultipartSchema ex
 interface ParseFailure {
   ok: false
   errorCode: ErrorCode
-  issues?: ValidationIssue[]
+  issues?: ValidationIssueParsed[]
 }
 
 export async function parseJsonOrMultipart<

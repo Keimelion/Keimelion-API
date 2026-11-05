@@ -4,8 +4,7 @@ import { multipartOnly, RATE_LIMITS } from '../../../shared/utils/rate-limiter.j
 import { jsonResult } from '../../../shared/utils/response.js'
 import type { FeatureRouter } from '../../../shared/types/app.js'
 import { updateProfile } from '../users.service.js'
-import { usernameSchema } from '../../../shared/schemas/username.js'
-import { supportedCurrencyEnum } from '../../../shared/schemas/currency.js'
+import { supportedCurrencyEnum, usernameSchema } from '@keimelion/sdk/schemas'
 import {
   multipartBoolSchema,
   parseJsonOrMultipart,

@@ -3,9 +3,8 @@ import { db } from '../../../db/client.js'
 import { items } from '../../../db/entities/items/items.schema.js'
 import { defineEntity } from '../../../shared/db/entity-descriptor.js'
 import type { ItemRowWithSources } from '../../../shared/types/item.js'
-import { getOffset } from '../../../shared/schemas/pagination.js'
-import type { PaginationInput } from '../../../shared/schemas/pagination.js'
-import type { SortInput } from '../../../shared/schemas/sort.js'
+import { getOffset } from '../../../shared/utils/pagination.js'
+import type { PaginationQueryParsed, SortInput } from '@keimelion/sdk/schemas'
 import type { FilterInput } from '../../../shared/db/filter-parser.js'
 
 export const itemsEntity = defineEntity({
@@ -36,7 +35,7 @@ function buildItemsWhere(filters: ListItemsFilters): SQL | undefined {
 }
 
 export function findAllItemsWithSources(
-  input: PaginationInput,
+  input: PaginationQueryParsed,
   filters: ListItemsFilters,
 ): Promise<ItemRowWithSources[]> {
   const offset = getOffset(input)

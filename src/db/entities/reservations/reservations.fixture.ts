@@ -1,7 +1,7 @@
 import { eq, inArray, sql } from 'drizzle-orm'
 import type { db as Db } from '../../client.js'
 import { listItems } from '../list-items/list-items.schema.js'
-import { ItemStatuses } from '../../../shared/enums/item-status.js'
+import { ItemStatuses } from '@keimelion/sdk/enums'
 import { hashSha256Hex } from '../../../shared/utils/hash.js'
 import { reservations } from './reservations.schema.js'
 

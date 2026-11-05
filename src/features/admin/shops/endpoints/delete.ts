@@ -4,7 +4,7 @@ import { jsonResult } from '../../../../shared/utils/response.js'
 import { validationErrorHandler } from '../../../../shared/utils/validation.js'
 import { getAuthUser } from '../../../../shared/middlewares/auth.js'
 import { uuidParamSchema } from '../../../../shared/schemas/params.js'
-import { HttpStatus } from '../../../../shared/enums/http.js'
+import { HttpStatus } from '@keimelion/sdk/enums'
 import type { FeatureRouter } from '../../../../shared/types/app.js'
 import { deleteShopById } from '../admin-shops.service.js'
 

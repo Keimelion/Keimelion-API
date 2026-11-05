@@ -1,6 +1,6 @@
 import { rateLimiter } from 'hono-rate-limiter'
 import { env } from '../../config/env.js'
-import { ErrorCode } from '../enums/error-code.js'
+import { ErrorCode } from '@keimelion/sdk/enums'
 import { sendError } from '../utils/response.js'
 
 export const rateLimitMiddleware = rateLimiter({

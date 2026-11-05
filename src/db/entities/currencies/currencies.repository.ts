@@ -1,7 +1,7 @@
 import { eq, ne } from 'drizzle-orm'
 import { db } from '../../client.js'
 import { currencies } from './currencies.schema.js'
-import { SupportedCurrencies } from '../../../shared/enums/currency.js'
+import { SupportedCurrencies } from '@keimelion/sdk/enums'
 
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 

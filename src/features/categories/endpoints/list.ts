@@ -1,4 +1,5 @@
-import { HttpStatus } from '../../../shared/enums/http.js'
+import { HttpStatus } from '@keimelion/sdk/enums'
+import type { Locale } from '@keimelion/sdk/enums'
 import { findAllCategoriesOrdered } from '../../../db/entities/categories/categories.repository.js'
 import { getLocale } from '../../../shared/middlewares/resolve-locale.js'
 import { jsonResult } from '../../../shared/utils/response.js'
@@ -8,7 +9,6 @@ import type {
   CategoryTreeNode,
 } from '../../../shared/types/category.js'
 import type { FeatureRouter } from '../../../shared/types/app.js'
-import type { Locale } from '../../../shared/enums/locale.js'
 import type { ServiceResult } from '../../../shared/types/service.js'
 
 export function mountListCategories(router: FeatureRouter): void {

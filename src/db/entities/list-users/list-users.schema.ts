@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm'
 import { index, pgEnum, pgTable, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
 import { timestamps, uuidPrimaryKey } from '../../../shared/db/columns.js'
-import { LIST_USER_ROLE_VALUES, ListUserRoles } from '../../../shared/enums/list-user-role.js'
+import { LIST_USER_ROLE_VALUES, ListUserRoles } from '@keimelion/sdk/enums'
 import { lists } from '../lists/lists.schema.js'
 import { users } from '../users/users.schema.js'
 

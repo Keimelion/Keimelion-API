@@ -1,7 +1,6 @@
 import type { db as Db } from '../../client.js'
 import { hashSha256Hex } from '../../../shared/utils/hash.js'
-import { InviteStatuses } from '../../../shared/enums/invite-status.js'
-import { ListUserRoles } from '../../../shared/enums/list-user-role.js'
+import { InviteStatuses, ListUserRoles } from '@keimelion/sdk/enums'
 import { LIST_IDS } from '../lists/lists.fixture.js'
 import { listInvites } from './list-invites.schema.js'
 import { COLLAB_INVITE_TTL_MS } from '../../../features/lists/collaborators.service.js'

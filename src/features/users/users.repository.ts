@@ -9,16 +9,15 @@ import {
   userReservationsEntity,
   type UserReservationsSortField,
 } from '../../db/entities/reservations/reservations.repository.js'
-import { ListUserRoles } from '../../shared/enums/list-user-role.js'
-import { getOffset } from '../../shared/schemas/pagination.js'
+import { getOffset } from '../../shared/utils/pagination.js'
+import { ListUserRoles } from '@keimelion/sdk/enums'
+import type { PaginationQueryParsed, SortInput } from '@keimelion/sdk/schemas'
 import { env } from '../../config/env.js'
 import { hashPassword } from '../../shared/utils/hash.js'
 import type { User } from '../../db/entities/users/users.schema.js'
 import type { UserRowWithAvatar } from '../../shared/types/user.js'
-import type { RegisterInput } from '../auth/endpoints/register.js'
+import type { RegisterRequestParsed } from '@keimelion/sdk/schemas'
 import type { ReservationProfileRow } from '../reservations/reservations.types.js'
-import type { PaginationInput } from '../../shared/schemas/pagination.js'
-import type { SortInput } from '../../shared/schemas/sort.js'
 
 type SetPasswordResetTokenFields = Partial<Pick<typeof users.$inferInsert, 'passwordResetToken' | 'passwordResetTokenExpiresAt'>>
 type ResetPasswordFields = Pick<typeof users.$inferInsert, 'passwordHash' | 'passwordResetToken' | 'passwordResetTokenExpiresAt'>
@@ -36,7 +35,7 @@ export function findUserByEmailVerifyToken(token: string): Promise<User | undefi
 }
 
 export async function insertUser(
-  input: RegisterInput,
+  input: RegisterRequestParsed,
   emailVerifyToken: string,
   avatarImageId: string | null = null,
 ): Promise<User | undefined> {
@@ -130,7 +129,7 @@ function myReservationsWhere(userId: string): ReturnType<typeof and> {
 
 export async function findMyReservationsPaged(
   userId: string,
-  pagination: PaginationInput,
+  pagination: PaginationQueryParsed,
   sort: SortInput<UserReservationsSortField> | undefined,
 ): Promise<ReservationProfileRow[]> {
   const offset = getOffset(pagination)

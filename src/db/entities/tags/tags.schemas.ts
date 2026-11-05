@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { createSlugSchema } from '../../../shared/schemas/slug.js'
+import { createSlugSchema } from '@keimelion/sdk/schemas'
 import { MAX_TAG_NAME_LENGTH, MAX_TAG_SLUG_LENGTH } from './tags.schema.js'
 
 const MIN_TAG_NAME_LENGTH = 1

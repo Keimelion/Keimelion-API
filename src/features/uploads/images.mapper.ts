@@ -1,5 +1,6 @@
 import { env } from '../../config/env.js'
 import type { Image } from '../../db/entities/images/images.schema.js'
+import type { ImageDetailParsed, ImageUrlsParsed } from '@keimelion/sdk/schemas'
 
 export const IMAGE_VARIANT_WIDTHS = {
   sm: 300,
@@ -9,24 +10,11 @@ export const IMAGE_VARIANT_WIDTHS = {
 
 export type ImageVariant = keyof typeof IMAGE_VARIANT_WIDTHS
 
-export interface ImageUrls {
-  sm: string
-  md: string
-  lg: string
-}
+export type ImageUrls = ImageUrlsParsed
 
-export interface ImageDetail {
-  id: string
-  hash: string
-  mime: string
-  sizeBytes: number
-  width: number
-  height: number
-  createdAt: Date
-  urls: ImageUrls
-}
+export type ImageDetail = ImageDetailParsed
 
-export function buildImageUrls(fileKey: string): ImageUrls {
+export function buildImageUrls(fileKey: string): ImageUrlsParsed {
   const base = env.UPLOADS_PUBLIC_BASE_URL.replace(/\/+$/, '')
   return {
     sm: `${base}/${fileKey}-${String(IMAGE_VARIANT_WIDTHS.sm)}.webp`,
@@ -35,7 +23,7 @@ export function buildImageUrls(fileKey: string): ImageUrls {
   }
 }
 
-export function toImageDetail(image: Image): ImageDetail {
+export function toImageDetail(image: Image): ImageDetailParsed {
   return {
     id: image.id,
     hash: image.hash,

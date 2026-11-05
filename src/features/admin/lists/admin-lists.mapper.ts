@@ -1,6 +1,6 @@
 import { extractOwnerDetail, toListDetail } from '../../../shared/types/list.js'
 import type { ListDetail, ListRowWithOwner } from '../../../shared/types/list.js'
-import type { SupportedCurrency } from '../../../shared/enums/currency.js'
+import type { SupportedCurrency } from '@keimelion/sdk/enums'
 import type { UserDetail } from '../../../shared/types/user.js'
 
 export interface AdminListAggregate {

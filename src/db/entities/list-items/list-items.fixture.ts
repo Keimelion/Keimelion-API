@@ -1,5 +1,5 @@
 import type { db as Db } from '../../client.js'
-import { ItemStatuses } from '../../../shared/enums/item-status.js'
+import { ItemStatuses } from '@keimelion/sdk/enums'
 import { ITEM_IDS } from '../items/items.fixture.js'
 import { LIST_IDS } from '../lists/lists.fixture.js'
 import { listItems } from './list-items.schema.js'

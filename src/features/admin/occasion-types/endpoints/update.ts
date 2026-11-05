@@ -1,6 +1,6 @@
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import { DEFAULT_LOCALE } from '../../../../shared/enums/locale.js'
+import { DEFAULT_LOCALE } from '@keimelion/sdk/enums'
 import { validationErrorHandler } from '../../../../shared/utils/validation.js'
 import { getAuthUser } from '../../../../shared/middlewares/auth.js'
 import { adminOnly } from '../../../../shared/middlewares/admin-only.js'

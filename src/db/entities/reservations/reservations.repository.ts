@@ -1,15 +1,14 @@
 import { and, count, desc, eq, inArray, or, sql } from 'drizzle-orm'
 import { db } from '../../client.js'
 import { defineEntity } from '../../../shared/db/entity-descriptor.js'
-import { getOffset } from '../../../shared/schemas/pagination.js'
-import { ListUserRoles } from '../../../shared/enums/list-user-role.js'
+import { getOffset } from '../../../shared/utils/pagination.js'
+import { ListUserRoles } from '@keimelion/sdk/enums'
+import type { PaginationQueryParsed, SortInput } from '@keimelion/sdk/schemas'
 import { listItems } from '../list-items/list-items.schema.js'
 import { listUsers } from '../list-users/list-users.schema.js'
 import { reservations } from './reservations.schema.js'
 import type { Reservation } from './reservations.schema.js'
 import type { ReservationRowHydrated } from '../../../shared/types/reservation.js'
-import type { PaginationInput } from '../../../shared/schemas/pagination.js'
-import type { SortInput } from '../../../shared/schemas/sort.js'
 
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 type DbOrTx = typeof db | DbTransaction
@@ -109,7 +108,7 @@ export function findReservationsByUserId(userId: string, tx: DbOrTx = db): Promi
 
 export function findReservationsForUser(
   userId: string,
-  pagination: PaginationInput,
+  pagination: PaginationQueryParsed,
   sort: SortInput<UserReservationsSortField> | undefined,
 ): Promise<Reservation[]> {
   const offset = getOffset(pagination)

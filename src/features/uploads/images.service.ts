@@ -2,7 +2,7 @@ import { logger } from '../../shared/utils/logger.js'
 import { processImage } from './image.pipeline.js'
 import { deleteImageById } from '../../db/entities/images/images.repository.js'
 import type { Image } from '../../db/entities/images/images.schema.js'
-import type { ErrorCode } from '../../shared/enums/error-code.js'
+import type { ErrorCode } from '@keimelion/sdk/enums'
 
 export type OptionalImageOutcome =
   | { image: Image | null }

@@ -1,26 +1,10 @@
 import type { User } from '../../db/entities/users/users.schema.js'
 import type { Image } from '../../db/entities/images/images.schema.js'
-import type { SupportedCurrency } from '../enums/currency.js'
+import type { SupportedCurrency } from '@keimelion/sdk/enums'
+import type { UserDetailParsed } from '@keimelion/sdk/schemas'
 import { toImageDetail } from '../../features/uploads/images.mapper.js'
-import type { ImageDetail } from '../../features/uploads/images.mapper.js'
 
-export interface UserDetail {
-  id: string
-  email: string
-  username: string | null
-  authProvider: User['authProvider']
-  role: User['role']
-  avatarImageId: string | null
-  avatar: ImageDetail | null
-  isCgvAccepted: boolean
-  cgvAcceptedAt: Date | null
-  isMarketingOptedIn: boolean
-  defaultCurrency: SupportedCurrency
-  emailVerifiedAt: Date | null
-  lastActiveAt: Date | null
-  createdAt: Date
-  updatedAt: Date
-}
+export type UserDetail = UserDetailParsed
 
 export interface UserWrite {
   username: string | null
@@ -32,7 +16,7 @@ export interface UserRowWithAvatar extends User {
   avatarImage: Image | null
 }
 
-export function toUserDetail(user: UserRowWithAvatar): UserDetail {
+export function toUserDetail(user: UserRowWithAvatar): UserDetailParsed {
   const { avatarImage } = user
   return {
     id: user.id,

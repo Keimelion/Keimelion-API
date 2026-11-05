@@ -1,13 +1,13 @@
 import { and, asc, count, desc, eq, gt, inArray, lte, type SQL } from 'drizzle-orm'
 import { db } from '../../client.js'
-import { InviteStatuses } from '../../../shared/enums/invite-status.js'
-import type { InviteStatus } from '../../../shared/enums/invite-status.js'
+import { getOffset } from '../../../shared/utils/pagination.js'
+import { InviteStatuses } from '@keimelion/sdk/enums'
+import type { InviteStatus } from '@keimelion/sdk/enums'
+import type { PaginationQueryParsed } from '@keimelion/sdk/schemas'
 import { listInvites } from './list-invites.schema.js'
 import type { ListInvite } from './list-invites.schema.js'
 import type { List } from '../lists/lists.schema.js'
 import type { UserRowWithAvatar } from '../../../shared/types/user.js'
-import { getOffset } from '../../../shared/schemas/pagination.js'
-import type { PaginationInput } from '../../../shared/schemas/pagination.js'
 
 type DbOrTx = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0]
 
@@ -96,7 +96,7 @@ export interface ListInviteFilters {
 }
 
 export function findAllListInvites(
-  pagination: PaginationInput,
+  pagination: PaginationQueryParsed,
   filters: ListInviteFilters,
 ): Promise<ListInviteWithRelationsRow[]> {
   const offset = getOffset(pagination)

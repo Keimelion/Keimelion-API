@@ -1,7 +1,8 @@
 import { asc, desc, isNull, type AnyColumn, type SQL } from 'drizzle-orm'
 import { buildGenericWhere } from './filter-where.js'
 import { makeFilterValidator } from './filter-validator.js'
-import { sortQuerySchema, type SortDirection } from '../schemas/sort.js'
+import { sortQuerySchema } from '@keimelion/sdk/schemas'
+import type { SortDirection } from '@keimelion/sdk/schemas'
 import type { FilterConfig, FilterFieldConfig } from './filter-config.js'
 import type { FilterInput } from './filter-parser.js'
 

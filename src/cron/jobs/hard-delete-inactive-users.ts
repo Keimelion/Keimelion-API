@@ -6,7 +6,7 @@ import {
   insertDeletionAudit,
 } from '../../db/entities/users/users.repository.js'
 import type { User } from '../../db/entities/users/users.schema.js'
-import type { DeletionReason } from '../../shared/enums/deletion-reason.js'
+import type { DeletionReason } from '@keimelion/sdk/enums'
 import { reconcileListItemsForUserHardDelete } from '../../features/reservations/reservations.service.js'
 import { logger } from '../../shared/utils/logger.js'
 import { createCronJob } from '../create-cron-job.js'
