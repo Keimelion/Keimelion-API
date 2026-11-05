@@ -1,6 +1,6 @@
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import { createSlugSchema } from '../../../shared/schemas/slug.js'
+import { createSlugSchema } from '@keimelion/sdk/schemas'
 import { getLocale } from '../../../shared/middlewares/resolve-locale.js'
 import { RATE_LIMITS } from '../../../shared/utils/rate-limiter.js'
 import { jsonResult } from '../../../shared/utils/response.js'

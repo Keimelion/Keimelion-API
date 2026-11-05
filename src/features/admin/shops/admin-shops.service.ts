@@ -1,10 +1,10 @@
-import { HttpStatus } from '../../../shared/enums/http.js'
-import { ErrorCode } from '../../../shared/enums/error-code.js'
+import { buildPaginatedResponse } from '../../../shared/utils/pagination.js'
+import { ErrorCode, HttpStatus } from '@keimelion/sdk/enums'
+import type { PaginatedResponse, PaginationQueryParsed } from '@keimelion/sdk/schemas'
 import { serviceError } from '../../../shared/utils/response.js'
 import { logger } from '../../../shared/utils/logger.js'
 import { pickDefined } from '../../../shared/utils/partial-update.js'
 import { runWrite, buildChanges } from '../../../shared/utils/admin-write.js'
-import { buildPaginatedResponse } from '../../../shared/schemas/pagination.js'
 import {
   findShopById,
   insertShop,
@@ -22,8 +22,7 @@ import { toAdminShopItemSource } from './admin-shops.mapper.js'
 import { AdminAction } from '../admin.enums.js'
 import type { ShopDetail, ShopWrite } from '../../../shared/types/shop.js'
 import type { ServiceResult } from '../../../shared/types/service.js'
-import type { PaginatedResponse, PartialWrite } from '../../../shared/types/api.js'
-import type { PaginationInput } from '../../../shared/schemas/pagination.js'
+import type { PartialWrite } from '../../../shared/types/api.js'
 import type { ListShopsInput } from './endpoints/list.js'
 import type { AdminShopItemSource } from './admin-shops.mapper.js'
 
@@ -71,7 +70,7 @@ export async function listShops(
 
 export async function getShopById(
   id: string,
-  pagination: PaginationInput,
+  pagination: PaginationQueryParsed,
 ): Promise<ServiceResult<GetShopResponse>> {
   const shopRow = await findShopById(id)
   if (!shopRow) return serviceError(ErrorCode.NOT_FOUND)

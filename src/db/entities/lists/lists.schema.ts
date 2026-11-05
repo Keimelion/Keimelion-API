@@ -6,7 +6,7 @@ import {
   slugCheck,
   slugVarchar,
 } from '../../../shared/db/checks.js'
-import { LIST_STATUS_VALUES } from '../../../shared/enums/list-status.js'
+import { LIST_STATUS_VALUES } from '@keimelion/sdk/enums'
 import { occasionTypes } from '../occasion-types/occasion-types.schema.js'
 
 export const listStatusEnum = pgEnum('list_status', LIST_STATUS_VALUES)

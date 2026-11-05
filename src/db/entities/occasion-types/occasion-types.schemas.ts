@@ -1,8 +1,8 @@
 import { z } from 'zod'
-import { LOCALES } from '../../../shared/enums/locale.js'
-import { createSlugSchema } from '../../../shared/schemas/slug.js'
+import { LOCALES } from '@keimelion/sdk/enums'
+import { createSlugSchema } from '@keimelion/sdk/schemas'
 
-export { sortOrderSchema } from '../../../shared/schemas/sort-order.js'
+export { sortOrderSchema } from '@keimelion/sdk/schemas'
 
 const MIN_SLUG_LENGTH = 2
 const MAX_SLUG_LENGTH = 60

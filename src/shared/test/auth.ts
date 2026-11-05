@@ -1,5 +1,5 @@
 import { SignJWT } from 'jose'
-import type { UserRole } from '../enums/user-role.js'
+import type { UserRole } from '@keimelion/sdk/enums'
 
 export const TEST_JWT_SECRET = 'test-secret-key-that-is-at-least-32-chars-long'
 export const TEST_JTI = '00000000-0000-0000-0000-000000000099'

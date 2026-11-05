@@ -1,5 +1,5 @@
 import type { Context, MiddlewareHandler } from 'hono'
-import { ErrorCode } from '../enums/error-code.js'
+import { ErrorCode } from '@keimelion/sdk/enums'
 import { HonoContextKey } from '../enums/context-key.js'
 import { sendError } from '../utils/response.js'
 import { logger } from '../utils/logger.js'

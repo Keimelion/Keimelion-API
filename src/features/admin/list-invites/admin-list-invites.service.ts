@@ -1,5 +1,6 @@
-import { HttpStatus } from '../../../shared/enums/http.js'
-import { buildPaginatedResponse } from '../../../shared/schemas/pagination.js'
+import { buildPaginatedResponse } from '../../../shared/utils/pagination.js'
+import { HttpStatus } from '@keimelion/sdk/enums'
+import type { PaginatedResponse } from '@keimelion/sdk/schemas'
 import {
   countListInvites,
   findAllListInvites,
@@ -7,7 +8,6 @@ import {
 import { toAdminListInviteDetail } from './admin-list-invites.mapper.js'
 import type { AdminListInviteDetail } from './admin-list-invites.mapper.js'
 import type { ServiceResult } from '../../../shared/types/service.js'
-import type { PaginatedResponse } from '../../../shared/types/api.js'
 import type { ListAdminInvitesInput } from './endpoints/list.js'
 
 export async function listAdminInvites(

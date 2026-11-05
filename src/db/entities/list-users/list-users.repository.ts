@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm'
 import { db } from '../../client.js'
-import { ListUserRoles } from '../../../shared/enums/list-user-role.js'
-import type { ListUserRole } from '../../../shared/enums/list-user-role.js'
+import { ListUserRoles } from '@keimelion/sdk/enums'
+import type { ListUserRole } from '@keimelion/sdk/enums'
 import { listUsers } from './list-users.schema.js'
 import type { ListUser } from './list-users.schema.js'
 

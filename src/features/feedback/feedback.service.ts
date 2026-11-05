@@ -1,5 +1,4 @@
-import { HttpStatus } from '../../shared/enums/http.js'
-import { ErrorCode } from '../../shared/enums/error-code.js'
+import { ErrorCode, HttpStatus } from '@keimelion/sdk/enums'
 import { serviceError } from '../../shared/utils/response.js'
 import { insertFeedback } from './feedback.repository.js'
 import { toFeedbackDetail } from '../../shared/types/feedback.js'

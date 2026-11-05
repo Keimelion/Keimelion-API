@@ -3,7 +3,7 @@ import { adminOnly } from '../../../../shared/middlewares/admin-only.js'
 import { jsonResult } from '../../../../shared/utils/response.js'
 import { validationErrorHandler } from '../../../../shared/utils/validation.js'
 import { uuidParamSchema } from '../../../../shared/schemas/params.js'
-import { paginationQuerySchema } from '../../../../shared/schemas/pagination.js'
+import { paginationQuerySchema } from '@keimelion/sdk/schemas'
 import type { FeatureRouter } from '../../../../shared/types/app.js'
 import { getShopById } from '../admin-shops.service.js'
 

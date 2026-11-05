@@ -1,55 +1,28 @@
 import type { Context } from 'hono'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
-import type { ErrorCode } from '../enums/error-code.js'
-import { HttpStatus } from '../enums/http.js'
-import type { ApiError } from '../types/api.js'
+import { HttpStatus } from '@keimelion/sdk/enums'
+import type { ErrorCode } from '@keimelion/sdk/enums'
+import type { ApiErrorBodyParsed } from '@keimelion/sdk/schemas'
+import {
+  DUPLICATE_SHOP_IN_SOURCES_MESSAGE,
+  SLUG_GENERATION_EXHAUSTED_MESSAGE,
+  CATEGORY_NOT_FOUND_MESSAGE,
+  CATEGORY_MAX_DEPTH_EXCEEDED_MESSAGE,
+  CATEGORY_CYCLE_DETECTED_MESSAGE,
+  TAG_NOT_FOUND_MESSAGE,
+  TAG_INVALID_NAME_MESSAGE,
+  FEEDBACK_NOT_FOUND_MESSAGE,
+  COLLAB_SELF_INVITE_MESSAGE,
+  COLLAB_ALREADY_MEMBER_MESSAGE,
+  COLLAB_INVITE_NOT_FOUND_MESSAGE,
+  COLLAB_INVITE_EXPIRED_MESSAGE,
+  COLLAB_INVITE_ALREADY_RESOLVED_MESSAGE,
+  COLLAB_EMAIL_MISMATCH_MESSAGE,
+  RESERVATION_TOKEN_INVALID_MESSAGE,
+  RESERVATION_REQUIRES_RESERVER_NAME_MESSAGE,
+  RESERVATION_INCONSISTENT_INTENT_MESSAGE,
+} from '@keimelion/sdk/schemas'
 import type { ServiceResult } from '../types/service.js'
-
-export const DUPLICATE_SHOP_IN_SOURCES_MESSAGE =
-  'This shop is already used by another source of this item.'
-
-export const SLUG_GENERATION_EXHAUSTED_MESSAGE =
-  'Could not generate a unique slug, please retry with a different title.'
-
-export const MAX_CATEGORY_DEPTH = 3
-
-export const CATEGORY_NOT_FOUND_MESSAGE = 'Category not found'
-
-export const CATEGORY_MAX_DEPTH_EXCEEDED_MESSAGE =
-  `Category depth cannot exceed ${String(MAX_CATEGORY_DEPTH)} levels`
-
-export const CATEGORY_CYCLE_DETECTED_MESSAGE =
-  'Category parent cannot create a cycle in the hierarchy'
-
-export const TAG_NOT_FOUND_MESSAGE = 'Tag not found'
-
-export const TAG_INVALID_NAME_MESSAGE =
-  'Tag name must contain at least one letter or digit after normalization'
-
-export const FEEDBACK_NOT_FOUND_MESSAGE = 'Feedback not found'
-
-export const COLLAB_SELF_INVITE_MESSAGE = 'You cannot invite yourself to collaborate on your own list'
-
-export const COLLAB_ALREADY_MEMBER_MESSAGE =
-  'This list already has an active editor invitation or collaborator'
-
-export const COLLAB_INVITE_NOT_FOUND_MESSAGE = 'Invitation not found'
-
-export const COLLAB_INVITE_EXPIRED_MESSAGE = 'This invitation has expired'
-
-export const COLLAB_INVITE_ALREADY_RESOLVED_MESSAGE =
-  'This invitation has already been accepted or revoked'
-
-export const COLLAB_EMAIL_MISMATCH_MESSAGE =
-  'This invitation was issued to a different email address'
-
-export const RESERVATION_TOKEN_INVALID_MESSAGE = 'The reservation token is invalid for this reservation'
-
-export const RESERVATION_REQUIRES_RESERVER_NAME_MESSAGE =
-  'reserverName is required when reserving without an account'
-
-export const RESERVATION_INCONSISTENT_INTENT_MESSAGE =
-  'Only the list owner may reserve on behalf of someone else (reserverName)'
 
 export const errorMap: Record<ErrorCode, { status: ContentfulStatusCode; message: string }> = {
   BAD_REQUEST:             { status: HttpStatus.BAD_REQUEST,           message: 'Bad request' },
@@ -97,11 +70,11 @@ export const errorMap: Record<ErrorCode, { status: ContentfulStatusCode; message
 
 export function sendError(code: ErrorCode, metadata: Record<string, unknown> = {}): Response {
   const { status, message } = errorMap[code]
-  const body: ApiError = { message, code, metadata }
+  const body: ApiErrorBodyParsed = { message, code, metadata }
   return Response.json(body, { status })
 }
 
-export function serviceError(code: ErrorCode, metadata: Record<string, unknown> = {}): { data: ApiError; httpStatus: number } {
+export function serviceError(code: ErrorCode, metadata: Record<string, unknown> = {}): { data: ApiErrorBodyParsed; httpStatus: number } {
   const { status, message } = errorMap[code]
   return { data: { message, code, metadata }, httpStatus: status }
 }

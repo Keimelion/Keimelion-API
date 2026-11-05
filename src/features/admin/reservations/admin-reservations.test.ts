@@ -3,7 +3,7 @@ import { db } from '../../../db/client.js'
 import { apiRequest } from '../../../shared/test/api-request.js'
 import { generateTestToken, makeAccessTokenEntry } from '../../../shared/test/auth.js'
 import { ADMIN_USER_FIXTURE as ADMIN_USER, makeAdminUser } from '../../../shared/test/fixtures/users.js'
-import { ItemStatuses } from '../../../shared/enums/item-status.js'
+import { ItemStatuses } from '@keimelion/sdk/enums'
 import { logger } from '../../../shared/utils/logger.js'
 
 vi.mock('../../../shared/utils/logger.js', () => ({

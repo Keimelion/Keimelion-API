@@ -1,6 +1,5 @@
 import type { MiddlewareHandler } from 'hono'
-import { ErrorCode } from '../enums/error-code.js'
-import { UserRoles } from '../enums/user-role.js'
+import { ErrorCode, UserRoles } from '@keimelion/sdk/enums'
 import { HonoContextKey } from '../enums/context-key.js'
 import { sendError } from '../utils/response.js'
 import type { AppVariables } from '../types/app.js'

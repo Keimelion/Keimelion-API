@@ -2,8 +2,8 @@ import { count, desc, eq } from 'drizzle-orm'
 import { db } from '../../client.js'
 import { items } from './items.schema.js'
 import { listItems } from '../list-items/list-items.schema.js'
-import { getOffset } from '../../../shared/schemas/pagination.js'
-import type { PaginationInput } from '../../../shared/schemas/pagination.js'
+import { getOffset } from '../../../shared/utils/pagination.js'
+import type { PaginationQueryParsed } from '@keimelion/sdk/schemas'
 import type { Item } from './items.schema.js'
 import type { ItemRowWithImage, ItemRowWithSources } from '../../../shared/types/item.js'
 
@@ -71,7 +71,7 @@ export async function countListItemsReferencing(itemId: string, tx?: DbTransacti
   return row?.total ?? 0
 }
 
-export function findAllItemsWithSources(pagination: PaginationInput): Promise<ItemRowWithSources[]> {
+export function findAllItemsWithSources(pagination: PaginationQueryParsed): Promise<ItemRowWithSources[]> {
   const offset = getOffset(pagination)
   return db.query.items.findMany({
     orderBy: [desc(items.createdAt)],

@@ -2,7 +2,7 @@ import { pgEnum, pgTable, timestamp, uuid } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
 import { timestamps, uuidPrimaryKey } from '../../../shared/db/columns.js'
 import { nonEmptyCheck, nonEmptyVarchar } from '../../../shared/db/checks.js'
-import { DELETION_REASON_VALUES } from '../../../shared/enums/deletion-reason.js'
+import { DELETION_REASON_VALUES } from '@keimelion/sdk/enums'
 
 export const deletionReasonEnum = pgEnum('deletion_reason', DELETION_REASON_VALUES)
 

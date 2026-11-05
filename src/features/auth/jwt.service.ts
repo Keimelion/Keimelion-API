@@ -1,8 +1,8 @@
 import { randomUUID } from 'crypto'
 import { SignJWT, jwtVerify } from 'jose'
 import { env } from '../../config/env.js'
-import { USER_ROLE_VALUES } from '../../shared/enums/user-role.js'
-import type { UserRole } from '../../shared/enums/user-role.js'
+import { USER_ROLE_VALUES } from '@keimelion/sdk/enums'
+import type { UserRole } from '@keimelion/sdk/enums'
 
 const ALGORITHM = 'HS256'
 

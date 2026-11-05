@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { Readable } from 'stream'
-import { ErrorCode } from '../../shared/enums/error-code.js'
+import { ErrorCode } from '@keimelion/sdk/enums'
 
 const mockToFile = vi.fn().mockResolvedValue(undefined)
 const mockWebp = vi.fn(() => ({ toFile: mockToFile }))

@@ -1,7 +1,7 @@
 import { zValidator } from '@hono/zod-validator'
 import { jsonResult } from '../../../shared/utils/response.js'
 import { validationErrorHandler } from '../../../shared/utils/validation.js'
-import { paginationQuerySchema } from '../../../shared/schemas/pagination.js'
+import { paginationQuerySchema } from '@keimelion/sdk/schemas'
 import { getLocale } from '../../../shared/middlewares/resolve-locale.js'
 import type { FeatureRouter } from '../../../shared/types/app.js'
 import { listItems } from '../items.service.js'

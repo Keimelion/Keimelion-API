@@ -1,7 +1,7 @@
 import type { db as Db } from '../../client.js'
-import { FeedbackStatuses } from '../../../shared/enums/feedback-status.js'
+import { FeedbackStatuses } from '@keimelion/sdk/enums'
+import type { FeedbackStatus } from '@keimelion/sdk/enums'
 import { feedback } from './feedback.schema.js'
-import type { FeedbackStatus } from '../../../shared/enums/feedback-status.js'
 
 type FeedbackInsert = typeof feedback.$inferInsert
 

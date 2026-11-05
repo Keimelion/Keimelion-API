@@ -6,7 +6,7 @@ import { validationErrorHandler } from '../../../../shared/utils/validation.js'
 import { getAuthUser } from '../../../../shared/middlewares/auth.js'
 import { RATE_LIMITS } from '../../../../shared/utils/rate-limiter.js'
 import { uuidParamSchema } from '../../../../shared/schemas/params.js'
-import { LIST_STATUS_VALUES } from '../../../../shared/enums/list-status.js'
+import { LIST_STATUS_VALUES } from '@keimelion/sdk/enums'
 import {
   listTitleSchema,
   listDescriptionSchema,

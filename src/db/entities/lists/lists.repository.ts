@@ -4,7 +4,7 @@ import { pickDefined } from '../../../shared/utils/partial-update.js'
 import { listUsers } from '../list-users/list-users.schema.js'
 import { listItems } from '../list-items/list-items.schema.js'
 import { lists } from './lists.schema.js'
-import type { ListStatus } from '../../../shared/enums/list-status.js'
+import type { ListStatus } from '@keimelion/sdk/enums'
 import type { ListRowWithOwner, PublicListRow } from '../../../shared/types/list.js'
 import type { List } from './lists.schema.js'
 

@@ -1,11 +1,10 @@
 import type { ListInvite } from '../../db/entities/list-invites/list-invites.schema.js'
-import type { ListUserRole } from '../enums/list-user-role.js'
-import type { InviteStatus } from '../enums/invite-status.js'
+import { InviteStatuses } from '@keimelion/sdk/enums'
+import type { InviteStatus, ListUserRole } from '@keimelion/sdk/enums'
 import type { ListUserWithUser } from './list.js'
 import type { UserRowWithAvatar } from './user.js'
 import { toImageDetail } from '../../features/uploads/images.mapper.js'
 import type { ImageDetail } from '../../features/uploads/images.mapper.js'
-import { InviteStatuses } from '../enums/invite-status.js'
 
 // Identity of a list member as seen by the other members — deliberately narrower than
 // UserDetail so an editor never receives the owner's account settings (role, CGV, opt-ins…).

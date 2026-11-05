@@ -1,4 +1,4 @@
-import { ErrorCode } from '../enums/error-code.js'
+import { ErrorCode } from '@keimelion/sdk/enums'
 import { isPgUniqueViolation, isPgForeignKeyViolation } from '../db/pg-errors.js'
 
 export type WriteOutcome<T> = { row: T } | { errorCode: ErrorCode }

@@ -1,9 +1,8 @@
 import { z } from 'zod'
 import { ASCII_HOSTNAME_REGEX, normalizeDomain } from '../../../shared/utils/domain.js'
-import { httpsUrlSchema } from '../../../shared/schemas/url.js'
-import { createSlugSchema } from '../../../shared/schemas/slug.js'
+import { createSlugSchema, httpsUrlSchema } from '@keimelion/sdk/schemas'
 
-export { sortOrderSchema } from '../../../shared/schemas/sort-order.js'
+export { sortOrderSchema } from '@keimelion/sdk/schemas'
 
 const MIN_SLUG_LENGTH = 2
 const MAX_SLUG_LENGTH = 60

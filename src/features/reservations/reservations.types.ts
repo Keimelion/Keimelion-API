@@ -1,4 +1,4 @@
-import type { ItemStatus } from '../../shared/enums/item-status.js'
+import type { ItemStatus } from '@keimelion/sdk/enums'
 import type { Reservation } from '../../db/entities/reservations/reservations.schema.js'
 import type { ListItem } from '../../db/entities/list-items/list-items.schema.js'
 import type { List } from '../../db/entities/lists/lists.schema.js'

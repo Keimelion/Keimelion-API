@@ -1,15 +1,14 @@
 import { and, asc, count, ilike, type SQL } from 'drizzle-orm'
-import { HttpStatus } from '../../shared/enums/http.js'
+import { buildPaginatedResponse, getOffset } from '../../shared/utils/pagination.js'
+import { HttpStatus } from '@keimelion/sdk/enums'
+import type { PaginatedResponse, PaginationQueryParsed } from '@keimelion/sdk/schemas'
 import { db } from '../../db/client.js'
 import { tags } from '../../db/entities/tags/tags.schema.js'
-import { buildPaginatedResponse, getOffset } from '../../shared/schemas/pagination.js'
 import { toTagPublic } from '../../shared/types/tag.js'
 import type { TagPublic } from '../../shared/types/tag.js'
-import type { PaginationInput } from '../../shared/schemas/pagination.js'
-import type { PaginatedResponse } from '../../shared/types/api.js'
 import type { ServiceResult } from '../../shared/types/service.js'
 
-export interface ListTagsPublicInput extends PaginationInput {
+export interface ListTagsPublicInput extends PaginationQueryParsed {
   name?: string
 }
 

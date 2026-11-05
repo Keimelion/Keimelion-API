@@ -1,11 +1,11 @@
 import { rateLimiter } from 'hono-rate-limiter'
 import { bodyLimit } from 'hono/body-limit'
 import type { Context, MiddlewareHandler, Next } from 'hono'
-import { ErrorCode } from '../enums/error-code.js'
+import { ErrorCode } from '@keimelion/sdk/enums'
+import type { ApiErrorBodyParsed } from '@keimelion/sdk/schemas'
 import { HonoContextKey } from '../enums/context-key.js'
 import { env } from '../../config/env.js'
 import { errorMap, sendError } from './response.js'
-import type { ApiError } from '../types/api.js'
 import type { AppVariables } from '../types/app.js'
 import type { User } from '../../db/entities/users/users.schema.js'
 
@@ -95,7 +95,7 @@ function feedbackKeyGenerator(prefix: string): (context: Context<{ Variables: Ap
 // via c.header(...) are merged into the final response.
 function feedbackRateLimitHandler(context: Context): Response {
   const { status, message } = errorMap[ErrorCode.RATE_LIMIT_EXCEEDED]
-  const body: ApiError = { message, code: ErrorCode.RATE_LIMIT_EXCEEDED, metadata: {} }
+  const body: ApiErrorBodyParsed = { message, code: ErrorCode.RATE_LIMIT_EXCEEDED, metadata: {} }
   return context.json(body, status)
 }
 

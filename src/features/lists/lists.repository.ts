@@ -7,12 +7,11 @@ import {
   LIST_WITH_OWNER,
 } from '../../db/entities/lists/lists.repository.js'
 import { listUsers } from '../../db/entities/list-users/list-users.schema.js'
-import { CONTRIBUTOR_ROLE_VALUES } from '../../shared/enums/list-user-role.js'
+import { getOffset } from '../../shared/utils/pagination.js'
+import { CONTRIBUTOR_ROLE_VALUES } from '@keimelion/sdk/enums'
+import type { PaginationQueryParsed, SortInput } from '@keimelion/sdk/schemas'
 import { defineEntity } from '../../shared/db/entity-descriptor.js'
 import type { ListRowWithOwner } from '../../shared/types/list.js'
-import { getOffset } from '../../shared/schemas/pagination.js'
-import type { PaginationInput } from '../../shared/schemas/pagination.js'
-import type { SortInput } from '../../shared/schemas/sort.js'
 
 export const userListsEntity = defineEntity({
   sortable: LIST_SORTABLE_FIELDS,
@@ -24,7 +23,7 @@ export type UserListsSortField = keyof typeof userListsEntity.sortable
 
 export async function findListsAccessibleBy(
   userId: string,
-  pagination: PaginationInput,
+  pagination: PaginationQueryParsed,
   sort: SortInput<UserListsSortField> | undefined,
 ): Promise<ListRowWithOwner[]> {
   const offset = getOffset(pagination)

@@ -1,5 +1,5 @@
 import type { Feedback } from '../../db/entities/feedback/feedback.schema.js'
-import type { FeedbackStatus } from '../enums/feedback-status.js'
+import type { FeedbackStatus } from '@keimelion/sdk/enums'
 
 export interface FeedbackDetail {
   id: string

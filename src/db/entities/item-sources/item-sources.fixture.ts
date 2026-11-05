@@ -1,10 +1,10 @@
 import { inArray } from 'drizzle-orm'
 import type { db as Db } from '../../client.js'
-import { SupportedCurrencies } from '../../../shared/enums/currency.js'
+import { SupportedCurrencies } from '@keimelion/sdk/enums'
+import type { SupportedCurrency } from '@keimelion/sdk/enums'
 import { shops } from '../shops/shops.schema.js'
 import { ITEM_IDS } from '../items/items.fixture.js'
 import { itemSources } from './item-sources.schema.js'
-import type { SupportedCurrency } from '../../../shared/enums/currency.js'
 
 type ItemSourceInsert = typeof itemSources.$inferInsert
 

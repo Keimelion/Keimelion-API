@@ -3,9 +3,8 @@ import { db } from '../../../db/client.js'
 import { tags } from '../../../db/entities/tags/tags.schema.js'
 import { defineEntity } from '../../../shared/db/entity-descriptor.js'
 import type { Tag } from '../../../db/entities/tags/tags.schema.js'
-import { getOffset } from '../../../shared/schemas/pagination.js'
-import type { PaginationInput } from '../../../shared/schemas/pagination.js'
-import type { SortInput } from '../../../shared/schemas/sort.js'
+import { getOffset } from '../../../shared/utils/pagination.js'
+import type { PaginationQueryParsed, SortInput } from '@keimelion/sdk/schemas'
 import type { FilterInput } from '../../../shared/db/filter-parser.js'
 
 export const tagsEntity = defineEntity({
@@ -39,7 +38,7 @@ function buildTagsWhere(filters: ListTagsFilters): SQL | undefined {
 }
 
 export function findAllTags(
-  input: PaginationInput,
+  input: PaginationQueryParsed,
   filters: ListTagsFilters,
 ): Promise<Tag[]> {
   const offset = getOffset(input)

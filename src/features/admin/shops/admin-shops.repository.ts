@@ -4,9 +4,8 @@ import { shops } from '../../../db/entities/shops/shops.schema.js'
 import { itemSources } from '../../../db/entities/item-sources/item-sources.schema.js'
 import { defineEntity } from '../../../shared/db/entity-descriptor.js'
 import type { Shop } from '../../../db/entities/shops/shops.schema.js'
-import { getOffset } from '../../../shared/schemas/pagination.js'
-import type { PaginationInput } from '../../../shared/schemas/pagination.js'
-import type { SortInput } from '../../../shared/schemas/sort.js'
+import { getOffset } from '../../../shared/utils/pagination.js'
+import type { PaginationQueryParsed, SortInput } from '@keimelion/sdk/schemas'
 import type { FilterInput } from '../../../shared/db/filter-parser.js'
 import type { ItemSourceWithItem } from './admin-shops.mapper.js'
 
@@ -44,7 +43,7 @@ function buildShopsWhere(filters: ListShopsFilters): SQL | undefined {
   return shopsEntity.buildWhere(generic)
 }
 
-export function findAllShops(input: PaginationInput, filters: ListShopsFilters): Promise<Shop[]> {
+export function findAllShops(input: PaginationQueryParsed, filters: ListShopsFilters): Promise<Shop[]> {
   const offset = getOffset(input)
   return db.query.shops.findMany({
     where: buildShopsWhere(filters),
@@ -64,7 +63,7 @@ export async function countShops(filters: ListShopsFilters): Promise<number> {
 
 export function findItemSourcesByShopId(
   shopId: string,
-  input: PaginationInput,
+  input: PaginationQueryParsed,
 ): Promise<ItemSourceWithItem[]> {
   const offset = getOffset(input)
   return db.query.itemSources.findMany({

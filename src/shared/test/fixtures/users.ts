@@ -1,5 +1,5 @@
 import type { User } from '../../../db/entities/users/users.schema.js'
-import { SupportedCurrencies } from '../../enums/currency.js'
+import { SupportedCurrencies } from '@keimelion/sdk/enums'
 
 /**
  * Canonical admin user row used across admin feature tests.

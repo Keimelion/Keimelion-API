@@ -1,7 +1,9 @@
 import { z } from 'zod'
-import { httpsUrlSchema } from '../../../shared/schemas/url.js'
-import { DUPLICATE_SHOP_IN_SOURCES_MESSAGE } from '../../../shared/utils/response.js'
-import { supportedCurrencyEnum } from '../../../shared/schemas/currency.js'
+import {
+  DUPLICATE_SHOP_IN_SOURCES_MESSAGE,
+  httpsUrlSchema,
+  supportedCurrencyEnum,
+} from '@keimelion/sdk/schemas'
 
 const MAX_SOURCE_URL_LENGTH = 2048
 const PRICE_REGEX = /^\d{1,8}(\.\d{1,2})?$/

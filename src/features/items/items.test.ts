@@ -3,7 +3,7 @@ import { app } from '../../app.js'
 import { db } from '../../db/client.js'
 import { images } from '../../db/entities/images/images.schema.js'
 import { env } from '../../config/env.js'
-import { ErrorCode } from '../../shared/enums/error-code.js'
+import { ErrorCode } from '@keimelion/sdk/enums'
 import { apiMultipartRequest, apiRequest } from '../../shared/test/api-request.js'
 import { generateTestToken, makeAccessTokenEntry } from '../../shared/test/auth.js'
 

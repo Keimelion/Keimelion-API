@@ -1,9 +1,10 @@
 import { db } from '../../db/client.js'
-import { HttpStatus } from '../../shared/enums/http.js'
-import { ErrorCode } from '../../shared/enums/error-code.js'
+import { buildPaginatedResponse } from '../../shared/utils/pagination.js'
+import { ErrorCode, HttpStatus } from '@keimelion/sdk/enums'
+import type { Locale } from '@keimelion/sdk/enums'
+import type { PaginatedResponse, PaginationQueryParsed } from '@keimelion/sdk/schemas'
 import { serviceError } from '../../shared/utils/response.js'
 import { pickDefined } from '../../shared/utils/partial-update.js'
-import { buildPaginatedResponse } from '../../shared/schemas/pagination.js'
 import {
   countAllItems,
   findAllItemsWithSources,
@@ -22,10 +23,7 @@ import {
 import type { Item } from '../../db/entities/items/items.schema.js'
 import type { ItemRelations } from '../../shared/db/item-relations.js'
 import type { ItemWithSources } from '../../shared/types/item.js'
-import type { PaginationInput } from '../../shared/schemas/pagination.js'
-import type { PaginatedResponse } from '../../shared/types/api.js'
 import type { ServiceResult } from '../../shared/types/service.js'
-import type { Locale } from '../../shared/enums/locale.js'
 import type { CreateItemFields } from './endpoints/create.js'
 import type { UpdateItemFields } from './endpoints/update.js'
 
@@ -52,7 +50,7 @@ const ITEM_CREATE_CONTEXT = 'item.create'
 const ITEM_UPDATE_CONTEXT = 'item.update'
 
 export async function listItems(
-  pagination: PaginationInput,
+  pagination: PaginationQueryParsed,
   locale: Locale,
 ): Promise<ServiceResult<PaginatedResponse<ItemWithSources>>> {
   const [rows, total] = await Promise.all([findAllItemsWithSources(pagination), countAllItems()])

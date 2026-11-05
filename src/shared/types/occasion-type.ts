@@ -2,7 +2,7 @@ import type {
   OccasionType,
   OccasionTypeTranslation,
 } from '../../db/entities/occasion-types/occasion-types.schema.js'
-import type { Locale } from '../enums/locale.js'
+import type { Locale } from '@keimelion/sdk/enums'
 
 export interface OccasionTypeDetail {
   id: string

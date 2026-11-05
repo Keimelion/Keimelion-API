@@ -23,8 +23,7 @@ import type { ListInvite } from '../../../db/entities/list-invites/list-invites.
 import type { ListUser } from '../../../db/entities/list-users/list-users.schema.js'
 import type { ListTag } from '../../../db/entities/list-tags/list-tags.schema.js'
 import type { ListDetail } from '../../../shared/types/list.js'
-import type { ListUserRole } from '../../../shared/enums/list-user-role.js'
-import type { InviteStatus } from '../../../shared/enums/invite-status.js'
+import type { InviteStatus, ListUserRole } from '@keimelion/sdk/enums'
 
 export interface ExportListTagRow {
   listId: string

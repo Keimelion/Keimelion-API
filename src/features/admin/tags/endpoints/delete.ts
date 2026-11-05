@@ -5,7 +5,7 @@ import { validationErrorHandler } from '../../../../shared/utils/validation.js'
 import { getAuthUser } from '../../../../shared/middlewares/auth.js'
 import { RATE_LIMITS } from '../../../../shared/utils/rate-limiter.js'
 import { uuidParamSchema } from '../../../../shared/schemas/params.js'
-import { HttpStatus } from '../../../../shared/enums/http.js'
+import { HttpStatus } from '@keimelion/sdk/enums'
 import type { FeatureRouter } from '../../../../shared/types/app.js'
 import { deleteTagById } from '../admin-tags.service.js'
 

@@ -1,5 +1,5 @@
 import type { Context, MiddlewareHandler } from 'hono'
-import { ErrorCode } from '../enums/error-code.js'
+import { ErrorCode } from '@keimelion/sdk/enums'
 import { sendError } from '../utils/response.js'
 import { verifyJwt } from '../../features/auth/jwt.service.js'
 import type { JwtPayload } from '../../features/auth/jwt.service.js'

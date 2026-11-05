@@ -3,7 +3,7 @@ import type { Context } from 'hono'
 import { authMiddleware } from '../../../shared/middlewares/auth.js'
 import { listContributorMiddleware } from '../../../shared/middlewares/list-access.middleware.js'
 import { RATE_LIMITS } from '../../../shared/utils/rate-limiter.js'
-import { ErrorCode } from '../../../shared/enums/error-code.js'
+import { ErrorCode } from '@keimelion/sdk/enums'
 import { jsonResult, sendError } from '../../../shared/utils/response.js'
 import {
   creatorNoteSchema,

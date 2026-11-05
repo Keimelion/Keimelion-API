@@ -1,12 +1,12 @@
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import type { FeatureRouter } from '../../../../shared/types/app.js'
-import { paginationQuerySchema } from '../../../../shared/schemas/pagination.js'
+import { INVITE_STATUS_VALUES } from '@keimelion/sdk/enums'
+import { paginationQuerySchema } from '@keimelion/sdk/schemas'
 import { validationErrorHandler } from '../../../../shared/utils/validation.js'
 import { adminOnly } from '../../../../shared/middlewares/admin-only.js'
 import { RATE_LIMITS } from '../../../../shared/utils/rate-limiter.js'
 import { jsonResult } from '../../../../shared/utils/response.js'
-import { INVITE_STATUS_VALUES } from '../../../../shared/enums/invite-status.js'
 import { listAdminInvites } from '../admin-list-invites.service.js'
 
 const listAdminInvitesQuerySchema = paginationQuerySchema.extend({

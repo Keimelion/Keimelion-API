@@ -1,6 +1,6 @@
 import { zValidator } from '@hono/zod-validator'
 import { getOptionalAuthUser, optionalAuthMiddleware } from '../../../shared/middlewares/optional-auth.js'
-import { HttpStatus } from '../../../shared/enums/http.js'
+import { HttpStatus } from '@keimelion/sdk/enums'
 import { RATE_LIMITS } from '../../../shared/utils/rate-limiter.js'
 import { jsonResult } from '../../../shared/utils/response.js'
 import { validationErrorHandler } from '../../../shared/utils/validation.js'

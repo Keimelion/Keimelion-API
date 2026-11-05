@@ -1,9 +1,8 @@
-import { HttpStatus } from '../../shared/enums/http.js'
-import { ErrorCode } from '../../shared/enums/error-code.js'
+import { ErrorCode, HttpStatus } from '@keimelion/sdk/enums'
+import type { Locale } from '@keimelion/sdk/enums'
 import { findListBySlug } from '../../db/entities/lists/lists.repository.js'
 import { serviceError } from '../../shared/utils/response.js'
 import { toPublicListDetail } from '../../shared/types/list.js'
-import type { Locale } from '../../shared/enums/locale.js'
 import type { PublicListDetail } from '../../shared/types/list.js'
 import type { ServiceResult } from '../../shared/types/service.js'
 

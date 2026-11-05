@@ -1,5 +1,5 @@
 import type { db } from '../../db/client.js'
-import { ErrorCode } from '../enums/error-code.js'
+import { ErrorCode } from '@keimelion/sdk/enums'
 import { normalizeTagSlugs } from '../utils/slug.js'
 import { findCategoriesByIds } from '../../db/entities/categories/categories.repository.js'
 import { replaceItemCategories } from '../../db/entities/item-categories/item-categories.repository.js'

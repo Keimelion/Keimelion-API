@@ -4,7 +4,7 @@ import { adminOnly } from '../../../../shared/middlewares/admin-only.js'
 import { jsonResult } from '../../../../shared/utils/response.js'
 import { uuidParamSchema } from '../../../../shared/schemas/params.js'
 import { validationErrorHandler } from '../../../../shared/utils/validation.js'
-import { HttpStatus } from '../../../../shared/enums/http.js'
+import { HttpStatus } from '@keimelion/sdk/enums'
 import type { FeatureRouter } from '../../../../shared/types/app.js'
 import { deleteOccasionTypeById } from '../admin-occasion-types.service.js'
 

@@ -1,7 +1,7 @@
 import type { Context, MiddlewareHandler } from 'hono'
-import { LOCALES, DEFAULT_LOCALE } from '../enums/locale.js'
+import { DEFAULT_LOCALE, LOCALES } from '@keimelion/sdk/enums'
+import type { Locale } from '@keimelion/sdk/enums'
 import { HonoContextKey } from '../enums/context-key.js'
-import type { Locale } from '../enums/locale.js'
 import type { AppVariables } from '../types/app.js'
 
 export const resolveLocaleMiddleware: MiddlewareHandler = async (context, next) => {

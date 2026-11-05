@@ -3,7 +3,7 @@ import { db } from '../../../db/client.js'
 import { users } from './users.schema.js'
 import type { User } from './users.schema.js'
 import { userDeletionAudit } from '../user-deletion-audit/user-deletion-audit.schema.js'
-import type { DeletionReason } from '../../../shared/enums/deletion-reason.js'
+import type { DeletionReason } from '@keimelion/sdk/enums'
 import type { UserRowWithAvatar } from '../../../shared/types/user.js'
 
 const HARD_DELETE_BATCH_SIZE = 100

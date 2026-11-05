@@ -4,7 +4,7 @@ import {
   findAllNonUsdCurrencyCodes,
   updateCurrencyRate,
 } from '../../db/entities/currencies/currencies.repository.js'
-import { SupportedCurrencies } from '../../shared/enums/currency.js'
+import { SupportedCurrencies } from '@keimelion/sdk/enums'
 import { logger } from '../../shared/utils/logger.js'
 import { createCronJob } from '../create-cron-job.js'
 

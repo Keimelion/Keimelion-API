@@ -1,7 +1,7 @@
 import { jsonb, pgEnum, pgTable, text, uuid } from 'drizzle-orm/pg-core'
 import { timestamps, uuidPrimaryKey } from '../../../shared/db/columns.js'
 import { nonEmptyCheck, nonEmptyVarchar } from '../../../shared/db/checks.js'
-import { FEEDBACK_STATUS_VALUES, FeedbackStatuses } from '../../../shared/enums/feedback-status.js'
+import { FEEDBACK_STATUS_VALUES, FeedbackStatuses } from '@keimelion/sdk/enums'
 import { users } from '../users/users.schema.js'
 
 export const feedbackStatusEnum = pgEnum('feedback_status', FEEDBACK_STATUS_VALUES)

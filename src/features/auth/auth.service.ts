@@ -1,7 +1,6 @@
 import { randomUUID, randomBytes } from 'crypto'
 import { env } from '../../config/env.js'
-import { HttpStatus } from '../../shared/enums/http.js'
-import { ErrorCode } from '../../shared/enums/error-code.js'
+import { ErrorCode, HttpStatus } from '@keimelion/sdk/enums'
 import { NodeEnvs } from '../../shared/enums/node-env.js'
 import { serviceError } from '../../shared/utils/response.js'
 import { hashPassword, verifyPassword, hashSha256Hex } from '../../shared/utils/hash.js'
@@ -30,21 +29,28 @@ import {
 import { deleteAllUserTokens } from '../../db/entities/access-tokens/access-tokens.repository.js'
 import { insertRefreshToken, findRefreshTokenByHash } from '../../db/entities/refresh-tokens/refresh-tokens.repository.js'
 import { findUserById } from '../../db/entities/users/users.repository.js'
-import type { UserDetail } from '../../shared/types/user.js'
+import type {
+  ForgotPasswordRequestParsed,
+  LoginRequestParsed,
+  LoginResponseParsed,
+  LogoutResponseParsed,
+  RefreshResponseParsed,
+  RegisterRequestParsed,
+  RegisterResponseParsed,
+  ResetPasswordRequestParsed,
+  ResetPasswordResponseParsed,
+  VerifyEmailRequestParsed,
+  VerifyEmailResponseParsed,
+} from '@keimelion/sdk/schemas'
 import type { ServiceResult } from '../../shared/types/service.js'
-import type { RegisterInput } from './endpoints/register.js'
-import type { VerifyEmailInput } from './endpoints/verify-email.js'
-import type { LoginInput } from './endpoints/login.js'
-import type { ForgotPasswordInput } from './endpoints/forgot-password.js'
-import type { ResetPasswordInput } from './endpoints/reset-password.js'
 
 const PASSWORD_RESET_TOKEN_TTL_MS = 60 * 60 * 1000
 const REFRESH_TOKEN_BYTE_LENGTH = 32
 
 export async function registerUser(
-  input: RegisterInput,
+  input: RegisterRequestParsed,
   avatarBuffer: Buffer | null = null,
-): Promise<ServiceResult<{ user: UserDetail; refreshToken: string }>> {
+): Promise<ServiceResult<RegisterResponseParsed>> {
   if (await isEmailAlreadyTaken(input.email)) {
     return serviceError(ErrorCode.CONFLICT)
   }
@@ -92,7 +98,7 @@ async function maybeAttachAvatar(
   return { row: updated, avatarImage: imageOutcome.image }
 }
 
-export async function verifyEmail(input: VerifyEmailInput): Promise<ServiceResult<{ message: string }>> {
+export async function verifyEmail(input: VerifyEmailRequestParsed): Promise<ServiceResult<VerifyEmailResponseParsed>> {
   const user = await findUserByEmailVerifyToken(input.token)
 
   if (!user?.emailVerifyTokenExpiresAt || user.emailVerifyTokenExpiresAt < new Date()) {
@@ -104,7 +110,7 @@ export async function verifyEmail(input: VerifyEmailInput): Promise<ServiceResul
   return { data: { message: 'Email verified successfully' }, httpStatus: HttpStatus.OK }
 }
 
-export async function loginUser(input: LoginInput): Promise<ServiceResult<{ accessToken: string; refreshToken: string; user: UserDetail }>> {
+export async function loginUser(input: LoginRequestParsed): Promise<ServiceResult<LoginResponseParsed>> {
   const user = await findUserByEmail(input.email)
 
   if (!user || await isPasswordInvalid(input.password, user.passwordHash)) {
@@ -127,7 +133,7 @@ export async function loginUser(input: LoginInput): Promise<ServiceResult<{ acce
   return { data: { accessToken: token, refreshToken: rawRefreshToken, user: toUserDetail(user) }, httpStatus: HttpStatus.OK }
 }
 
-export async function refreshAccessToken(rawToken: string): Promise<ServiceResult<{ accessToken: string; refreshToken: string }>> {
+export async function refreshAccessToken(rawToken: string): Promise<ServiceResult<RefreshResponseParsed>> {
   const tokenHash = hashSha256Hex(rawToken)
   const existingToken = await findRefreshTokenByHash(tokenHash)
 
@@ -160,7 +166,7 @@ export async function refreshAccessToken(rawToken: string): Promise<ServiceResul
   return { data: { accessToken: token, refreshToken: newRawRefreshToken }, httpStatus: HttpStatus.OK }
 }
 
-export async function logoutUser(payload: JwtPayload, userId: string, refreshToken?: string): Promise<ServiceResult<{ message: string }>> {
+export async function logoutUser(payload: JwtPayload, userId: string, refreshToken?: string): Promise<ServiceResult<LogoutResponseParsed>> {
   if (!payload.tokenId) {
     return serviceError(ErrorCode.LOGOUT_FAILED)
   }
@@ -175,7 +181,7 @@ export async function logoutUser(payload: JwtPayload, userId: string, refreshTok
   }
 }
 
-export async function requestPasswordReset(input: ForgotPasswordInput): Promise<ServiceResult<{ message: string; passwordResetToken?: string }>> {
+export async function requestPasswordReset(input: ForgotPasswordRequestParsed): Promise<ServiceResult<{ message: string; passwordResetToken?: string }>> {
   const genericMessage = 'If this email is registered, a reset link has been sent'
   const user = await findUserByEmail(input.email)
 
@@ -200,7 +206,7 @@ export async function requestPasswordReset(input: ForgotPasswordInput): Promise<
   }
 }
 
-export async function resetPassword(input: ResetPasswordInput): Promise<ServiceResult<{ message: string }>> {
+export async function resetPassword(input: ResetPasswordRequestParsed): Promise<ServiceResult<ResetPasswordResponseParsed>> {
   const tokenHash = hashSha256Hex(input.passwordResetToken)
   const user = await findUserByPasswordResetToken(tokenHash)
 

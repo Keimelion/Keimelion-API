@@ -4,8 +4,8 @@ import type { ListTagWithTag } from '../../db/entities/list-tags/list-tags.schem
 import type { ListItem } from '../../db/entities/list-items/list-items.schema.js'
 import type { User } from '../../db/entities/users/users.schema.js'
 import type { Image } from '../../db/entities/images/images.schema.js'
-import type { ItemStatus } from '../enums/item-status.js'
-import type { Locale } from '../enums/locale.js'
+import { CONTRIBUTOR_ROLE_VALUES, ListUserRoles } from '@keimelion/sdk/enums'
+import type { ItemStatus, ListUserRole, Locale } from '@keimelion/sdk/enums'
 import { toUserDetail } from './user.js'
 import { toTagPublic } from './tag.js'
 import { toItemSourceDetail } from './item.js'
@@ -18,8 +18,6 @@ import type { UserDetail, UserRowWithAvatar } from './user.js'
 import type { TagPublic } from './tag.js'
 import { toListMemberUser } from './collaborator.js'
 import type { CollaboratorSummary, ListMemberUser } from './collaborator.js'
-import { CONTRIBUTOR_ROLE_VALUES, ListUserRoles } from '../enums/list-user-role.js'
-import type { ListUserRole } from '../enums/list-user-role.js'
 
 export interface ListDetail {
   id: string
