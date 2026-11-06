@@ -12,6 +12,7 @@ import { tagsRouter } from './tags/tags.routes.js'
 import { feedbackRouter } from './feedback/feedback.routes.js'
 import { publicRouter } from './public/public.routes.js'
 import { reservationsRouter } from './reservations/reservations.routes.js'
+import { reportsRouter } from './reports/reports.routes.js'
 
 export function mountRoutes(app: Hono): void {
   app.route('/health', healthRouter)
@@ -29,5 +30,6 @@ export function mountRoutes(app: Hono): void {
   v1.route('/feedback', feedbackRouter)
   v1.route('/public', publicRouter)
   v1.route('/reservations', reservationsRouter)
+  v1.route('/reports', reportsRouter)
   app.route('/v1', v1)
 }

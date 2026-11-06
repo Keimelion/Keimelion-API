@@ -1,8 +1,11 @@
 import { and, eq, inArray, lt, notExists, sql } from 'drizzle-orm'
+import type { SQL } from 'drizzle-orm'
 import { db } from '../../client.js'
 import { images } from './images.schema.js'
 import { items } from '../items/items.schema.js'
 import { users } from '../users/users.schema.js'
+import { reports } from '../reports/reports.schema.js'
+import { ReportStatuses } from '@keimelion/sdk/enums'
 import type { Image } from './images.schema.js'
 
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
@@ -23,9 +26,11 @@ export async function insertImage(input: InsertImageInput, tx?: DbTransaction): 
   return image
 }
 
+// Images kept as evidence by a pending report survive: the orphan cleanup job purges them once
+// the report is upheld or dismissed.
 export async function deleteImageById(id: string, tx?: DbTransaction): Promise<void> {
   const client = tx ?? db
-  await client.delete(images).where(eq(images.id, id))
+  await client.delete(images).where(and(eq(images.id, id), isNotEvidenceOfPendingReport()))
 }
 
 // Serializes writers and the orphan-file sweeper on a given content hash: files are deduplicated
@@ -50,8 +55,18 @@ export async function deleteUnreferencedImages(createdBefore: Date): Promise<num
         lt(images.createdAt, createdBefore),
         notExists(db.select({ id: items.id }).from(items).where(eq(items.imageId, images.id))),
         notExists(db.select({ id: users.id }).from(users).where(eq(users.avatarImageId, images.id))),
+        isNotEvidenceOfPendingReport(),
       ),
     )
     .returning({ id: images.id })
   return deleted.length
+}
+
+function isNotEvidenceOfPendingReport(): SQL {
+  return notExists(
+    db
+      .select({ id: reports.id })
+      .from(reports)
+      .where(and(eq(reports.targetImageId, images.id), eq(reports.reportStatus, ReportStatuses.PENDING))),
+  )
 }

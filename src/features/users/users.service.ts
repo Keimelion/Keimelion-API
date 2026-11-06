@@ -19,6 +19,7 @@ import {
   findListsOwnedByForExport,
   findListTagsForOwner,
   findListUsersForExport,
+  findReportsByUser,
   findReservationsForExport,
   findTagsCreatedByUser,
 } from './export/rgpd-export.repository.js'
@@ -39,6 +40,7 @@ import {
   toExportListRow,
   toExportListTagRow,
   toExportListUserRow,
+  toExportReportRow,
 } from './export/export-entities.js'
 import { toReservationProfileEntry } from '../reservations/reservations.types.js'
 import type { ReservationProfileEntry } from '../reservations/reservations.types.js'
@@ -231,6 +233,7 @@ export async function exportUserData(userId: string, format: ExportFormat): Prom
     rawListInvites,
     rawFeedback,
     rawReservations,
+    rawReports,
     rawImages,
   ] = await Promise.all([
     findItemsByCreator(userId),
@@ -243,6 +246,7 @@ export async function exportUserData(userId: string, format: ExportFormat): Prom
     findListInvitesForExport(userId),
     findFeedbackByUser(userId),
     findReservationsForExport(userId),
+    findReportsByUser(userId),
     findImagesByUploaderForExport(userId),
   ])
 
@@ -260,6 +264,7 @@ export async function exportUserData(userId: string, format: ExportFormat): Prom
       listInvites: rawListInvites.map(toExportListInviteRow),
       feedback: rawFeedback.map(toFeedbackDetail),
       reservations: rawReservations,
+      reports: rawReports.map(toExportReportRow),
       images: rawImages.map(toImageDetail),
     },
     contentType: EXPORT_JSON_CONTENT_TYPE,

@@ -10,6 +10,7 @@ import { listItems } from '../../../db/entities/list-items/list-items.schema.js'
 import { listTags } from '../../../db/entities/list-tags/list-tags.schema.js'
 import { lists } from '../../../db/entities/lists/lists.schema.js'
 import { reservations } from '../../../db/entities/reservations/reservations.schema.js'
+import { reports } from '../../../db/entities/reports/reports.schema.js'
 import { tags } from '../../../db/entities/tags/tags.schema.js'
 import { users } from '../../../db/entities/users/users.schema.js'
 import { CONTRIBUTOR_ROLE_VALUES, ListUserRoles } from '@keimelion/sdk/enums'
@@ -23,6 +24,7 @@ import type { ListItem } from '../../../db/entities/list-items/list-items.schema
 import type { ListTag } from '../../../db/entities/list-tags/list-tags.schema.js'
 import type { List } from '../../../db/entities/lists/lists.schema.js'
 import type { Tag } from '../../../db/entities/tags/tags.schema.js'
+import type { Report } from '../../../db/entities/reports/reports.schema.js'
 
 export async function findItemsByCreator(userId: string): Promise<ItemRowWithImage[]> {
   return db.query.items.findMany({
@@ -146,4 +148,27 @@ export async function findReservationsForExport(userId: string): Promise<Reserva
     quantityBooked: row.quantityBooked,
     createdAt: row.createdAt,
   }))
+}
+
+export type ReportExportSourceRow = Pick<
+  Report,
+  'id' | 'targetType' | 'targetId' | 'reason' | 'description' | 'reportStatus' | 'createdAt'
+>
+
+// Only reports filed by the user: reports about the user belong to the reporters, and the
+// moderation fields (snapshot, admin note, reviewer) are never selected.
+export async function findReportsByUser(userId: string): Promise<ReportExportSourceRow[]> {
+  return db.query.reports.findMany({
+    where: eq(reports.userId, userId),
+    columns: {
+      id: true,
+      targetType: true,
+      targetId: true,
+      reason: true,
+      description: true,
+      reportStatus: true,
+      createdAt: true,
+    },
+    orderBy: desc(reports.createdAt),
+  })
 }

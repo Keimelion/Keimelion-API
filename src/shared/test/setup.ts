@@ -27,6 +27,8 @@ vi.mock('../../config/env.js', () => ({
     FX_PROVIDER_URL: 'https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml',
     FEEDBACK_RATE_LIMIT_PER_MINUTE: 5,
     FEEDBACK_RATE_LIMIT_PER_HOUR: 20,
+    REPORT_RATE_LIMIT_PER_MINUTE: 5,
+    REPORT_RATE_LIMIT_PER_HOUR: 20,
     UPLOADS_DIR: '/tmp/keimelion-test-uploads',
     UPLOADS_MAX_SIZE_BYTES: 10_000_000,
     UPLOADS_PUBLIC_BASE_URL: 'http://localhost:3000/uploads',
@@ -74,7 +76,7 @@ const applyDbMockDefaults = (db: Record<string, unknown>): void => {
   }))
   const passThrough = (async (callback: (tx: unknown) => Promise<unknown>) => callback(db)) as never
   vi.mocked(db.transaction as ReturnType<typeof vi.fn>).mockImplementation(passThrough)
-  const emptyFindMany = ['lists', 'listUsers', 'listInvites', 'items', 'itemSources', 'listItems', 'shops', 'categories', 'itemCategories', 'tags', 'itemTags', 'listTags', 'feedback', 'images', 'reservations']
+  const emptyFindMany = ['lists', 'listUsers', 'listInvites', 'items', 'itemSources', 'listItems', 'shops', 'categories', 'itemCategories', 'tags', 'itemTags', 'listTags', 'feedback', 'images', 'reservations', 'reports']
   for (const table of emptyFindMany) {
     const q = (db.query as Record<string, { findMany: ReturnType<typeof vi.fn> }>)[table]
     if (q !== undefined) q.findMany.mockResolvedValue([])
@@ -160,6 +162,10 @@ vi.mock('../../db/client.js', () => {
         findMany: vi.fn().mockResolvedValue([]),
       },
       reservations: {
+        findFirst: vi.fn(),
+        findMany: vi.fn().mockResolvedValue([]),
+      },
+      reports: {
         findFirst: vi.fn(),
         findMany: vi.fn().mockResolvedValue([]),
       },
