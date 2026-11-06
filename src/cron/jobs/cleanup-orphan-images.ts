@@ -13,8 +13,8 @@ const ONE_HOUR_MS = 60 * 60 * 1000
 const HASH_LOOKUP_BATCH_SIZE = 500
 
 // 1. Deletes images rows that no item nor user references anymore (replaced, cleared, parent
-//    deleted…), once they are older than the grace period so an upload still being attached
-//    to its parent is left alone.
+//    deleted…) and that no pending report keeps as evidence, once they are older than the grace
+//    period so an upload still being attached to its parent is left alone.
 // 2. Deletes webp files whose hash no images row references anymore.
 async function runOrphanImageCleanup(): Promise<number> {
   const createdBefore = new Date(Date.now() - env.IMAGE_ORPHAN_GRACE_HOURS * ONE_HOUR_MS)

@@ -25,4 +25,5 @@ export const AdminAction = {
   DELETE_TAG: 'admin_delete_tag',
   UPDATE_FEEDBACK: 'admin_update_feedback',
   DELETE_RESERVATION: 'admin_delete_reservation',
+  UPDATE_REPORT: 'admin_update_report',
 } as const

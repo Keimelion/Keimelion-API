@@ -9,9 +9,11 @@ import {
   findListsOwnedByForExport,
   findListTagsForOwner,
   findListUsersForExport,
+  findReportsByUser,
   findReservationsForExport,
   findTagsCreatedByUser,
 } from './rgpd-export.repository.js'
+import type { ReportExportSourceRow } from './rgpd-export.repository.js'
 import { toUserDetail } from '../../../shared/types/user.js'
 import { toFeedbackDetail } from '../../../shared/types/feedback.js'
 import { toItemDetail, toItemSourceDetailWithoutShop, toListItemDetail } from '../../../shared/types/item.js'
@@ -23,7 +25,13 @@ import type { ListInvite } from '../../../db/entities/list-invites/list-invites.
 import type { ListUser } from '../../../db/entities/list-users/list-users.schema.js'
 import type { ListTag } from '../../../db/entities/list-tags/list-tags.schema.js'
 import type { ListDetail } from '../../../shared/types/list.js'
-import type { InviteStatus, ListUserRole } from '@keimelion/sdk/enums'
+import type {
+  InviteStatus,
+  ListUserRole,
+  ReportReason,
+  ReportStatus,
+  ReportTargetType,
+} from '@keimelion/sdk/enums'
 
 export interface ExportListTagRow {
   listId: string
@@ -67,6 +75,28 @@ export function toExportListInviteRow(row: ListInvite): ExportListInviteRow {
     role: row.role,
     inviteStatus: row.inviteStatus,
     acceptedAt: row.acceptedAt ?? null,
+    createdAt: row.createdAt,
+  }
+}
+
+export interface ExportReportRow {
+  id: string
+  targetType: ReportTargetType
+  targetId: string
+  reason: ReportReason
+  description: string | null
+  status: ReportStatus
+  createdAt: Date
+}
+
+export function toExportReportRow(row: ReportExportSourceRow): ExportReportRow {
+  return {
+    id: row.id,
+    targetType: row.targetType,
+    targetId: row.targetId,
+    reason: row.reason,
+    description: row.description,
+    status: row.reportStatus,
     createdAt: row.createdAt,
   }
 }
@@ -284,6 +314,15 @@ const reservationsEntityDescriptor: ExportEntityDescriptor = {
   fetchRows: async (userId: string) => findReservationsForExport(userId),
 }
 
+const reportsEntityDescriptor: ExportEntityDescriptor = {
+  filename: 'reports.csv',
+  columns: ['id', 'targetType', 'targetId', 'reason', 'description', 'status', 'createdAt'],
+  fetchRows: async (userId: string) => {
+    const rows = await findReportsByUser(userId)
+    return rows.map(toExportReportRow)
+  },
+}
+
 const imagesEntityDescriptor: ExportEntityDescriptor = {
   filename: 'images.csv',
   columns: [
@@ -319,5 +358,6 @@ export const EXPORT_ENTITY_REGISTRY: ExportEntityDescriptor[] = [
   listInvitesEntityDescriptor,
   feedbackEntityDescriptor,
   reservationsEntityDescriptor,
+  reportsEntityDescriptor,
   imagesEntityDescriptor,
 ]
