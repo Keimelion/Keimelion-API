@@ -4,13 +4,15 @@ import type {
   Category,
   CategoryTranslation,
 } from '../../db/entities/categories/categories.schema.js'
-import type { AdminCategoryDetailParsed, CategorySummaryParsed } from '@keimelion/sdk/schemas'
+import type {
+  AdminCategoryDetailParsed,
+  CategorySummaryParsed,
+  CategoryTreeNodeParsed,
+} from '@keimelion/sdk/schemas'
 
 export type CategoryPublic = CategorySummaryParsed
 
-export interface CategoryTreeNode extends CategoryPublic {
-  children: CategoryTreeNode[]
-}
+export type CategoryTreeNode = CategoryTreeNodeParsed
 
 export interface CategoryRowWithResolvedName {
   id: string
