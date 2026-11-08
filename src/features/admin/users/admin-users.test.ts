@@ -47,6 +47,14 @@ function mockReservationCountsByUserIds(counts = new Map<string, number>()): voi
   vi.mocked(db.select).mockReturnValueOnce(chain as never)
 }
 
+function mockPendingReportImageGuardSubquery(): void {
+  const chain = {
+    from: vi.fn().mockReturnThis(),
+    where: vi.fn().mockReturnThis(),
+  }
+  vi.mocked(db.select).mockReturnValueOnce(chain as never)
+}
+
 function mockReservationCountForUser(total = 0): void {
   const chain = {
     from: vi.fn().mockReturnThis(),
@@ -818,6 +826,7 @@ describe('PATCH /v1/admin/users/:id', () => {
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce({ ...TARGET_USER, avatarImageId: previousImageId })
     vi.mocked(db.transaction).mockImplementationOnce(async (callback) => callback({ update: vi.fn(() => ({ set })) } as never))
+    mockPendingReportImageGuardSubquery()
     mockReservationCountForUser()
 
     const response = await apiRequest(`/v1/admin/users/${TARGET_USER.id}`, {

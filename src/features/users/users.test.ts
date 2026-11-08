@@ -1770,3 +1770,86 @@ describe('PATCH /v1/users/me — multipart guards', () => {
     expect(vi.mocked(db.update)).not.toHaveBeenCalled()
   })
 })
+
+describe('GET /v1/users/me/export — reports', () => {
+  const REPORT_ROW = {
+    id: '00000000-0000-0000-0000-00000000e001',
+    userId: SAFE_USER.id,
+    targetType: 'item' as const,
+    targetId: '00000000-0000-0000-0000-00000000e101',
+    targetSnapshot: { name: 'Snapshot that must stay internal' },
+    targetImageId: '00000000-0000-0000-0000-00000000e201',
+    reason: 'scam_fraud' as const,
+    description: 'Links to a phishing shop',
+    reportStatus: 'upheld' as const,
+    adminNote: 'Internal moderation note',
+    reviewedByUserId: '00000000-0000-0000-0000-00000000e301',
+    reviewedAt: new Date('2024-07-02'),
+    createdAt: new Date('2024-07-01'),
+    updatedAt: new Date('2024-07-02'),
+  }
+  const EXPECTED_EXPORT_KEYS = ['id', 'targetType', 'targetId', 'reason', 'description', 'status', 'createdAt']
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
+  })
+
+  it('includes a reports key with the reports filed by the user, without moderation fields', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    vi.mocked(db.query.reports.findMany).mockResolvedValueOnce([REPORT_ROW] as never)
+
+    const response = await apiRequest('/v1/users/me/export?format=json', { token })
+
+    expect(response.status).toBe(200)
+    const body = await response.json() as { reports: Record<string, unknown>[] }
+    expect(body.reports).toHaveLength(1)
+    expect(Object.keys(body.reports[0] ?? {}).sort()).toEqual([...EXPECTED_EXPORT_KEYS].sort())
+    expect(body.reports[0]).toMatchObject({ id: REPORT_ROW.id, status: 'upheld', reason: 'scam_fraud' })
+    const serialized = JSON.stringify(body.reports)
+    expect(serialized).not.toContain('Internal moderation note')
+    expect(serialized).not.toContain('Snapshot that must stay internal')
+    expect(serialized).not.toContain(REPORT_ROW.reviewedByUserId)
+  })
+
+  it('scopes the reports export to reports filed by the caller and never selects moderation columns', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    vi.mocked(db.query.reports.findMany).mockResolvedValueOnce([])
+
+    await apiRequest('/v1/users/me/export?format=json', { token })
+
+    const exportQuery = vi.mocked(db.query.reports.findMany).mock.calls[0]?.[0]
+    const whereClause = new PgDialect().sqlToQuery(exportQuery?.where as SQL)
+    expect(whereClause.sql).toBe('"reports"."user_id" = $1')
+    expect(whereClause.params).toEqual([SAFE_USER.id])
+    expect(exportQuery?.columns).not.toHaveProperty('adminNote')
+    expect(exportQuery?.columns).not.toHaveProperty('targetSnapshot')
+    expect(exportQuery?.columns).not.toHaveProperty('reviewedByUserId')
+  })
+
+  it('registers reports.csv with the exact allow-list required by RGPD', () => {
+    const descriptor = EXPORT_ENTITY_REGISTRY.find((entry) => entry.filename === 'reports.csv')
+    expect(descriptor?.columns).toEqual(EXPECTED_EXPORT_KEYS)
+  })
+
+  it('maps reports.csv rows through the allow-list mapper', async () => {
+    const descriptor = EXPORT_ENTITY_REGISTRY.find((entry) => entry.filename === 'reports.csv')
+    vi.mocked(db.query.reports.findMany).mockResolvedValueOnce([REPORT_ROW] as never)
+
+    const rows = await (descriptor as { fetchRows: (userId: string) => Promise<object[]> }).fetchRows(SAFE_USER.id)
+
+    expect(rows).toEqual([{
+      id: REPORT_ROW.id,
+      targetType: 'item',
+      targetId: REPORT_ROW.targetId,
+      reason: 'scam_fraud',
+      description: 'Links to a phishing shop',
+      status: 'upheld',
+      createdAt: REPORT_ROW.createdAt,
+    }])
+  })
+})
