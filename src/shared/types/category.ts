@@ -4,18 +4,15 @@ import type {
   Category,
   CategoryTranslation,
 } from '../../db/entities/categories/categories.schema.js'
+import type {
+  AdminCategoryDetailParsed,
+  CategorySummaryParsed,
+  CategoryTreeNodeParsed,
+} from '@keimelion/sdk/schemas'
 
-export interface CategoryPublic {
-  id: string
-  parentId: string | null
-  name: string
-  slug: string
-  depth: number
-}
+export type CategoryPublic = CategorySummaryParsed
 
-export interface CategoryTreeNode extends CategoryPublic {
-  children: CategoryTreeNode[]
-}
+export type CategoryTreeNode = CategoryTreeNodeParsed
 
 export interface CategoryRowWithResolvedName {
   id: string
@@ -31,15 +28,7 @@ export interface CategoryRowWithTranslations extends Category {
 
 export type CategoryTranslationsDict = Partial<Record<Locale, string>>
 
-export interface AdminCategoryDetail {
-  id: string
-  parentId: string | null
-  slug: string
-  depth: number
-  translations: CategoryTranslationsDict
-  createdAt: Date
-  updatedAt: Date
-}
+export type AdminCategoryDetail = AdminCategoryDetailParsed
 
 export function toCategoryPublic(row: CategoryRowWithResolvedName): CategoryPublic {
   return {

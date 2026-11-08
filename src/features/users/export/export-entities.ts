@@ -17,14 +17,14 @@ import type { ReportExportSourceRow } from './rgpd-export.repository.js'
 import { toUserDetail } from '../../../shared/types/user.js'
 import { toFeedbackDetail } from '../../../shared/types/feedback.js'
 import { toItemDetail, toItemSourceDetailWithoutShop, toListItemDetail } from '../../../shared/types/item.js'
-import { toListDetail } from '../../../shared/types/list.js'
+import { toListDetailWithoutCollaborators } from '../../../shared/types/list.js'
 import { toTagDetail } from '../../../shared/types/tag.js'
 import { toImageDetail } from '../../uploads/images.mapper.js'
 import type { List } from '../../../db/entities/lists/lists.schema.js'
 import type { ListInvite } from '../../../db/entities/list-invites/list-invites.schema.js'
 import type { ListUser } from '../../../db/entities/list-users/list-users.schema.js'
 import type { ListTag } from '../../../db/entities/list-tags/list-tags.schema.js'
-import type { ListDetail } from '../../../shared/types/list.js'
+import type { ListDetailWithoutCollaborators } from '../../../shared/types/list.js'
 import type {
   InviteStatus,
   ListUserRole,
@@ -101,13 +101,13 @@ export function toExportReportRow(row: ReportExportSourceRow): ExportReportRow {
   }
 }
 
-export interface ExportListRow extends ListDetail {
+export interface ExportListRow extends ListDetailWithoutCollaborators {
   deletedAt: Date | null
 }
 
 export function toExportListRow(list: List): ExportListRow {
   const row = { ...list, listUsers: [], listTags: [] }
-  return { ...toListDetail(row), deletedAt: list.deletedAt }
+  return { ...toListDetailWithoutCollaborators(row), deletedAt: list.deletedAt }
 }
 
 /**

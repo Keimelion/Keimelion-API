@@ -1,4 +1,6 @@
 import { count, type SQL } from 'drizzle-orm'
+import type { AnyColumn } from 'drizzle-orm'
+import type { ADMIN_ITEMS_SORT_FIELDS } from '@keimelion/sdk/schemas'
 import { db } from '../../../db/client.js'
 import { items } from '../../../db/entities/items/items.schema.js'
 import { defineEntity } from '../../../shared/db/entity-descriptor.js'
@@ -12,7 +14,7 @@ export const itemsEntity = defineEntity({
     name:      items.name,
     createdAt: items.createdAt,
     updatedAt: items.updatedAt,
-  },
+  } satisfies Record<(typeof ADMIN_ITEMS_SORT_FIELDS)[number], AnyColumn>,
   defaultSort: [{ field: 'createdAt', direction: 'desc' }],
   filterable: {
     id:              { column: items.id,              operators: ['eq', 'in'] },

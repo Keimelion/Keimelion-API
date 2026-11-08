@@ -5,6 +5,13 @@ import { generateTestToken, makeAccessTokenEntry } from '../../../shared/test/au
 import { ADMIN_USER_FIXTURE as ADMIN_USER, makeAdminUser } from '../../../shared/test/fixtures/users.js'
 import { logger } from '../../../shared/utils/logger.js'
 import { images } from '../../../db/entities/images/images.schema.js'
+import {
+  adminUsersCreateResponseSchema,
+  adminUsersGetResponseSchema,
+  adminUsersListResponseSchema,
+  adminUsersUpdateResponseSchema,
+  messageResponseSchema,
+} from '@keimelion/sdk/schemas'
 
 vi.mock('../../../shared/utils/logger.js', () => ({
   logger: {
@@ -79,6 +86,7 @@ describe('GET /v1/admin/users', () => {
     const response = await apiRequest('/v1/admin/users', { token })
 
     const body = await response.json() as { items: { email: string }[]; pagination: { total: number } }
+    adminUsersListResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.items).toHaveLength(2)
     expect(body.items[0]?.email).toBe('admin@example.com')
@@ -516,6 +524,7 @@ describe('GET /v1/admin/users/:id', () => {
     const response = await apiRequest(`/v1/admin/users/${TARGET_USER.id}`, { token })
 
     const body = await response.json() as { user: { email: string; reservationsCount: number } }
+    adminUsersGetResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.user.email).toBe('user@example.com')
     expect(body.user.reservationsCount).toBe(0)
@@ -610,6 +619,7 @@ describe('PATCH /v1/admin/users/:id', () => {
     })
 
     const body = await response.json() as { user: { role: string } }
+    adminUsersUpdateResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.user.role).toBe('moderator')
   })
@@ -896,6 +906,7 @@ describe('DELETE /v1/admin/users/:id', () => {
     const response = await apiRequest(`/v1/admin/users/${TARGET_USER.id}`, { method: 'DELETE', token })
 
     const body = await response.json() as { message: string }
+    messageResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.message).toBe('User deleted successfully')
   })
@@ -1060,6 +1071,7 @@ describe('POST /v1/admin/users', () => {
     })
 
     const body = await response.json() as { user: Record<string, unknown>; passwordResetToken: string }
+    adminUsersCreateResponseSchema.parse(body)
     expect(response.status).toBe(201)
     expect(body.user).toBeDefined()
     expect(body.user.email).toBe('user@example.com')

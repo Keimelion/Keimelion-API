@@ -2,23 +2,15 @@ import { authMiddleware, getAuthUser } from '../../../shared/middlewares/auth.js
 import { multipartOnly, RATE_LIMITS } from '../../../shared/utils/rate-limiter.js'
 import { jsonResult } from '../../../shared/utils/response.js'
 import { getLocale } from '../../../shared/middlewares/resolve-locale.js'
-import { parseJsonOrMultipart, sendParseFailure } from '../../uploads/multipart.js'
-import { multipartWritableItemFieldsSchema, writableItemFieldsSchema } from '../items.schemas.js'
-import type { z } from 'zod'
+import { multipartJsonSchema, parseJsonOrMultipart, sendParseFailure } from '../../uploads/multipart.js'
+import { itemsCreateRequestSchema } from '@keimelion/sdk/schemas'
 import type { FeatureRouter } from '../../../shared/types/app.js'
 import { createUserItem } from '../items.service.js'
 
-const jsonCreateItemSchema = writableItemFieldsSchema
-  .partial()
-  .required({ name: true })
-  .strict()
-
-const multipartCreateItemSchema = multipartWritableItemFieldsSchema
-  .partial()
-  .required({ name: true })
-  .strict()
-
-export type CreateItemFields = z.infer<typeof jsonCreateItemSchema>
+const multipartCreateItemSchema = itemsCreateRequestSchema.extend({
+  tags: multipartJsonSchema(itemsCreateRequestSchema.shape.tags).optional(),
+  categories: multipartJsonSchema(itemsCreateRequestSchema.shape.categories).optional(),
+})
 
 export function mountCreateItem(router: FeatureRouter): void {
   router.post(
@@ -28,7 +20,7 @@ export function mountCreateItem(router: FeatureRouter): void {
     multipartOnly(RATE_LIMITS.UPLOAD()),
     async (context) => {
       const parsed = await parseJsonOrMultipart(context, {
-        jsonSchema: jsonCreateItemSchema,
+        jsonSchema: itemsCreateRequestSchema,
         multipartSchema: multipartCreateItemSchema,
       })
       if (!parsed.ok) return sendParseFailure(parsed)

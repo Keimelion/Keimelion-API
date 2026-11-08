@@ -1,20 +1,14 @@
-import { extractOwnerDetail, toListDetail } from '../../../shared/types/list.js'
-import type { ListDetail, ListRowWithOwner } from '../../../shared/types/list.js'
+import { extractOwnerDetail, toListDetailWithoutCollaborators } from '../../../shared/types/list.js'
+import type { ListRowWithOwner } from '../../../shared/types/list.js'
+import type { AdminListDetailParsed } from '@keimelion/sdk/schemas'
 import type { SupportedCurrency } from '@keimelion/sdk/enums'
-import type { UserDetail } from '../../../shared/types/user.js'
 
 export interface AdminListAggregate {
   itemCount: number
   totalEstimatedPrice: string | null
 }
 
-export interface AdminListDetail extends Omit<ListDetail, 'owner'> {
-  owner: UserDetail | null
-  deletedAt: Date | null
-  itemCount: number
-  totalEstimatedPrice: string | null
-  displayCurrency: SupportedCurrency
-}
+export type AdminListDetail = AdminListDetailParsed
 
 const DEFAULT_AGGREGATE: AdminListAggregate = { itemCount: 0, totalEstimatedPrice: null }
 
@@ -24,7 +18,7 @@ export function toAdminListDetail(
   aggregate: AdminListAggregate = DEFAULT_AGGREGATE,
 ): AdminListDetail {
   return {
-    ...toListDetail(row),
+    ...toListDetailWithoutCollaborators(row),
     owner: extractOwnerDetail(row),
     deletedAt: row.deletedAt ?? null,
     itemCount: aggregate.itemCount,

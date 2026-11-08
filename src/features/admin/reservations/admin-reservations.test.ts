@@ -5,6 +5,10 @@ import { generateTestToken, makeAccessTokenEntry } from '../../../shared/test/au
 import { ADMIN_USER_FIXTURE as ADMIN_USER, makeAdminUser } from '../../../shared/test/fixtures/users.js'
 import { ItemStatuses } from '@keimelion/sdk/enums'
 import { logger } from '../../../shared/utils/logger.js'
+import {
+  adminReservationsGetResponseSchema,
+  adminReservationsListResponseSchema,
+} from '@keimelion/sdk/schemas'
 
 vi.mock('../../../shared/utils/logger.js', () => ({
   logger: {
@@ -234,6 +238,7 @@ describe('GET /v1/admin/reservations', () => {
       }[]
       pagination: { total: number }
     }
+    adminReservationsListResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.pagination.total).toBe(1)
     expect(body.items[0]?.id).toBe(RESERVATION_ID)
@@ -387,6 +392,7 @@ describe('GET /v1/admin/reservations/:id', () => {
         list: { owner: { id: string } | null }
       }
     }
+    adminReservationsGetResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.reservation.id).toBe(RESERVATION_ID)
     expect(body.reservation.user.id).toBe(RESERVER_USER.id)

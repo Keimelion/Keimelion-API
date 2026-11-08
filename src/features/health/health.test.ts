@@ -1,7 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { app } from '../../app.js'
 import { db } from '../../db/client.js'
-import type { HealthResult } from './health.service.js'
+import type { HealthGetResponseInput } from '@keimelion/sdk/schemas'
+import {
+  healthGetResponseSchema,
+} from '@keimelion/sdk/schemas'
 
 describe('GET /health', () => {
   beforeEach(() => {
@@ -12,7 +15,8 @@ describe('GET /health', () => {
     vi.mocked(db.execute).mockResolvedValueOnce([] as never)
 
     const res = await app.request('/health')
-    const body = await res.json() as HealthResult
+    const body = await res.json() as HealthGetResponseInput
+    healthGetResponseSchema.parse(body)
 
     expect(res.status).toBe(200)
     expect(body.status).toBe('ok')
@@ -25,7 +29,7 @@ describe('GET /health', () => {
     vi.mocked(db.execute).mockRejectedValueOnce(new Error('Connection refused'))
 
     const res = await app.request('/health')
-    const body = await res.json() as HealthResult
+    const body = await res.json() as HealthGetResponseInput
 
     expect(res.status).toBe(500)
     expect(body.status).toBe('degraded')

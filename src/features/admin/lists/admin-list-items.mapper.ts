@@ -1,14 +1,9 @@
 import { toItemWithSources, toListItemDetail } from '../../../shared/types/item.js'
-import type { ItemSourceDetail, ItemWithSources, ListItemDetail } from '../../../shared/types/item.js'
 import type { Locale, SupportedCurrency } from '@keimelion/sdk/enums'
 import type { AdminListItemRow } from './admin-list-items.repository.js'
+import type { AdminListItemDetailParsed } from '@keimelion/sdk/schemas'
 
-export interface AdminListItemResponse extends ListItemDetail {
-  item: ItemWithSources
-  sources: ItemSourceDetail[]
-  averagePrice: string | null
-  displayCurrency: SupportedCurrency
-}
+export type AdminListItemResponse = AdminListItemDetailParsed
 
 export function toAdminListItemResponse(
   row: AdminListItemRow,

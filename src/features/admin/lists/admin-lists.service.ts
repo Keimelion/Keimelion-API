@@ -3,7 +3,11 @@ import { buildPaginatedResponse } from '../../../shared/utils/pagination.js'
 import { ErrorCode, HttpStatus } from '@keimelion/sdk/enums'
 import type { Locale, SupportedCurrency } from '@keimelion/sdk/enums'
 import { DEFAULT_DISPLAY_CURRENCY } from '@keimelion/sdk/schemas'
-import type { PaginatedResponse, PaginationQueryParsed } from '@keimelion/sdk/schemas'
+import type {
+  AdminListsUpdateRequestParsed,
+  PaginatedResponse,
+  PaginationQueryParsed,
+} from '@keimelion/sdk/schemas'
 import { serviceError } from '../../../shared/utils/response.js'
 import { logger } from '../../../shared/utils/logger.js'
 import { runWrite, buildChanges } from '../../../shared/utils/admin-write.js'
@@ -39,7 +43,6 @@ import type { AdminListAggregate, AdminListDetail } from './admin-lists.mapper.j
 import type { AdminListItemResponse } from './admin-list-items.mapper.js'
 import type { ServiceResult } from '../../../shared/types/service.js'
 import type { ListListsInput } from './endpoints/list.js'
-import type { UpdateListInput } from './endpoints/update.js'
 
 const FREE_TEXT_FIELDS = new Set(['title', 'description'])
 
@@ -116,7 +119,7 @@ export async function listListItemsByListId(
 export async function updateListById(
   adminId: string,
   id: string,
-  input: UpdateListInput,
+  input: AdminListsUpdateRequestParsed,
 ): Promise<ServiceResult<{ list: AdminListDetail }>> {
   const existingRow = await findAdminListByIdWithOwner(id)
   if (!existingRow || existingRow.deletedAt) return serviceError(ErrorCode.NOT_FOUND)

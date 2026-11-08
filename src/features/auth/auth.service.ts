@@ -31,6 +31,7 @@ import { insertRefreshToken, findRefreshTokenByHash } from '../../db/entities/re
 import { findUserById } from '../../db/entities/users/users.repository.js'
 import type {
   ForgotPasswordRequestParsed,
+  ForgotPasswordResponseParsed,
   LoginRequestParsed,
   LoginResponseParsed,
   LogoutResponseParsed,
@@ -181,7 +182,7 @@ export async function logoutUser(payload: JwtPayload, userId: string, refreshTok
   }
 }
 
-export async function requestPasswordReset(input: ForgotPasswordRequestParsed): Promise<ServiceResult<{ message: string; passwordResetToken?: string }>> {
+export async function requestPasswordReset(input: ForgotPasswordRequestParsed): Promise<ServiceResult<ForgotPasswordResponseParsed & { passwordResetToken?: string }>> {
   const genericMessage = 'If this email is registered, a reset link has been sent'
   const user = await findUserByEmail(input.email)
 

@@ -5,33 +5,19 @@ import type { ListItem } from '../../db/entities/list-items/list-items.schema.js
 import type { User } from '../../db/entities/users/users.schema.js'
 import type { Image } from '../../db/entities/images/images.schema.js'
 import { CONTRIBUTOR_ROLE_VALUES, ListUserRoles } from '@keimelion/sdk/enums'
-import type { ItemStatus, ListUserRole, Locale } from '@keimelion/sdk/enums'
+import type { ListUserRole, Locale } from '@keimelion/sdk/enums'
 import { toUserDetail } from './user.js'
 import { toTagPublic } from './tag.js'
 import { toItemSourceDetail } from './item.js'
-import type { ItemRowWithSources, ItemSourceDetail } from './item.js'
+import type { ItemRowWithSources } from './item.js'
 import { resolveCategoryName, toCategoryPublic } from './category.js'
-import type { CategoryPublic } from './category.js'
 import { toImageDetail } from '../../features/uploads/images.mapper.js'
-import type { ImageDetail } from '../../features/uploads/images.mapper.js'
 import type { UserDetail, UserRowWithAvatar } from './user.js'
-import type { TagPublic } from './tag.js'
 import { toListMemberUser } from './collaborator.js'
-import type { CollaboratorSummary, ListMemberUser } from './collaborator.js'
+import type { CollaboratorSummary } from './collaborator.js'
+import type { ListDetailParsed, PublicItemDetailParsed, PublicListDetailParsed, PublicListItemDetailParsed, PublicUserSummaryParsed } from '@keimelion/sdk/schemas'
 
-export interface ListDetail {
-  id: string
-  title: string
-  slug: string
-  description: string | null
-  listStatus: string
-  occasionTypeId: string | null
-  owner: ListMemberUser | null
-  collaborators?: CollaboratorSummary[]
-  tags: TagPublic[]
-  createdAt: Date
-  updatedAt: Date
-}
+export type ListDetail = ListDetailParsed
 
 export interface ListUserWithUser extends ListUser {
   user: UserRowWithAvatar | null
@@ -66,9 +52,15 @@ export function extractOwnerDetail(row: ListRowWithOwner): UserDetail | null {
   return ownerUser ? toUserDetail(ownerUser) : null
 }
 
-export function toListDetail(row: ListRowWithOwner, collaborators?: CollaboratorSummary[]): ListDetail {
+export type ListDetailWithoutCollaborators = Omit<ListDetail, 'collaborators'>
+
+export function toListDetail(row: ListRowWithOwner, collaborators: CollaboratorSummary[]): ListDetail {
+  return { ...toListDetailWithoutCollaborators(row), collaborators }
+}
+
+export function toListDetailWithoutCollaborators(row: ListRowWithOwner): ListDetailWithoutCollaborators {
   const ownerUser = findOwnerUser(row.listUsers)
-  const base: ListDetail = {
+  return {
     id: row.id,
     title: row.title,
     slug: row.slug,
@@ -80,56 +72,15 @@ export function toListDetail(row: ListRowWithOwner, collaborators?: Collaborator
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   }
-  if (collaborators !== undefined) base.collaborators = collaborators
-  return base
 }
 
-export interface PublicUserDetail {
-  id: string
-  username: string | null
-  avatar: ImageDetail | null
-}
+export type PublicUserDetail = PublicUserSummaryParsed
 
-export interface PublicListItemDetail {
-  id: string
-  listId: string
-  itemId: string
-  quantityDesired: number
-  quantityReservedTotal: number
-  itemStatus: ItemStatus
-  sortOrder: number | null
-  creatorNote: string | null
-  item: PublicItemDetail
-  createdAt: Date
-  updatedAt: Date
-}
+export type PublicListItemDetail = PublicListItemDetailParsed
 
-export interface PublicItemDetail {
-  id: string
-  name: string
-  description: string | null
-  imageId: string | null
-  image: ImageDetail | null
-  sources: ItemSourceDetail[]
-  categories: CategoryPublic[]
-  tags: TagPublic[]
-  createdAt: Date
-  updatedAt: Date
-}
+export type PublicItemDetail = PublicItemDetailParsed
 
-export interface PublicListDetail {
-  id: string
-  title: string
-  slug: string
-  description: string | null
-  listStatus: string
-  occasionTypeId: string | null
-  owner: PublicUserDetail | null
-  tags: TagPublic[]
-  items: PublicListItemDetail[]
-  createdAt: Date
-  updatedAt: Date
-}
+export type PublicListDetail = PublicListDetailParsed
 
 export interface PublicListUserRow extends ListUser {
   user: (User & { avatarImage: Image | null }) | null

@@ -1,6 +1,8 @@
 import { db } from '../../../db/client.js'
 import { users } from '../../../db/entities/users/users.schema.js'
 import { and, count, eq, type SQL } from 'drizzle-orm'
+import type { AnyColumn } from 'drizzle-orm'
+import type { ADMIN_USERS_SORT_FIELDS } from '@keimelion/sdk/schemas'
 import { z } from 'zod'
 import { getOffset } from '../../../shared/utils/pagination.js'
 import { USER_ROLE_VALUES } from '@keimelion/sdk/enums'
@@ -21,7 +23,7 @@ export const usersEntity = defineEntity({
     email:       users.email,
     username:    users.username,
     lastActiveAt: users.lastActiveAt,
-  },
+  } satisfies Record<(typeof ADMIN_USERS_SORT_FIELDS)[number], AnyColumn>,
   defaultSort: [{ field: 'createdAt', direction: 'desc' }],
   filterable: {
     id:        { column: users.id,        operators: ['eq', 'in'] },

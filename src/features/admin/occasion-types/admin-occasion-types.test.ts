@@ -4,6 +4,11 @@ import { apiRequest } from '../../../shared/test/api-request.js'
 import { generateTestToken, makeAccessTokenEntry } from '../../../shared/test/auth.js'
 import { ADMIN_USER_FIXTURE as ADMIN_USER, makeAdminUser } from '../../../shared/test/fixtures/users.js'
 import { logger } from '../../../shared/utils/logger.js'
+import {
+  adminOccasionTypesCreateResponseSchema,
+  adminOccasionTypesListResponseSchema,
+  adminOccasionTypesUpdateResponseSchema,
+} from '@keimelion/sdk/schemas'
 
 vi.mock('../../../shared/utils/logger.js', () => ({
   logger: {
@@ -110,6 +115,7 @@ describe('POST /v1/admin/occasion-types', () => {
     })
 
     const body = await response.json() as { occasionType: { slug: string; translations: unknown[] } }
+    adminOccasionTypesCreateResponseSchema.parse(body)
     expect(response.status).toBe(201)
     expect(body.occasionType.slug).toBe('wedding')
     expect(body.occasionType.translations).toHaveLength(2)
@@ -284,6 +290,7 @@ describe('GET /v1/admin/occasion-types', () => {
       items: { slug: string; isActive: boolean; translations: unknown[] }[]
       pagination: { total: number }
     }
+    adminOccasionTypesListResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.items).toHaveLength(2)
     expect(body.pagination.total).toBe(2)
@@ -380,6 +387,7 @@ describe('PATCH /v1/admin/occasion-types/:id', () => {
     })
 
     const body = await response.json() as { occasionType: { sortOrder: number } }
+    adminOccasionTypesUpdateResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.occasionType.sortOrder).toBe(42)
   })

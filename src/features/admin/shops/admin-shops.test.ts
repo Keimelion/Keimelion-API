@@ -4,6 +4,12 @@ import { apiRequest } from '../../../shared/test/api-request.js'
 import { generateTestToken, makeAccessTokenEntry } from '../../../shared/test/auth.js'
 import { ADMIN_USER_FIXTURE as ADMIN_USER, makeAdminUser } from '../../../shared/test/fixtures/users.js'
 import { logger } from '../../../shared/utils/logger.js'
+import {
+  adminShopsCreateResponseSchema,
+  adminShopsGetResponseSchema,
+  adminShopsListResponseSchema,
+  adminShopsUpdateResponseSchema,
+} from '@keimelion/sdk/schemas'
 
 vi.mock('../../../shared/utils/logger.js', () => ({
   logger: {
@@ -110,6 +116,7 @@ describe('POST /v1/admin/shops', () => {
     })
 
     const body = await response.json() as { shop: { slug: string; name: string } }
+    adminShopsCreateResponseSchema.parse(body)
     expect(response.status).toBe(201)
     expect(body.shop.slug).toBe('amazon')
     expect(body.shop.name).toBe('Amazon')
@@ -365,6 +372,7 @@ describe('GET /v1/admin/shops', () => {
       items: { slug: string }[]
       pagination: { total: number }
     }
+    adminShopsListResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.items).toHaveLength(1)
     expect(body.pagination.total).toBe(1)
@@ -634,6 +642,7 @@ describe('GET /v1/admin/shops/:id', () => {
       items: { id: string; itemId: string; itemName: string; sourceUrl: string | null }[]
       itemsCount: number
     }
+    adminShopsGetResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.shop.id).toBe(SHOP_ROW.id)
     expect(body.shop.slug).toBe('amazon')
@@ -739,6 +748,7 @@ describe('PATCH /v1/admin/shops/:id', () => {
     })
 
     const body = await response.json() as { shop: { name: string } }
+    adminShopsUpdateResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.shop.name).toBe('Amazon Updated')
   })

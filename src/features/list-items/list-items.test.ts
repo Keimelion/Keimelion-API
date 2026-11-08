@@ -2,6 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { db } from '../../db/client.js'
 import { apiRequest } from '../../shared/test/api-request.js'
 import { generateTestToken, makeAccessTokenEntry } from '../../shared/test/auth.js'
+import {
+  listItemsCreateResponseSchema,
+  listItemsUpdateResponseSchema,
+  messageResponseSchema,
+} from '@keimelion/sdk/schemas'
 
 const AUTH_USER = {
   id: '00000000-0000-0000-0000-000000000001',
@@ -105,6 +110,7 @@ describe('POST /v1/list-items', () => {
     })
 
     const body = await response.json() as { listItem: Record<string, unknown> }
+    listItemsCreateResponseSchema.parse(body)
     expect(response.status).toBe(201)
     expect(body.listItem.listId).toBe(LIST_ID)
     expect(body.listItem).not.toHaveProperty('image')
@@ -196,6 +202,7 @@ describe('PATCH /v1/list-items/:id', () => {
     })
 
     const body = await response.json() as { listItem: { quantityDesired: number } }
+    listItemsUpdateResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.listItem.quantityDesired).toBe(3)
   })
@@ -348,6 +355,7 @@ describe('DELETE /v1/list-items/:id', () => {
     })
 
     const body = await response.json() as { message: string }
+    messageResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.message).toBe('Item removed from list')
   })

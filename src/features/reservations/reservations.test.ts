@@ -16,6 +16,10 @@ import {
 import { RESERVER_NAME_MAX_LENGTH } from '../../db/entities/reservations/reservations.schema.js'
 import type { ListItem } from '../../db/entities/list-items/list-items.schema.js'
 import type { Reservation } from '../../db/entities/reservations/reservations.schema.js'
+import {
+  reservationsCreateResponseSchema,
+  reservationsGetResponseSchema,
+} from '@keimelion/sdk/schemas'
 
 vi.mock('../../shared/utils/logger.js', () => ({
   logger: {
@@ -295,6 +299,7 @@ describe('POST /v1/reservations', () => {
       const response = await postReservation({ listItemId: LIST_ITEM_ID, quantityBooked: 3 }, token)
 
       const body = await response.json() as ReservationActionBody
+      reservationsCreateResponseSchema.parse(body)
       expect(response.status).toBe(201)
       expect(body.reservation.id).toBe(RESERVATION_ID)
       expect(body.reservation.userId).toBe(AUTH_USER.id)
@@ -427,6 +432,7 @@ describe('POST /v1/reservations', () => {
       )
 
       const body = await response.json() as ReservationActionBody
+      reservationsCreateResponseSchema.parse(body)
       expect(response.status).toBe(201)
       expect(body).not.toHaveProperty('token')
       expect(body.reservation.userId).toBeNull()
@@ -478,6 +484,7 @@ describe('POST /v1/reservations', () => {
       })
 
       const body = await response.json() as ReservationActionBody
+      reservationsCreateResponseSchema.parse(body)
       expect(response.status).toBe(201)
       expect(body.token).toMatch(RESERVATION_TOKEN_REGEX)
       expect(body.reservation.userId).toBeNull()
@@ -639,6 +646,7 @@ describe('GET /v1/reservations/:id', () => {
     const response = await apiRequest(`/v1/reservations/${RESERVATION_ID}`, { token })
 
     const body = await response.json() as { reservation: { id: string; list: { owner: { id: string } } } }
+    reservationsGetResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.reservation.id).toBe(RESERVATION_ID)
     expect(body.reservation.list.owner.id).toBe(OWNER_USER_ID)

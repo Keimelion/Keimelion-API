@@ -10,48 +10,22 @@ import type {
   CategoryTranslation,
 } from '../../db/entities/categories/categories.schema.js'
 import type { Tag } from '../../db/entities/tags/tags.schema.js'
-import type { ShopPublic } from './shop.js'
-import type { CategoryPublic } from './category.js'
-import type { TagPublic } from './tag.js'
 import type { Locale } from '@keimelion/sdk/enums'
 import { toShopPublic } from './shop.js'
 import { resolveCategoryName, toCategoryPublic } from './category.js'
 import { toTagPublic } from './tag.js'
 import { toImageDetail } from '../../features/uploads/images.mapper.js'
-import type { ImageDetail } from '../../features/uploads/images.mapper.js'
+import type { ItemDetailParsed, ItemSourceDetailParsed, ItemWithSourcesDetailParsed, ListItemDetailParsed } from '@keimelion/sdk/schemas'
 
-export interface ItemDetail {
-  id: string
-  name: string
-  description: string | null
-  imageId: string | null
-  image: ImageDetail | null
-  createdByUserId: string | null
-  createdAt: Date
-  updatedAt: Date
-}
+export type ItemDetail = ItemDetailParsed
 
-export interface ItemWithSources extends ItemDetail {
-  sources: ItemSourceDetail[]
-  categories: CategoryPublic[]
-  tags: TagPublic[]
-}
+export type ItemWithSources = ItemWithSourcesDetailParsed
 
 export interface ItemRowWithImage extends Item {
   image: Image | null
 }
 
-export interface ItemSourceDetail {
-  id: string
-  itemId: string
-  shopId: string | null
-  shop: ShopPublic | null
-  sourceUrl: string | null
-  price: string | null
-  currency: string
-  createdAt: Date
-  updatedAt: Date
-}
+export type ItemSourceDetail = ItemSourceDetailParsed
 
 export interface ItemSourceWithShop extends ItemSource {
   shop: Shop | null
@@ -75,18 +49,7 @@ export interface ItemRowWithSources extends ItemRowWithImage {
   itemTags: ItemTagWithTagRow[]
 }
 
-export interface ListItemDetail {
-  id: string
-  listId: string
-  itemId: string
-  quantityDesired: number
-  quantityReservedTotal: number
-  itemStatus: string
-  sortOrder: number | null
-  creatorNote: string | null
-  createdAt: Date
-  updatedAt: Date
-}
+export type ListItemDetail = ListItemDetailParsed
 
 export interface ListItemWrite {
   quantityDesired: number

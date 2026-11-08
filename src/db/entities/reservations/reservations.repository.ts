@@ -1,4 +1,6 @@
 import { and, count, desc, eq, inArray, or, sql } from 'drizzle-orm'
+import type { AnyColumn } from 'drizzle-orm'
+import type { RESERVATION_SORT_FIELDS } from '@keimelion/sdk/schemas'
 import { db } from '../../client.js'
 import { defineEntity } from '../../../shared/db/entity-descriptor.js'
 import { getOffset } from '../../../shared/utils/pagination.js'
@@ -16,7 +18,7 @@ type DbOrTx = typeof db | DbTransaction
 export const RESERVATION_SORTABLE_FIELDS = {
   createdAt: reservations.createdAt,
   quantityBooked: reservations.quantityBooked,
-} as const
+} as const satisfies Record<(typeof RESERVATION_SORT_FIELDS)[number], AnyColumn>
 
 export const RESERVATION_DEFAULT_SORT = [{ field: 'createdAt' as const, direction: 'desc' as const }]
 

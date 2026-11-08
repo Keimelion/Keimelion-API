@@ -1,30 +1,13 @@
 import { zValidator } from '@hono/zod-validator'
-import { z } from 'zod'
+import { adminItemsUpdateSourceRequestSchema } from '@keimelion/sdk/schemas'
+import { itemSourceParamSchema } from '../../../../shared/schemas/params.js'
 import { adminOnly } from '../../../../shared/middlewares/admin-only.js'
 import { jsonResult } from '../../../../shared/utils/response.js'
 import { validationErrorHandler } from '../../../../shared/utils/validation.js'
 import { getAuthUser } from '../../../../shared/middlewares/auth.js'
 import { RATE_LIMITS } from '../../../../shared/utils/rate-limiter.js'
-import {
-  currencySchema,
-  httpsSourceUrlSchema,
-  itemSourceParamSchema,
-  priceSchema,
-  shopIdSchema,
-} from '../../../../db/entities/item-sources/item-sources.schemas.js'
 import type { FeatureRouter } from '../../../../shared/types/app.js'
 import { updateItemSourceById } from '../admin-item-sources.service.js'
-
-const adminUpdateItemSourceSchema = z
-  .object({
-    shopId: shopIdSchema.optional(),
-    sourceUrl: httpsSourceUrlSchema.optional(),
-    price: priceSchema.optional(),
-    currency: currencySchema.optional(),
-  })
-  .strict()
-
-export type UpdateItemSourceInput = z.infer<typeof adminUpdateItemSourceSchema>
 
 export function mountUpdateItemSource(router: FeatureRouter): void {
   router.patch(
@@ -32,7 +15,7 @@ export function mountUpdateItemSource(router: FeatureRouter): void {
     ...adminOnly,
     RATE_LIMITS.STANDARD(),
     zValidator('param', itemSourceParamSchema, validationErrorHandler),
-    zValidator('json', adminUpdateItemSourceSchema, validationErrorHandler),
+    zValidator('json', adminItemsUpdateSourceRequestSchema, validationErrorHandler),
     async (context) => {
       const admin = getAuthUser(context)
       const { id, sourceId } = context.req.valid('param')

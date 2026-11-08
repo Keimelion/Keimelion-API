@@ -1,6 +1,6 @@
 import { buildPaginatedResponse } from '../../../shared/utils/pagination.js'
 import { ErrorCode, HttpStatus } from '@keimelion/sdk/enums'
-import type { PaginatedResponse, PaginationQueryParsed } from '@keimelion/sdk/schemas'
+import type { AdminShopsGetResponseParsed, PaginatedResponse, PaginationQueryParsed } from '@keimelion/sdk/schemas'
 import { serviceError } from '../../../shared/utils/response.js'
 import { logger } from '../../../shared/utils/logger.js'
 import { pickDefined } from '../../../shared/utils/partial-update.js'
@@ -24,13 +24,6 @@ import type { ShopDetail, ShopWrite } from '../../../shared/types/shop.js'
 import type { ServiceResult } from '../../../shared/types/service.js'
 import type { PartialWrite } from '../../../shared/types/api.js'
 import type { ListShopsInput } from './endpoints/list.js'
-import type { AdminShopItemSource } from './admin-shops.mapper.js'
-
-export interface GetShopResponse {
-  shop: ShopDetail
-  items: AdminShopItemSource[]
-  itemsCount: number
-}
 
 type ShopFieldPatch = Partial<ShopWrite>
 
@@ -71,7 +64,7 @@ export async function listShops(
 export async function getShopById(
   id: string,
   pagination: PaginationQueryParsed,
-): Promise<ServiceResult<GetShopResponse>> {
+): Promise<ServiceResult<AdminShopsGetResponseParsed>> {
   const shopRow = await findShopById(id)
   if (!shopRow) return serviceError(ErrorCode.NOT_FOUND)
 

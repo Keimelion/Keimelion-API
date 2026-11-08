@@ -1,4 +1,6 @@
 import { count, eq, type SQL } from 'drizzle-orm'
+import type { AnyColumn } from 'drizzle-orm'
+import type { ADMIN_FEEDBACK_SORT_FIELDS } from '@keimelion/sdk/schemas'
 import { z } from 'zod'
 import { db } from '../../../db/client.js'
 import { feedback } from '../../../db/entities/feedback/feedback.schema.js'
@@ -19,7 +21,7 @@ export const feedbackEntity = defineEntity({
     createdAt: feedback.createdAt,
     updatedAt: feedback.updatedAt,
     status:    feedback.status,
-  },
+  } satisfies Record<(typeof ADMIN_FEEDBACK_SORT_FIELDS)[number], AnyColumn>,
   defaultSort: [{ field: 'createdAt', direction: 'desc' }],
   filterable: {
     status:    { column: feedback.status,    operators: ['eq', 'in'], valueSchema: feedbackStatusSchema },

@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { db } from '../../db/client.js'
 import { apiRequest } from '../../shared/test/api-request.js'
+import {
+  categoriesListResponseSchema,
+} from '@keimelion/sdk/schemas'
 
 interface CategoryRow {
   id: string
@@ -95,6 +98,7 @@ describe('GET /v1/categories', () => {
     const response = await apiRequest('/v1/categories')
 
     const body = (await response.json()) as { categories: CategoryTreeNodeShape[] }
+    categoriesListResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.categories).toHaveLength(1)
     const root = body.categories[0]
