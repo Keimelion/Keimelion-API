@@ -154,7 +154,7 @@ export function toPublicListDetail(row: PublicListRow, locale: Locale): PublicLi
     description: row.description ?? null,
     listStatus: row.listStatus,
     occasionTypeId: row.occasionTypeId ?? null,
-    owner: toPublicOwner(ownerUser),
+    owner: ownerUser ? toPublicUserDetail(ownerUser) : null,
     tags: row.listTags.map((link) => toTagPublic(link.tag)),
     items: row.listItems.map((listItem) => toPublicListItem(listItem, locale)),
     createdAt: row.createdAt,
@@ -162,8 +162,7 @@ export function toPublicListDetail(row: PublicListRow, locale: Locale): PublicLi
   }
 }
 
-function toPublicOwner(user: (User & { avatarImage: Image | null }) | null): PublicUserDetail | null {
-  if (!user) return null
+export function toPublicUserDetail(user: User & { avatarImage: Image | null }): PublicUserDetail {
   return {
     id: user.id,
     username: user.username ?? null,
@@ -187,7 +186,7 @@ function toPublicListItem(row: PublicListItemRow, locale: Locale): PublicListIte
   }
 }
 
-function toPublicItemDetail(item: ItemRowWithSources, locale: Locale): PublicItemDetail {
+export function toPublicItemDetail(item: ItemRowWithSources, locale: Locale): PublicItemDetail {
   return {
     id: item.id,
     name: item.name,

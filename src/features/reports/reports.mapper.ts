@@ -1,30 +1,36 @@
 import { DEFAULT_LOCALE } from '@keimelion/sdk/enums'
-import { toUserDetail } from '../../shared/types/user.js'
-import { toListDetail } from '../../shared/types/list.js'
-import { toItemWithSources } from '../../shared/types/item.js'
+import { findOwnerUser, toPublicItemDetail, toPublicUserDetail } from '../../shared/types/list.js'
+import { toTagPublic } from '../../shared/types/tag.js'
 import type { UserRowWithAvatar } from '../../shared/types/user.js'
 import type { ListRowWithOwner } from '../../shared/types/list.js'
 import type { ItemRowWithSources } from '../../shared/types/item.js'
 
 export type ReportTargetSnapshot = Record<string, unknown>
 
-const SNAPSHOT_EXCLUDED_KEYS: ReadonlySet<string> = new Set(['email'])
-
+// Snapshots keep only what the target exposes publicly, field by field: account settings and
+// contact data (email, consents, auth provider, activity) never reach the moderation record.
 export function toUserSnapshot(user: UserRowWithAvatar): ReportTargetSnapshot {
-  return serializeSnapshot(toUserDetail(user))
+  return toJsonSnapshot(toPublicUserDetail(user))
 }
 
 export function toListSnapshot(list: ListRowWithOwner): ReportTargetSnapshot {
-  return serializeSnapshot(toListDetail(list))
+  const ownerUser = findOwnerUser(list.listUsers)
+  return toJsonSnapshot({
+    id: list.id,
+    title: list.title,
+    slug: list.slug,
+    description: list.description ?? null,
+    listStatus: list.listStatus,
+    occasionTypeId: list.occasionTypeId ?? null,
+    owner: ownerUser ? toPublicUserDetail(ownerUser) : null,
+    tags: list.listTags.map((link) => toTagPublic(link.tag)),
+  })
 }
 
 export function toItemSnapshot(item: ItemRowWithSources): ReportTargetSnapshot {
-  return serializeSnapshot(toItemWithSources(item, DEFAULT_LOCALE))
+  return toJsonSnapshot(toPublicItemDetail(item, DEFAULT_LOCALE))
 }
 
-function serializeSnapshot(detail: object): ReportTargetSnapshot {
-  const json = JSON.stringify(detail, (key, value: unknown) =>
-    SNAPSHOT_EXCLUDED_KEYS.has(key) ? undefined : value,
-  )
-  return JSON.parse(json) as ReportTargetSnapshot
+function toJsonSnapshot(detail: object): ReportTargetSnapshot {
+  return JSON.parse(JSON.stringify(detail)) as ReportTargetSnapshot
 }

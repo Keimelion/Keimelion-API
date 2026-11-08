@@ -27,8 +27,6 @@ vi.mock('../../config/env.js', () => ({
     FX_PROVIDER_URL: 'https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml',
     FEEDBACK_RATE_LIMIT_PER_MINUTE: 5,
     FEEDBACK_RATE_LIMIT_PER_HOUR: 20,
-    REPORT_RATE_LIMIT_PER_MINUTE: 5,
-    REPORT_RATE_LIMIT_PER_HOUR: 20,
     UPLOADS_DIR: '/tmp/keimelion-test-uploads',
     UPLOADS_MAX_SIZE_BYTES: 10_000_000,
     UPLOADS_PUBLIC_BASE_URL: 'http://localhost:3000/uploads',

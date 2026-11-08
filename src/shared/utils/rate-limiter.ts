@@ -93,7 +93,7 @@ function feedbackKeyGenerator(prefix: string): (context: Context<{ Variables: Ap
 
 // Uses context.json(...) so RateLimit-* and Retry-After headers set by hono-rate-limiter
 // via c.header(...) are merged into the final response.
-function jsonRateLimitHandler(context: Context): Response {
+function feedbackRateLimitHandler(context: Context): Response {
   const { status, message } = errorMap[ErrorCode.RATE_LIMIT_EXCEEDED]
   const body: ApiErrorBodyParsed = { message, code: ErrorCode.RATE_LIMIT_EXCEEDED, metadata: {} }
   return context.json(body, status)
@@ -106,39 +106,14 @@ export function createFeedbackRateLimiters(): [MiddlewareHandler, MiddlewareHand
       limit: env.FEEDBACK_RATE_LIMIT_PER_MINUTE,
       standardHeaders: 'draft-6',
       keyGenerator: feedbackKeyGenerator('feedback:min'),
-      handler: jsonRateLimitHandler,
+      handler: feedbackRateLimitHandler,
     }),
     rateLimiter({
       windowMs: ONE_HOUR_MS,
       limit: env.FEEDBACK_RATE_LIMIT_PER_HOUR,
       standardHeaders: 'draft-6',
       keyGenerator: feedbackKeyGenerator('feedback:hour'),
-      handler: jsonRateLimitHandler,
-    }),
-  ]
-}
-
-// Keyed on user.id: the route is authenticated, so a single account cannot bypass by rotating
-// IPs. Must be mounted AFTER authMiddleware so that HonoContextKey.USER is populated.
-function reportKeyGenerator(prefix: string): (context: Context<{ Variables: AppVariables }>) => string {
-  return (context) => `${prefix}:user:${context.get(HonoContextKey.USER).id}`
-}
-
-export function createReportRateLimiters(): [MiddlewareHandler, MiddlewareHandler] {
-  return [
-    rateLimiter({
-      windowMs: ONE_MINUTE_MS,
-      limit: env.REPORT_RATE_LIMIT_PER_MINUTE,
-      standardHeaders: 'draft-6',
-      keyGenerator: reportKeyGenerator('report:min'),
-      handler: jsonRateLimitHandler,
-    }),
-    rateLimiter({
-      windowMs: ONE_HOUR_MS,
-      limit: env.REPORT_RATE_LIMIT_PER_HOUR,
-      standardHeaders: 'draft-6',
-      keyGenerator: reportKeyGenerator('report:hour'),
-      handler: jsonRateLimitHandler,
+      handler: feedbackRateLimitHandler,
     }),
   ]
 }

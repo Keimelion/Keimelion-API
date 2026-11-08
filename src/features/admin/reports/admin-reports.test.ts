@@ -323,6 +323,7 @@ describe('PATCH /v1/admin/reports/:id', () => {
 
   it.each([
     ['an unknown status', { status: 'approved' }],
+    ['a move back to pending', { status: 'pending' }],
     ['an admin note over the maximum length', { adminNote: 'a'.repeat(REPORT_ADMIN_NOTE_MAX_LENGTH + 1) }],
     ['an unknown field', { status: 'upheld', reason: 'other' }],
   ])('returns 422 for %s', async (_label, payload) => {

@@ -194,6 +194,7 @@ describe('POST /v1/reports', () => {
     expect(inserted).toMatchObject({ userId: REPORTER.id, targetType: 'user', targetId: TARGET_USER_ID, description: null })
     expect(inserted.targetImageId).toBe(IMAGE_ID)
     expect(inserted.targetSnapshot).toMatchObject({ id: TARGET_USER_ID, username: 'target' })
+    expect(Object.keys(inserted.targetSnapshot).sort()).toEqual(['avatar', 'id', 'username'])
     expect(findSensitiveKeys(inserted.targetSnapshot)).toEqual([])
     expect(JSON.stringify(inserted.targetSnapshot)).not.toContain('target@example.com')
     expect(JSON.stringify(inserted.targetSnapshot)).not.toContain('secret-hash')
@@ -211,6 +212,7 @@ describe('POST /v1/reports', () => {
     expect(inserted.targetImageId).toBeNull()
     expect(inserted.targetSnapshot).toMatchObject({ id: LIST_ID, listStatus: 'archived', owner: { id: TARGET_USER_ID } })
     expect(inserted.targetSnapshot).not.toHaveProperty('items')
+    expect(Object.keys(inserted.targetSnapshot.owner as object).sort()).toEqual(['avatar', 'id', 'username'])
     expect(findSensitiveKeys(inserted.targetSnapshot)).toEqual([])
   })
 
@@ -235,6 +237,7 @@ describe('POST /v1/reports', () => {
       name: 'Suspicious gadget',
       sources: [{ sourceUrl: 'https://phishing.example.com/deal' }],
     })
+    expect(inserted.targetSnapshot).not.toHaveProperty('createdByUserId')
     expect(findSensitiveKeys(inserted.targetSnapshot)).toEqual([])
   })
 
