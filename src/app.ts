@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import { HTTPException } from 'hono/http-exception'
 import { cors } from 'hono/cors'
 import { secureHeaders } from 'hono/secure-headers'
 import { serveStatic } from '@hono/node-server/serve-static'
@@ -8,7 +9,7 @@ import { rateLimitMiddleware } from './shared/middlewares/rate-limit.js'
 import { loggerMiddleware } from './shared/middlewares/logger.js'
 import { resolveLocaleMiddleware } from './shared/middlewares/resolve-locale.js'
 import { mountRoutes } from './features/index.js'
-import { ErrorCode, HttpHeader, HttpMethod } from '@keimelion/sdk/enums'
+import { ErrorCode, HttpHeader, HttpMethod, HttpStatus } from '@keimelion/sdk/enums'
 import { NodeEnvs } from './shared/enums/node-env.js'
 import { sendError } from './shared/utils/response.js'
 import { logger } from './shared/utils/logger.js'
@@ -78,6 +79,10 @@ app.notFound((context) => sendError(ErrorCode.NOT_FOUND, { path: context.req.pat
 
 // Global error handler
 app.onError((err, _c) => {
+  // Hono's validator throws a 400 HTTPException on a malformed JSON body
+  if (err instanceof HTTPException && err.status === HttpStatus.BAD_REQUEST) {
+    return sendError(ErrorCode.BAD_REQUEST)
+  }
   logger.error({ err }, 'Unhandled error')
   return sendError(ErrorCode.INTERNAL_ERROR)
 })
