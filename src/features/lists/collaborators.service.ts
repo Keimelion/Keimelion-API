@@ -22,14 +22,15 @@ import type { CollaboratorDetail } from '../../shared/types/collaborator.js'
 import type { User } from '../../db/entities/users/users.schema.js'
 import type { ListRowWithOwner } from '../../shared/types/list.js'
 import type { ServiceResult } from '../../shared/types/service.js'
-import type { CreateInviteInput } from './endpoints/collaborators/create-invite.js'
-import type { AcceptInviteInput } from './endpoints/collaborators/accept-invite.js'
+import type {
+  CollaboratorsAcceptInviteRequestParsed,
+  CollaboratorsCreateInviteRequestParsed,
+} from '@keimelion/sdk/schemas'
 
 export const COLLAB_INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
 // Raw token sent to the invitee; independent from the stored hash width (SHA256_HEX_LENGTH).
 export const INVITE_TOKEN_BYTE_LENGTH = 32
-export const INVITE_TOKEN_HEX_LENGTH = INVITE_TOKEN_BYTE_LENGTH * 2
 
 // Thrown from inside the accept transaction to roll both writes back when the TOCTOU-safe
 // UPDATE loses the race (status changed or expiry passed between read and write).
@@ -45,7 +46,7 @@ export interface CreateInviteResponse {
 export async function createListInvite(
   list: ListRowWithOwner,
   owner: User,
-  input: CreateInviteInput,
+  input: CollaboratorsCreateInviteRequestParsed,
 ): Promise<ServiceResult<CreateInviteResponse>> {
   if (input.email === owner.email.toLowerCase()) {
     return serviceError(ErrorCode.COLLAB_SELF_INVITE)
@@ -91,7 +92,7 @@ export async function createListInvite(
 
 export async function acceptListInvite(
   acceptor: User,
-  input: AcceptInviteInput,
+  input: CollaboratorsAcceptInviteRequestParsed,
 ): Promise<ServiceResult<{ invite: CollaboratorDetail }>> {
   if (!acceptor.emailVerifiedAt) return serviceError(ErrorCode.EMAIL_NOT_VERIFIED)
 

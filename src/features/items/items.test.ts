@@ -6,6 +6,12 @@ import { env } from '../../config/env.js'
 import { ErrorCode } from '@keimelion/sdk/enums'
 import { apiMultipartRequest, apiRequest } from '../../shared/test/api-request.js'
 import { generateTestToken, makeAccessTokenEntry } from '../../shared/test/auth.js'
+import {
+  itemsCreateResponseSchema,
+  itemsGetResponseSchema,
+  itemsListResponseSchema,
+  itemsUpdateResponseSchema,
+} from '@keimelion/sdk/schemas'
 
 const { mockProcessImage } = vi.hoisted(() => ({ mockProcessImage: vi.fn() }))
 
@@ -104,6 +110,7 @@ describe('GET /v1/items', () => {
       items: { id: string; name: string; sources: { itemId: string }[] }[]
       pagination: { total: number; page: number; limit: number }
     }
+    itemsListResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.items).toHaveLength(2)
     expect(body.pagination.total).toBe(2)
@@ -186,6 +193,7 @@ describe('GET /v1/items/:id', () => {
     const response = await apiRequest(`/v1/items/${ITEM_ROW.id}`)
 
     const body = await response.json() as { item: { id: string; sources: { itemId: string; shop: unknown }[] } }
+    itemsGetResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.item.id).toBe(ITEM_ROW.id)
     expect(body.item.sources).toHaveLength(1)
@@ -382,6 +390,7 @@ describe('POST /v1/items', () => {
     const body = await response.json() as {
       item: { id: string; sources: unknown[]; tags: unknown[]; categories: unknown[] }
     }
+    itemsCreateResponseSchema.parse(body)
     expect(response.status).toBe(201)
     expect(body.item.id).toBe(OWNED_ITEM_ROW.id)
     expect(body.item.sources).toEqual([])
@@ -609,6 +618,7 @@ describe('PATCH /v1/items/:id', () => {
     })
 
     const body = await response.json() as { item: { tags: { slug: string }[] } }
+    itemsUpdateResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.item.tags.map((tag) => tag.slug)).toEqual(expect.arrayContaining(['gaming', 'reading']))
   })
@@ -1051,6 +1061,7 @@ describe('POST /v1/items — multipart image upload', () => {
     })
 
     const body = await response.json() as ItemImageBody
+    itemsCreateResponseSchema.parse(body)
     expect(response.status).toBe(201)
     expect(body.item.imageId).toBe(NEW_IMAGE_ROW.id)
     expect(body.item.image?.urls.sm).toContain('-300.webp')
@@ -1375,6 +1386,7 @@ describe('PATCH /v1/items/:id — image replace / clear', () => {
     const response = await apiMultipartRequest(PATH, { method: 'PATCH', token, image: { buffer: IMAGE_BUFFER } })
 
     const body = await response.json() as ItemImageBody
+    itemsUpdateResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.item.image?.urls.md).toContain('-800.webp')
     expect(spies.set).toHaveBeenCalledWith({ imageId: NEW_IMAGE_ROW.id })

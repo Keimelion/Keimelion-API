@@ -3,6 +3,9 @@ import { db } from '../../../db/client.js'
 import { apiRequest } from '../../../shared/test/api-request.js'
 import { generateTestToken, makeAccessTokenEntry } from '../../../shared/test/auth.js'
 import { ADMIN_USER_FIXTURE as ADMIN_USER, makeAdminUser } from '../../../shared/test/fixtures/users.js'
+import {
+  adminCollaboratorInvitesListResponseSchema,
+} from '@keimelion/sdk/schemas'
 
 const NON_ADMIN_USER = makeAdminUser({
   id: '00000000-0000-0000-0000-000000000002',
@@ -96,6 +99,7 @@ describe('GET /v1/admin/collaborator-invites', () => {
       }[]
       pagination: { total: number }
     }
+    adminCollaboratorInvitesListResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.pagination.total).toBe(2)
     expect(body.items).toHaveLength(2)

@@ -6,6 +6,12 @@ import { generateTestToken, makeAccessTokenEntry } from '../../shared/test/auth.
 import { EXPORT_ENTITY_REGISTRY } from './export/export-entities.js'
 import { PgDialect } from 'drizzle-orm/pg-core'
 import type { SQL } from 'drizzle-orm'
+import {
+  messageResponseSchema,
+  usersGetProfileResponseSchema,
+  usersListReservationsResponseSchema,
+  usersUpdateProfileResponseSchema,
+} from '@keimelion/sdk/schemas'
 
 const SAFE_USER = {
   id: '00000000-0000-0000-0000-000000000001',
@@ -49,6 +55,7 @@ describe('GET /v1/users/me', () => {
     const response = await apiRequest('/v1/users/me', { token })
 
     const body = await response.json() as { user: { email: string } }
+    usersGetProfileResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.user.email).toBe('user@example.com')
   })
@@ -123,6 +130,7 @@ describe('PATCH /v1/users/me', () => {
     })
 
     const body = await response.json() as { user: { username: string } }
+    usersUpdateProfileResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.user.username).toBe('newusername')
   })
@@ -289,6 +297,7 @@ describe('POST /v1/users/me/change-password', () => {
     })
 
     const body = await response.json() as { message: string }
+    messageResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.message).toBe('Password changed successfully')
     expect(vi.mocked(db.transaction)).toHaveBeenCalledOnce()
@@ -408,6 +417,7 @@ describe('DELETE /v1/users/me', () => {
     const response = await apiRequest('/v1/users/me', { method: 'DELETE', token })
 
     const body = await response.json() as { message: string }
+    messageResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.message).toBe('Account deleted successfully')
     expect(vi.mocked(db.transaction)).toHaveBeenCalledOnce()
@@ -1496,6 +1506,7 @@ describe('GET /v1/users/me/reservations', () => {
       }[]
       pagination: { total: number }
     }
+    usersListReservationsResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.pagination.total).toBe(1)
     expect(body.items).toHaveLength(1)

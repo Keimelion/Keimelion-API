@@ -1,6 +1,9 @@
 import { buildPaginatedResponse } from '../../../shared/utils/pagination.js'
 import { HttpStatus } from '@keimelion/sdk/enums'
-import type { PaginatedResponse } from '@keimelion/sdk/schemas'
+import type {
+  AdminCollaboratorInvitesListQueryParsed,
+  PaginatedResponse,
+} from '@keimelion/sdk/schemas'
 import {
   countListInvites,
   findAllListInvites,
@@ -8,10 +11,9 @@ import {
 import { toAdminListInviteDetail } from './admin-list-invites.mapper.js'
 import type { AdminListInviteDetail } from './admin-list-invites.mapper.js'
 import type { ServiceResult } from '../../../shared/types/service.js'
-import type { ListAdminInvitesInput } from './endpoints/list.js'
 
 export async function listAdminInvites(
-  input: ListAdminInvitesInput,
+  input: AdminCollaboratorInvitesListQueryParsed,
 ): Promise<ServiceResult<PaginatedResponse<AdminListInviteDetail>>> {
   const filters = { inviteStatus: input.inviteStatus }
   const [rows, total] = await Promise.all([

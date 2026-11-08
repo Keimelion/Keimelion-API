@@ -1,24 +1,16 @@
 import { zValidator } from '@hono/zod-validator'
+import { listsListQuerySchema } from '@keimelion/sdk/schemas'
 import { authMiddleware, getAuthUser } from '../../../shared/middlewares/auth.js'
 import { jsonResult } from '../../../shared/utils/response.js'
-import { paginationQuerySchema } from '@keimelion/sdk/schemas'
 import { validationErrorHandler } from '../../../shared/utils/validation.js'
 import type { FeatureRouter } from '../../../shared/types/app.js'
-import type { z } from 'zod'
 import { listUserLists } from '../lists.service.js'
-import { userListsEntity } from '../lists.repository.js'
-
-const listUserListsQuerySchema = paginationQuerySchema.extend({
-  sort: userListsEntity.buildListQuerySchema(),
-})
-
-export type ListUserListsInput = z.infer<typeof listUserListsQuerySchema>
 
 export function mountListUserLists(router: FeatureRouter): void {
   router.get(
     '/',
     authMiddleware,
-    zValidator('query', listUserListsQuerySchema, validationErrorHandler),
+    zValidator('query', listsListQuerySchema, validationErrorHandler),
     async (context) => {
       const user = getAuthUser(context)
       const query = context.req.valid('query')

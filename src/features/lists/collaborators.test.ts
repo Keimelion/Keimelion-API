@@ -3,6 +3,10 @@ import { createHash } from 'crypto'
 import { db } from '../../db/client.js'
 import { apiRequest } from '../../shared/test/api-request.js'
 import { generateTestToken, makeAccessTokenEntry } from '../../shared/test/auth.js'
+import {
+  collaboratorsAcceptInviteResponseSchema,
+  collaboratorsCreateInviteResponseSchema,
+} from '@keimelion/sdk/schemas'
 
 const OWNER_USER = {
   id: '00000000-0000-0000-0000-000000000001',
@@ -140,6 +144,7 @@ describe('POST /v1/lists/:listId/collaborators/invites', () => {
       invite: { invitedEmail: string; role: string; inviteStatus: string }
       inviteToken: string
     }
+    collaboratorsCreateInviteResponseSchema.parse(body)
     expect(response.status).toBe(201)
     expect(body.invite.invitedEmail).toBe('invitee@example.com')
     expect(body.invite.role).toBe('editor')
@@ -334,6 +339,7 @@ describe('POST /v1/collaborators/invites/accept', () => {
     const body = await response.json() as {
       invite: { inviteStatus: string; user: { id: string } | null }
     }
+    collaboratorsAcceptInviteResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.invite.inviteStatus).toBe('accepted')
     expect(body.invite.user?.id).toBe(INVITEE_USER.id)

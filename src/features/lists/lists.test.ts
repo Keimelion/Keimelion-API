@@ -2,6 +2,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { db } from '../../db/client.js'
 import { apiRequest } from '../../shared/test/api-request.js'
 import { generateTestToken, makeAccessTokenEntry } from '../../shared/test/auth.js'
+import {
+  listsAddItemResponseSchema,
+  listsCreateResponseSchema,
+  listsGetResponseSchema,
+  listsListResponseSchema,
+  listsUpdateResponseSchema,
+} from '@keimelion/sdk/schemas'
 
 const AUTH_USER = {
   id: '00000000-0000-0000-0000-000000000001',
@@ -178,6 +185,7 @@ describe('POST /v1/lists', () => {
     })
 
     const body = await response.json() as { list: { title: string; slug: string } }
+    listsCreateResponseSchema.parse(body)
     expect(response.status).toBe(201)
     expect(body.list.title).toBe('My Wishlist')
     expect(body.list.slug).toBe('my-wishlist-abc123')
@@ -422,6 +430,7 @@ describe('GET /v1/lists', () => {
       items: { id: string; owner: { id: string } }[]
       pagination: { total: number }
     }
+    listsListResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.items).toHaveLength(1)
     expect(body.pagination.total).toBe(1)
@@ -472,6 +481,7 @@ describe('GET /v1/lists/:id', () => {
     const response = await apiRequest(`/v1/lists/${LIST_ID}`, { token })
 
     const body = await response.json() as { list: { title: string; owner: { id: string } | null } }
+    listsGetResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.list.title).toBe(MOCK_LIST.title)
     expect(body.list.owner?.id).toBe(AUTH_USER.id)
@@ -539,6 +549,7 @@ describe('PATCH /v1/lists/:id', () => {
     })
 
     const body = await response.json() as { list: { title: string } }
+    listsUpdateResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.list.title).toBe('Updated')
   })
@@ -779,6 +790,7 @@ describe('POST /v1/lists/:id/items', () => {
     })
 
     const body = await response.json() as { listItem: { item: { id: string; name: string }; itemStatus: string } }
+    listsAddItemResponseSchema.parse(body)
     expect(response.status).toBe(201)
     expect(body.listItem.item.id).toBe(ITEM_ID)
     expect(body.listItem.item.name).toBe('My Item')

@@ -1,4 +1,6 @@
 import { count, eq } from 'drizzle-orm'
+import type { AnyColumn } from 'drizzle-orm'
+import type { ADMIN_REPORTS_SORT_FIELDS } from '@keimelion/sdk/schemas'
 import type { SQL } from 'drizzle-orm'
 import { z } from 'zod'
 import { REPORT_REASON_VALUES, REPORT_STATUS_VALUES, REPORT_TARGET_TYPE_VALUES } from '@keimelion/sdk/enums'
@@ -20,7 +22,7 @@ export const reportEntity = defineEntity({
     createdAt: reports.createdAt,
     updatedAt: reports.updatedAt,
     status:    reports.reportStatus,
-  },
+  } satisfies Record<(typeof ADMIN_REPORTS_SORT_FIELDS)[number], AnyColumn>,
   defaultSort: [{ field: 'createdAt', direction: 'desc' }],
   filterable: {
     status:     { column: reports.reportStatus, operators: ['eq', 'in'], valueSchema: z.enum(REPORT_STATUS_VALUES) },

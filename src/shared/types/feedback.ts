@@ -1,16 +1,7 @@
 import type { Feedback } from '../../db/entities/feedback/feedback.schema.js'
-import type { FeedbackStatus } from '@keimelion/sdk/enums'
+import type { FeedbackDetailParsed } from '@keimelion/sdk/schemas'
 
-export interface FeedbackDetail {
-  id: string
-  userId: string | null
-  title: string
-  description: string
-  context: Record<string, unknown> | null
-  status: FeedbackStatus
-  createdAt: Date
-  updatedAt: Date
-}
+export type FeedbackDetail = FeedbackDetailParsed
 
 export function toFeedbackDetail(row: Feedback): FeedbackDetail {
   return {

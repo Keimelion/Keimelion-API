@@ -2,7 +2,11 @@ import { db } from '../../../db/client.js'
 import { buildPaginatedResponse } from '../../../shared/utils/pagination.js'
 import { ErrorCode, HttpStatus } from '@keimelion/sdk/enums'
 import type { Locale } from '@keimelion/sdk/enums'
-import type { PaginatedResponse } from '@keimelion/sdk/schemas'
+import type {
+  AdminItemsCreateRequestParsed,
+  AdminItemsUpdateRequestParsed,
+  PaginatedResponse,
+} from '@keimelion/sdk/schemas'
 import { serviceError } from '../../../shared/utils/response.js'
 import { logger } from '../../../shared/utils/logger.js'
 import { pickDefined } from '../../../shared/utils/partial-update.js'
@@ -32,14 +36,12 @@ import type { ItemWithSources } from '../../../shared/types/item.js'
 import type { AdminItem } from './admin-items.mapper.js'
 import type { ServiceResult } from '../../../shared/types/service.js'
 import type { ListItemsInput } from './endpoints/list.js'
-import type { CreateItemFields } from './endpoints/create.js'
-import type { UpdateItemFields } from './endpoints/update.js'
 
-export interface CreateItemInput extends CreateItemFields {
+export interface CreateItemInput extends AdminItemsCreateRequestParsed {
   imageBuffer: Buffer | null
 }
 
-export interface UpdateItemInput extends UpdateItemFields {
+export interface UpdateItemInput extends Omit<AdminItemsUpdateRequestParsed, 'clearImage'> {
   imageBuffer: Buffer | null
   clearImage: boolean
 }

@@ -4,7 +4,7 @@ import { getAuthUser } from '../../../../shared/middlewares/auth.js'
 import { jsonResult } from '../../../../shared/utils/response.js'
 import { validationErrorHandler } from '../../../../shared/utils/validation.js'
 import { uuidParamSchema } from '../../../../shared/schemas/params.js'
-import { displayCurrencyQuerySchema } from '@keimelion/sdk/schemas'
+import { adminListsGetQuerySchema } from '@keimelion/sdk/schemas'
 import type { FeatureRouter } from '../../../../shared/types/app.js'
 import { getListById } from '../admin-lists.service.js'
 import { resolveDisplayCurrency } from '../display-currency.js'
@@ -14,7 +14,7 @@ export function mountGetList(router: FeatureRouter): void {
     '/:id',
     ...adminOnly,
     zValidator('param', uuidParamSchema, validationErrorHandler),
-    zValidator('query', displayCurrencyQuerySchema, validationErrorHandler),
+    zValidator('query', adminListsGetQuerySchema, validationErrorHandler),
     async (context) => {
       const { id } = context.req.valid('param')
       const { currency: queryCurrency } = context.req.valid('query')

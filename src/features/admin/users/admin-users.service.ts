@@ -4,7 +4,12 @@ import { env } from '../../../config/env.js'
 import { buildPaginatedResponse } from '../../../shared/utils/pagination.js'
 import { ErrorCode, HttpStatus, UserRoles } from '@keimelion/sdk/enums'
 import type { UserRole } from '@keimelion/sdk/enums'
-import type { PaginatedResponse } from '@keimelion/sdk/schemas'
+import type {
+  AdminUsersCreateRequestParsed,
+  AdminUsersCreateResponseParsed,
+  AdminUsersUpdateRequestParsed,
+  PaginatedResponse,
+} from '@keimelion/sdk/schemas'
 import { NodeEnvs } from '../../../shared/enums/node-env.js'
 import { serviceError } from '../../../shared/utils/response.js'
 import { logger } from '../../../shared/utils/logger.js'
@@ -25,16 +30,14 @@ import type { AdminUser } from './admin-users.mapper.js'
 import type { User } from '../../../db/entities/users/users.schema.js'
 import type { ServiceResult } from '../../../shared/types/service.js'
 import type { ListUsersInput } from './endpoints/list-users.js'
-import type { AdminUpdateUserInput } from './endpoints/update-user.js'
-import type { AdminCreateUserInput } from './endpoints/create-user.js'
 
 const ADMIN_PASSWORD_RESET_TOKEN_TTL_MS = 24 * 60 * 60 * 1000
 const PASSWORD_RESET_TOKEN_BYTE_LENGTH = 32
 
 export async function createUser(
   adminId: string,
-  input: AdminCreateUserInput,
-): Promise<ServiceResult<{ user: AdminUser; passwordResetToken?: string }>> {
+  input: AdminUsersCreateRequestParsed,
+): Promise<ServiceResult<AdminUsersCreateResponseParsed & { passwordResetToken?: string }>> {
   const rawPasswordResetToken = randomBytes(PASSWORD_RESET_TOKEN_BYTE_LENGTH).toString('hex')
   const hashedPasswordResetToken = hashSha256Hex(rawPasswordResetToken)
   const passwordResetTokenExpiresAt = new Date(Date.now() + ADMIN_PASSWORD_RESET_TOKEN_TTL_MS)
@@ -99,7 +102,7 @@ export async function getUserById(id: string): Promise<ServiceResult<{ user: Adm
 export async function updateUser(
   adminId: string,
   targetUserId: string,
-  input: AdminUpdateUserInput,
+  input: AdminUsersUpdateRequestParsed,
 ): Promise<ServiceResult<{ user: AdminUser }>> {
   if (targetUserId === adminId) {
     return serviceError(ErrorCode.FORBIDDEN)

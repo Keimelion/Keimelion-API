@@ -3,6 +3,9 @@ import { db } from '../../../db/client.js'
 import { apiRequest } from '../../../shared/test/api-request.js'
 import { generateTestToken, makeAccessTokenEntry } from '../../../shared/test/auth.js'
 import { makeAdminUser } from '../../../shared/test/fixtures/users.js'
+import {
+  adminListsListItemsResponseSchema,
+} from '@keimelion/sdk/schemas'
 
 // This suite asserts on `displayCurrency: 'USD'` as the admin's default — override
 // `defaultCurrencyCode` on every variant so the fixture change does not alter behaviour.
@@ -271,6 +274,7 @@ describe('GET /v1/admin/lists/:id/items', () => {
       }[]
       pagination: { total: number }
     }
+    adminListsListItemsResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.pagination.total).toBe(2)
     expect(body.items).toHaveLength(2)

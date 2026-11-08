@@ -1,27 +1,25 @@
-import { z } from 'zod'
 import { zValidator } from '@hono/zod-validator'
+import { itemsUpdateRequestSchema } from '@keimelion/sdk/schemas'
 import { authMiddleware, getAuthUser } from '../../../shared/middlewares/auth.js'
 import { multipartOnly, RATE_LIMITS } from '../../../shared/utils/rate-limiter.js'
 import { jsonResult } from '../../../shared/utils/response.js'
 import { validationErrorHandler } from '../../../shared/utils/validation.js'
 import { uuidParamSchema } from '../../../shared/schemas/params.js'
 import { getLocale } from '../../../shared/middlewares/resolve-locale.js'
-import { multipartBoolSchema, parseJsonOrMultipart, sendParseFailure } from '../../uploads/multipart.js'
-import { multipartWritableItemFieldsSchema, writableItemFieldsSchema } from '../items.schemas.js'
+import {
+  multipartBoolSchema,
+  multipartJsonSchema,
+  parseJsonOrMultipart,
+  sendParseFailure,
+} from '../../uploads/multipart.js'
 import type { FeatureRouter } from '../../../shared/types/app.js'
 import { updateUserItem } from '../items.service.js'
 
-const jsonUpdateItemSchema = writableItemFieldsSchema
-  .partial()
-  .extend({ clearImage: z.boolean().optional() })
-  .strict()
-
-const multipartUpdateItemSchema = multipartWritableItemFieldsSchema
-  .partial()
-  .extend({ clearImage: multipartBoolSchema.optional() })
-  .strict()
-
-export type UpdateItemFields = Omit<z.infer<typeof jsonUpdateItemSchema>, 'clearImage'>
+const multipartUpdateItemSchema = itemsUpdateRequestSchema.extend({
+  tags: multipartJsonSchema(itemsUpdateRequestSchema.shape.tags).optional(),
+  categories: multipartJsonSchema(itemsUpdateRequestSchema.shape.categories).optional(),
+  clearImage: multipartBoolSchema.optional(),
+})
 
 export function mountUpdateItem(router: FeatureRouter): void {
   router.patch(
@@ -32,7 +30,7 @@ export function mountUpdateItem(router: FeatureRouter): void {
     zValidator('param', uuidParamSchema, validationErrorHandler),
     async (context) => {
       const parsed = await parseJsonOrMultipart(context, {
-        jsonSchema: jsonUpdateItemSchema,
+        jsonSchema: itemsUpdateRequestSchema,
         multipartSchema: multipartUpdateItemSchema,
       })
       if (!parsed.ok) return sendParseFailure(parsed)

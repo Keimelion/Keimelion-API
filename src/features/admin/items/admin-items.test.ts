@@ -4,7 +4,16 @@ import { apiMultipartRequest, apiRequest } from '../../../shared/test/api-reques
 import { generateTestToken, makeAccessTokenEntry } from '../../../shared/test/auth.js'
 import { ADMIN_USER_FIXTURE as ADMIN_USER, makeAdminUser } from '../../../shared/test/fixtures/users.js'
 import { logger } from '../../../shared/utils/logger.js'
-import { MAX_CATEGORIES_PER_ITEM } from '../../../db/entities/item-categories/item-categories.schemas.js'
+import {
+  adminItemsCreateResponseSchema,
+  adminItemsCreateSourceResponseSchema,
+  adminItemsGetResponseSchema,
+  adminItemsListResponseSchema,
+  adminItemsUpdateResponseSchema,
+  adminItemsUpdateSourceResponseSchema,
+  MAX_CATEGORIES_PER_ITEM,
+  messageResponseSchema,
+} from '@keimelion/sdk/schemas'
 import { images } from '../../../db/entities/images/images.schema.js'
 
 const { mockProcessImage } = vi.hoisted(() => ({ mockProcessImage: vi.fn() }))
@@ -409,6 +418,7 @@ describe('POST /v1/admin/items', () => {
     const body = await response.json() as {
       item: { name: string; createdByUserId: null; sources: { itemId: string }[] }
     }
+    adminItemsCreateResponseSchema.parse(body)
     expect(response.status).toBe(201)
     expect(body.item.name).toBe('Test Item')
     expect(body.item.createdByUserId).toBeNull()
@@ -778,6 +788,7 @@ describe('GET /v1/admin/items', () => {
       items: { name: string; sources: { itemId: string }[] }[]
       pagination: { total: number }
     }
+    adminItemsListResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.items).toHaveLength(1)
     expect(body.pagination.total).toBe(1)
@@ -982,6 +993,7 @@ describe('GET /v1/admin/items/:id', () => {
         reservationCount: number
       }
     }
+    adminItemsGetResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.item.name).toBe('Test Item')
     expect(body.item.sources).toHaveLength(1)
@@ -1053,6 +1065,7 @@ describe('PATCH /v1/admin/items/:id', () => {
     })
 
     const body = await response.json() as { item: { name: string; sources: unknown[] } }
+    adminItemsUpdateResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.item.name).toBe('Updated Name')
     expect(body.item.sources).toHaveLength(1)
@@ -1343,6 +1356,7 @@ describe('DELETE /v1/admin/items/:id (hard delete)', () => {
     })
 
     const body = await response.json() as { message: string }
+    messageResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.message).toContain('deleted')
   })
@@ -1475,6 +1489,7 @@ describe('POST /v1/admin/items/:id/sources', () => {
     })
 
     const body = await response.json() as { source: { itemId: string; shop: unknown } }
+    adminItemsCreateSourceResponseSchema.parse(body)
     expect(response.status).toBe(201)
     expect(body.source.itemId).toBe(ITEM_ROW.id)
     expect(body.source.shop).toBeNull()
@@ -1711,6 +1726,7 @@ describe('PATCH /v1/admin/items/:id/sources/:sourceId', () => {
     )
 
     const body = await response.json() as { source: { currency: string; shop: unknown } }
+    adminItemsUpdateSourceResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.source.currency).toBe('USD')
     expect(body.source.shop).toBeNull()
@@ -1922,6 +1938,7 @@ describe('DELETE /v1/admin/items/:id/sources/:sourceId', () => {
     )
 
     const body = await response.json() as { message: string }
+    messageResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.message).toContain('deleted')
   })
@@ -2078,6 +2095,7 @@ describe('admin items — image upload', () => {
     })
 
     const body = await response.json() as ImageBody
+    adminItemsCreateResponseSchema.parse(body)
     expect(response.status).toBe(201)
     expect(body.item.imageId).toBe(NEW_IMAGE_ROW.id)
     expect(body.item.image?.urls.md).toContain('-800.webp')

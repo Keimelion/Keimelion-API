@@ -7,7 +7,13 @@ import {
   ListStatuses,
   ListUserRoles,
 } from '@keimelion/sdk/enums'
-import type { PaginatedResponse } from '@keimelion/sdk/schemas'
+import type {
+  ListsAddItemRequestParsed,
+  ListsCreateRequestParsed,
+  ListsListQueryParsed,
+  ListsUpdateRequestParsed,
+  PaginatedResponse,
+} from '@keimelion/sdk/schemas'
 import { serviceError } from '../../shared/utils/response.js'
 import { runWrite } from '../../shared/utils/admin-write.js'
 import { buildSlugFromTitle, normalizeTagSlugs } from '../../shared/utils/slug.js'
@@ -35,17 +41,13 @@ import type { InsertList } from '../../db/entities/lists/lists.repository.js'
 import type { ListDetail, ListRowWithOwner } from '../../shared/types/list.js'
 import type { ListItemResponse } from './lists.types.js'
 import type { ServiceResult } from '../../shared/types/service.js'
-import type { AddItemInput } from './endpoints/add-item.js'
-import type { CreateListInput } from './endpoints/create.js'
-import type { ListUserListsInput } from './endpoints/list.js'
-import type { UpdateListInput } from './endpoints/update.js'
 
 const DEFAULT_QUANTITY_DESIRED = 1
 const MAX_SLUG_RETRIES = 3
 
 export async function createUserList(
   user: User,
-  input: CreateListInput,
+  input: ListsCreateRequestParsed,
 ): Promise<ServiceResult<{ list: ListDetail }>> {
   let tagSlugs: string[] | null = null
   if (input.tags !== undefined) {
@@ -68,7 +70,7 @@ export async function createUserList(
 
 export async function listUserLists(
   userId: string,
-  input: ListUserListsInput,
+  input: ListsListQueryParsed,
 ): Promise<ServiceResult<PaginatedResponse<ListDetail>>> {
   const [rows, total] = await Promise.all([
     findListsAccessibleBy(userId, input, input.sort),
@@ -93,7 +95,7 @@ export async function getUserListById(list: ListRowWithOwner): Promise<ServiceRe
 export async function updateUserList(
   existing: ListRowWithOwner,
   userId: string,
-  input: UpdateListInput,
+  input: ListsUpdateRequestParsed,
 ): Promise<ServiceResult<{ list: ListDetail }>> {
   const fieldPatch = buildListUpdatePatch(input)
   const { tags } = input
@@ -151,7 +153,7 @@ export async function deleteUserList(id: string): Promise<ServiceResult<null>> {
 
 export async function addItemToList(
   listId: string,
-  input: AddItemInput,
+  input: ListsAddItemRequestParsed,
 ): Promise<ServiceResult<{ listItem: ListItemResponse }>> {
   const item = await findItemByIdWithImage(input.itemId)
   if (!item) return serviceError(ErrorCode.NOT_FOUND)
@@ -179,7 +181,7 @@ export async function addItemToList(
 
 async function insertListWithSlugRetry(
   user: User,
-  input: CreateListInput,
+  input: ListsCreateRequestParsed,
   tagSlugs: string[] | null,
 ): Promise<{ row: ListRowWithOwner } | { errorCode: ErrorCode }> {
   for (let attempt = 0; attempt < MAX_SLUG_RETRIES; attempt += 1) {
@@ -199,7 +201,7 @@ interface InsertAttemptFailure {
 
 async function tryInsertList(
   user: User,
-  input: CreateListInput,
+  input: ListsCreateRequestParsed,
   slug: string,
   tagSlugs: string[] | null,
 ): Promise<{ row: ListRowWithOwner } | InsertAttemptFailure> {
@@ -230,7 +232,7 @@ async function tryInsertList(
   }
 }
 
-function buildCreatePayload(input: CreateListInput, slug: string): InsertList {
+function buildCreatePayload(input: ListsCreateRequestParsed, slug: string): InsertList {
   return {
     title: input.title,
     slug,

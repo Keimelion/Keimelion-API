@@ -1,4 +1,6 @@
 import { and, asc, eq, isNull, sql } from 'drizzle-orm'
+import type { AnyColumn } from 'drizzle-orm'
+import type { LIST_SORT_FIELDS } from '@keimelion/sdk/schemas'
 import { db } from '../../client.js'
 import { pickDefined } from '../../../shared/utils/partial-update.js'
 import { listUsers } from '../list-users/list-users.schema.js'
@@ -28,7 +30,7 @@ export const LIST_SORTABLE_FIELDS = {
   updatedAt:  lists.updatedAt,
   title:      lists.title,
   listStatus: lists.listStatus,
-} as const
+} as const satisfies Record<(typeof LIST_SORT_FIELDS)[number], AnyColumn>
 
 export const LIST_DEFAULT_SORT = [{ field: 'createdAt' as const, direction: 'desc' as const }]
 

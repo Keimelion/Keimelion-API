@@ -1,4 +1,6 @@
 import { count, type SQL } from 'drizzle-orm'
+import type { AnyColumn } from 'drizzle-orm'
+import type { ADMIN_TAGS_SORT_FIELDS } from '@keimelion/sdk/schemas'
 import { db } from '../../../db/client.js'
 import { tags } from '../../../db/entities/tags/tags.schema.js'
 import { defineEntity } from '../../../shared/db/entity-descriptor.js'
@@ -13,7 +15,7 @@ export const tagsEntity = defineEntity({
     slug:      tags.slug,
     createdAt: tags.createdAt,
     updatedAt: tags.updatedAt,
-  },
+  } satisfies Record<(typeof ADMIN_TAGS_SORT_FIELDS)[number], AnyColumn>,
   defaultSort: [
     { field: 'name', direction: 'asc' },
   ],

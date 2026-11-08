@@ -20,13 +20,15 @@ import { AdminAction } from '../admin.enums.js'
 import type { Shop } from '../../../db/entities/shops/shops.schema.js'
 import type { ItemSourceDetail } from '../../../shared/types/item.js'
 import type { ServiceResult } from '../../../shared/types/service.js'
-import type { CreateItemSourceInput } from './endpoints/create-source.js'
-import type { UpdateItemSourceInput } from './endpoints/update-source.js'
+import type {
+  AdminItemsCreateSourceRequestParsed,
+  AdminItemsUpdateSourceRequestParsed,
+} from '@keimelion/sdk/schemas'
 
 export async function createItemSource(
   adminId: string,
   itemId: string,
-  input: CreateItemSourceInput,
+  input: AdminItemsCreateSourceRequestParsed,
 ): Promise<ServiceResult<{ source: ItemSourceDetail }>> {
   const item = await findItemById(itemId)
   if (!item) return serviceError(ErrorCode.NOT_FOUND)
@@ -64,7 +66,7 @@ export async function updateItemSourceById(
   adminId: string,
   itemId: string,
   sourceId: string,
-  input: UpdateItemSourceInput,
+  input: AdminItemsUpdateSourceRequestParsed,
 ): Promise<ServiceResult<{ source: ItemSourceDetail }>> {
   const existingSource = await findItemSourceById(sourceId)
   if (existingSource?.itemId !== itemId) return serviceError(ErrorCode.NOT_FOUND)

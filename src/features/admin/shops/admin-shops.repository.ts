@@ -1,4 +1,6 @@
 import { count, desc, eq, type SQL } from 'drizzle-orm'
+import type { AnyColumn } from 'drizzle-orm'
+import type { ADMIN_SHOPS_SORT_FIELDS } from '@keimelion/sdk/schemas'
 import { db } from '../../../db/client.js'
 import { shops } from '../../../db/entities/shops/shops.schema.js'
 import { itemSources } from '../../../db/entities/item-sources/item-sources.schema.js'
@@ -16,7 +18,7 @@ export const shopsEntity = defineEntity({
     sortOrder: shops.sortOrder,
     createdAt: shops.createdAt,
     updatedAt: shops.updatedAt,
-  },
+  } satisfies Record<(typeof ADMIN_SHOPS_SORT_FIELDS)[number], AnyColumn>,
   defaultSort: [
     { field: 'sortOrder', direction: 'asc' },
     { field: 'name',      direction: 'asc' },

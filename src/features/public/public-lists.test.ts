@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { db } from '../../db/client.js'
 import { apiRequest } from '../../shared/test/api-request.js'
+import {
+  publicListsGetResponseSchema,
+} from '@keimelion/sdk/schemas'
 
 const OWNER_USER = {
   id: '00000000-0000-0000-0000-000000000001',
@@ -112,6 +115,7 @@ describe('GET /v1/public/lists/:slug', () => {
 
     const response = await apiRequest(`/v1/public/lists/${LIST_SLUG}`)
     const body = await response.json() as PublicListResponse
+    publicListsGetResponseSchema.parse(body)
 
     expect(response.status).toBe(200)
     expect(body.list.id).toBe(LIST_ID)

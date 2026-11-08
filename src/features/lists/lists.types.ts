@@ -1,6 +1,3 @@
-import type { ItemDetail, ItemSourceDetail, ListItemDetail } from '../../shared/types/item.js'
+import type { ListsAddItemResponseParsed } from '@keimelion/sdk/schemas'
 
-export interface ListItemResponse extends ListItemDetail {
-  item: ItemDetail
-  source: ItemSourceDetail | null
-}
+export type ListItemResponse = ListsAddItemResponseParsed['listItem']

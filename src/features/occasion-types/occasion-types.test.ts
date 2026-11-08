@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { db } from '../../db/client.js'
 import type { PublicOccasionType } from './occasion-types.mapper.js'
+import {
+  occasionTypesListResponseSchema,
+} from '@keimelion/sdk/schemas'
 
 vi.mock('../../shared/utils/logger.js', () => ({
   logger: {
@@ -85,6 +88,7 @@ describe('GET /v1/occasion-types', () => {
     const { app } = await import('../../app.js')
     const response = await app.request('/v1/occasion-types')
     const body = (await response.json()) as PublicOccasionType[]
+    occasionTypesListResponseSchema.parse(body)
 
     expect(response.status).toBe(200)
     expect(body).toHaveLength(2)

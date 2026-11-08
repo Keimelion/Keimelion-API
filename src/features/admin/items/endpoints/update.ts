@@ -1,14 +1,11 @@
 import { zValidator } from '@hono/zod-validator'
-import { z } from 'zod'
 import { adminOnly } from '../../../../shared/middlewares/admin-only.js'
 import { jsonResult } from '../../../../shared/utils/response.js'
 import { validationErrorHandler } from '../../../../shared/utils/validation.js'
 import { getAuthUser } from '../../../../shared/middlewares/auth.js'
 import { multipartOnly, RATE_LIMITS } from '../../../../shared/utils/rate-limiter.js'
 import { uuidParamSchema } from '../../../../shared/schemas/params.js'
-import { itemNameSchema, itemDescriptionSchema } from '../../../../db/entities/items/items.schemas.js'
-import { itemCategoriesInputSchema } from '../../../../db/entities/item-categories/item-categories.schemas.js'
-import { itemTagsInputSchema } from '../../../../db/entities/item-tags/item-tags.schemas.js'
+import { adminItemsUpdateRequestSchema } from '@keimelion/sdk/schemas'
 import { getLocale } from '../../../../shared/middlewares/resolve-locale.js'
 import {
   multipartBoolSchema,
@@ -19,27 +16,11 @@ import {
 import type { FeatureRouter } from '../../../../shared/types/app.js'
 import { updateItemById } from '../admin-items.service.js'
 
-const jsonAdminUpdateItemSchema = z
-  .object({
-    name: itemNameSchema.optional(),
-    description: itemDescriptionSchema.optional(),
-    categories: itemCategoriesInputSchema,
-    tags: itemTagsInputSchema,
-    clearImage: z.boolean().optional(),
-  })
-  .strict()
-
-const multipartAdminUpdateItemSchema = z
-  .object({
-    name: itemNameSchema.optional(),
-    description: itemDescriptionSchema.optional(),
-    categories: multipartJsonSchema(itemCategoriesInputSchema).optional(),
-    tags: multipartJsonSchema(itemTagsInputSchema).optional(),
-    clearImage: multipartBoolSchema.optional(),
-  })
-  .strict()
-
-export type UpdateItemFields = Omit<z.infer<typeof jsonAdminUpdateItemSchema>, 'clearImage'>
+const multipartAdminUpdateItemSchema = adminItemsUpdateRequestSchema.extend({
+  categories: multipartJsonSchema(adminItemsUpdateRequestSchema.shape.categories).optional(),
+  tags: multipartJsonSchema(adminItemsUpdateRequestSchema.shape.tags).optional(),
+  clearImage: multipartBoolSchema.optional(),
+})
 
 export function mountUpdateItem(router: FeatureRouter): void {
   router.patch(
@@ -50,7 +31,7 @@ export function mountUpdateItem(router: FeatureRouter): void {
     zValidator('param', uuidParamSchema, validationErrorHandler),
     async (context) => {
       const parsed = await parseJsonOrMultipart(context, {
-        jsonSchema: jsonAdminUpdateItemSchema,
+        jsonSchema: adminItemsUpdateRequestSchema,
         multipartSchema: multipartAdminUpdateItemSchema,
       })
       if (!parsed.ok) return sendParseFailure(parsed)

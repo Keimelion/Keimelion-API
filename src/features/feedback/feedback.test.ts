@@ -2,7 +2,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { db } from '../../db/client.js'
 import { apiRequest } from '../../shared/test/api-request.js'
 import { generateTestToken, makeAccessTokenEntry } from '../../shared/test/auth.js'
-import { MAX_FEEDBACK_CONTEXT_BYTES } from './endpoints/create.js'
+import {
+  feedbackCreateResponseSchema,
+  MAX_FEEDBACK_CONTEXT_BYTES,
+} from '@keimelion/sdk/schemas'
 
 const AUTH_USER = {
   id: '00000000-0000-0000-0000-000000000100',
@@ -93,6 +96,7 @@ describe('POST /v1/feedback', () => {
     const body = await response.json() as {
       feedback: { id: string; userId: string | null; title: string; status: string }
     }
+    feedbackCreateResponseSchema.parse(body)
     expect(response.status).toBe(201)
     expect(body.feedback.id).toBe(FEEDBACK_ID)
     expect(body.feedback.userId).toBeNull()

@@ -1,12 +1,8 @@
 import { toUserDetail } from '../../../shared/types/user.js'
-import type { UserDetail, UserRowWithAvatar } from '../../../shared/types/user.js'
+import type { UserRowWithAvatar } from '../../../shared/types/user.js'
+import type { AdminUserDetailParsed } from '@keimelion/sdk/schemas'
 
-export interface AdminUser extends UserDetail {
-  bannedAt: Date | null
-  banReason: string | null
-  deletedAt: Date | null
-  reservationsCount: number
-}
+export type AdminUser = AdminUserDetailParsed
 
 export function toAdminUser(
   user: UserRowWithAvatar,

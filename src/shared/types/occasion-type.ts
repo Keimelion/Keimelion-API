@@ -3,16 +3,9 @@ import type {
   OccasionTypeTranslation,
 } from '../../db/entities/occasion-types/occasion-types.schema.js'
 import type { Locale } from '@keimelion/sdk/enums'
+import type { AdminOccasionTypeDetailParsed } from '@keimelion/sdk/schemas'
 
-export interface OccasionTypeDetail {
-  id: string
-  slug: string
-  emoji: string | null
-  sortOrder: number
-  isActive: boolean
-  createdAt: Date
-  updatedAt: Date
-}
+export type OccasionTypeDetail = Omit<AdminOccasionTypeDetailParsed, 'translations'>
 
 export interface OccasionTypeRowWithTranslations extends OccasionType {
   translations: OccasionTypeTranslation[]

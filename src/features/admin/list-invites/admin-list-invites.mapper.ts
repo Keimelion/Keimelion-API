@@ -1,20 +1,10 @@
 import { toInviteDetail, toListMemberUser } from '../../../shared/types/collaborator.js'
-import type { CollaboratorDetail, ListMemberUser } from '../../../shared/types/collaborator.js'
 import type { ListInviteWithRelationsRow } from '../../../db/entities/list-invites/list-invites.repository.js'
+import type { AdminCollaboratorInviteDetailParsed } from '@keimelion/sdk/schemas'
 
 export type AdminListInviteRow = ListInviteWithRelationsRow
 
-export interface AdminListInviteList {
-  id: string
-  title: string
-  slug: string
-}
-
-export interface AdminListInviteDetail extends CollaboratorDetail {
-  list: AdminListInviteList
-  invitedBy: ListMemberUser | null
-  isExpired: boolean
-}
+export type AdminListInviteDetail = AdminCollaboratorInviteDetailParsed
 
 export function toAdminListInviteDetail(
   row: AdminListInviteRow,

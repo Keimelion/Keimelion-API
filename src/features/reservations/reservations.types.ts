@@ -1,33 +1,17 @@
-import type { ItemStatus } from '@keimelion/sdk/enums'
 import type { Reservation } from '../../db/entities/reservations/reservations.schema.js'
 import type { ListItem } from '../../db/entities/list-items/list-items.schema.js'
 import type { List } from '../../db/entities/lists/lists.schema.js'
 import type { ItemRowWithImage } from '../../shared/types/item.js'
 import { toImageDetail } from '../uploads/images.mapper.js'
-import type { ImageDetail } from '../uploads/images.mapper.js'
 import { findOwnerUser } from '../../shared/types/list.js'
 import type { ListUserWithUser } from '../../shared/types/list.js'
+import type { ListItemReservationSummaryParsed, ReservationsCreateResponseParsed, ReservationSummaryParsed, UserReservationSummaryParsed } from '@keimelion/sdk/schemas'
 
-export interface ReservationSummary {
-  id: string
-  listItemId: string
-  userId: string | null
-  reserverName: string | null
-  reserverEmail: string | null
-  quantityBooked: number
-  createdAt: Date
-}
+export type ReservationSummary = ReservationSummaryParsed
 
-export interface ListItemReservationSummary {
-  id: string
-  quantityReservedTotal: number
-  itemStatus: ItemStatus
-}
+export type ListItemReservationSummary = ListItemReservationSummaryParsed
 
-export interface ReservationActionResponse {
-  reservation: ReservationSummary
-  listItem: ListItemReservationSummary
-}
+export type ReservationActionResponse = Omit<ReservationsCreateResponseParsed, 'token'>
 
 export interface AnonymousReservationActionResponse extends ReservationActionResponse {
   token: string
@@ -58,26 +42,7 @@ export interface ReservationProfileRow extends Reservation {
   listItem: ReservationProfileListItemRow
 }
 
-export interface ReservationProfileEntry {
-  reservation: {
-    id: string
-    quantityBooked: number
-    createdAt: Date
-  }
-  listItem: {
-    id: string
-    name: string
-    quantityDesired: number
-    imageId: string | null
-    image: ImageDetail | null
-  }
-  list: {
-    id: string
-    slug: string
-    title: string
-    ownerDisplayName: string | null
-  }
-}
+export type ReservationProfileEntry = UserReservationSummaryParsed
 
 export function toReservationProfileEntry(row: ReservationProfileRow): ReservationProfileEntry {
   const ownerUser = findOwnerUser(row.listItem.list.listUsers)

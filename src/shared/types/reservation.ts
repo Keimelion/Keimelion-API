@@ -4,9 +4,9 @@ import type { List } from '../../db/entities/lists/lists.schema.js'
 import { findOwnerUser } from './list.js'
 import type { ListUserWithUser } from './list.js'
 import { toItemDetail } from './item.js'
-import type { ItemDetail, ItemRowWithImage } from './item.js'
+import type { ItemRowWithImage } from './item.js'
 import { toUserDetail } from './user.js'
-import type { UserDetail } from './user.js'
+import type { ReservationDetailParsed, ReservationListItemSummaryParsed, ReservationListSummaryParsed } from '@keimelion/sdk/schemas'
 
 export interface ReservationListRow extends List {
   listUsers: ListUserWithUser[]
@@ -21,28 +21,11 @@ export interface ReservationRowHydrated extends Reservation {
   listItem: ReservationListItemRow
 }
 
-export interface ReservationListItemSummary {
-  id: string
-  quantityDesired: number
-  item: ItemDetail
-}
+export type ReservationListItemSummary = ReservationListItemSummaryParsed
 
-export interface ReservationListSummary {
-  id: string
-  slug: string
-  title: string
-  owner: UserDetail | null
-}
+export type ReservationListSummary = ReservationListSummaryParsed
 
-export interface ReservationDetail {
-  id: string
-  reserverName: string | null
-  reserverEmail: string | null
-  quantityBooked: number
-  createdAt: Date
-  listItem: ReservationListItemSummary
-  list: ReservationListSummary
-}
+export type ReservationDetail = ReservationDetailParsed
 
 export function toReservationDetail(row: ReservationRowHydrated): ReservationDetail {
   const ownerUser = findOwnerUser(row.listItem.list.listUsers)

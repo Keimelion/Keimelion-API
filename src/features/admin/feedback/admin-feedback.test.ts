@@ -4,6 +4,10 @@ import { apiRequest } from '../../../shared/test/api-request.js'
 import { generateTestToken, makeAccessTokenEntry } from '../../../shared/test/auth.js'
 import { ADMIN_USER_FIXTURE as ADMIN_USER, makeAdminUser } from '../../../shared/test/fixtures/users.js'
 import { logger } from '../../../shared/utils/logger.js'
+import {
+  adminFeedbackListResponseSchema,
+  adminFeedbackUpdateResponseSchema,
+} from '@keimelion/sdk/schemas'
 
 vi.mock('../../../shared/utils/logger.js', () => ({
   logger: {
@@ -114,6 +118,7 @@ describe('GET /v1/admin/feedback', () => {
       items: { id: string; userId: string | null; user: unknown }[]
       pagination: { total: number }
     }
+    adminFeedbackListResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.items).toHaveLength(1)
     expect(body.pagination.total).toBe(1)
@@ -276,6 +281,7 @@ describe('PATCH /v1/admin/feedback/:id', () => {
     })
 
     const body = await response.json() as { feedback: { status: string } }
+    adminFeedbackUpdateResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.feedback.status).toBe('reviewed')
   })

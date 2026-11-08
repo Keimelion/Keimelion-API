@@ -1,7 +1,12 @@
 import { db } from '../../db/client.js'
 import { buildPaginatedResponse } from '../../shared/utils/pagination.js'
 import { ErrorCode, HttpStatus } from '@keimelion/sdk/enums'
-import type { PaginatedResponse } from '@keimelion/sdk/schemas'
+import type {
+  PaginatedResponse,
+  UsersChangePasswordRequestParsed,
+  UsersExportQueryParsed,
+  UsersListReservationsQueryParsed,
+} from '@keimelion/sdk/schemas'
 import { serviceError } from '../../shared/utils/response.js'
 import { pickDefined } from '../../shared/utils/partial-update.js'
 import { hashPassword, verifyPassword } from '../../shared/utils/hash.js'
@@ -49,9 +54,6 @@ import type { User } from '../../db/entities/users/users.schema.js'
 import type { Image } from '../../db/entities/images/images.schema.js'
 import type { ServiceResult } from '../../shared/types/service.js'
 import type { PartialWrite } from '../../shared/types/api.js'
-import type { ChangePasswordInput } from './endpoints/change-password.js'
-import type { ExportFormat } from './endpoints/export-data.js'
-import type { ListMyReservationsInput } from './endpoints/get-my-reservations.js'
 
 export interface UpdateUserProfileInput extends PartialWrite<UserWrite> {
   avatarBuffer: Buffer | null
@@ -166,7 +168,7 @@ export async function deleteAccount(userId: string, originalEmail: string): Prom
   return { data: { message: 'Account deleted successfully' }, httpStatus: HttpStatus.OK }
 }
 
-export async function changePassword(userId: string, input: ChangePasswordInput): Promise<ServiceResult<{ message: string }>> {
+export async function changePassword(userId: string, input: UsersChangePasswordRequestParsed): Promise<ServiceResult<{ message: string }>> {
   const user = await findUserById(userId)
 
   if (!user) {
@@ -195,7 +197,7 @@ export async function changePassword(userId: string, input: ChangePasswordInput)
 
 export async function listMyReservations(
   userId: string,
-  input: ListMyReservationsInput,
+  input: UsersListReservationsQueryParsed,
 ): Promise<ServiceResult<PaginatedResponse<ReservationProfileEntry>>> {
   const [rows, total] = await Promise.all([
     findMyReservationsPaged(userId, input, input.sort),
@@ -208,7 +210,7 @@ export async function listMyReservations(
   }
 }
 
-export async function exportUserData(userId: string, format: ExportFormat): Promise<ExportResult> {
+export async function exportUserData(userId: string, format: UsersExportQueryParsed['format']): Promise<ExportResult> {
   if (format === 'csv') {
     const zipStream = await buildExportZipStream(userId, EXPORT_ENTITY_REGISTRY)
     return {

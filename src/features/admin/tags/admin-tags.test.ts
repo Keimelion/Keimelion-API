@@ -4,6 +4,12 @@ import { apiRequest } from '../../../shared/test/api-request.js'
 import { generateTestToken, makeAccessTokenEntry } from '../../../shared/test/auth.js'
 import { ADMIN_USER_FIXTURE as ADMIN_USER, makeAdminUser } from '../../../shared/test/fixtures/users.js'
 import { logger } from '../../../shared/utils/logger.js'
+import {
+  adminTagsCreateResponseSchema,
+  adminTagsGetResponseSchema,
+  adminTagsListResponseSchema,
+  adminTagsUpdateResponseSchema,
+} from '@keimelion/sdk/schemas'
 
 vi.mock('../../../shared/utils/logger.js', () => ({
   logger: {
@@ -112,6 +118,7 @@ describe('POST /v1/admin/tags', () => {
     })
 
     const body = await response.json() as { tag: { slug: string; name: string } }
+    adminTagsCreateResponseSchema.parse(body)
     expect(response.status).toBe(201)
     expect(body.tag.name).toBe('Gaming')
     expect(body.tag.slug).toBe('gaming')
@@ -226,6 +233,7 @@ describe('GET /v1/admin/tags', () => {
       items: { slug: string }[]
       pagination: { total: number }
     }
+    adminTagsListResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.items).toHaveLength(1)
     expect(body.pagination.total).toBe(1)
@@ -280,6 +288,7 @@ describe('GET /v1/admin/tags/:id', () => {
     const response = await apiRequest(`/v1/admin/tags/${TAG_ROW.id}`, { token })
 
     const body = await response.json() as { tag: { id: string } }
+    adminTagsGetResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.tag.id).toBe(TAG_ROW.id)
   })
@@ -329,6 +338,7 @@ describe('PATCH /v1/admin/tags/:id', () => {
     })
 
     const body = await response.json() as { tag: { slug: string; name: string } }
+    adminTagsUpdateResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.tag.name).toBe('Video Games')
     expect(body.tag.slug).toBe('gaming')

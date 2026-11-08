@@ -1,38 +1,17 @@
 import type { ListInvite } from '../../db/entities/list-invites/list-invites.schema.js'
 import { InviteStatuses } from '@keimelion/sdk/enums'
-import type { InviteStatus, ListUserRole } from '@keimelion/sdk/enums'
 import type { ListUserWithUser } from './list.js'
 import type { UserRowWithAvatar } from './user.js'
 import { toImageDetail } from '../../features/uploads/images.mapper.js'
-import type { ImageDetail } from '../../features/uploads/images.mapper.js'
+import type { CollaboratorDetailParsed, CollaboratorSummaryParsed, ListMemberSummaryParsed } from '@keimelion/sdk/schemas'
 
 // Identity of a list member as seen by the other members — deliberately narrower than
 // UserDetail so an editor never receives the owner's account settings (role, CGV, opt-ins…).
-export interface ListMemberUser {
-  id: string
-  email: string
-  username: string | null
-  avatar: ImageDetail | null
-}
+export type ListMemberUser = ListMemberSummaryParsed
 
-export interface CollaboratorSummary {
-  user: ListMemberUser | null
-  invitedEmail: string | null
-  status: InviteStatus
-  role: ListUserRole
-}
+export type CollaboratorSummary = CollaboratorSummaryParsed
 
-export interface CollaboratorDetail {
-  id: string
-  listId: string
-  user: ListMemberUser | null
-  invitedEmail: string | null
-  inviteStatus: InviteStatus
-  role: ListUserRole
-  acceptedAt: Date | null
-  createdAt: Date
-  updatedAt: Date
-}
+export type CollaboratorDetail = CollaboratorDetailParsed
 
 export function toListMemberUser(user: UserRowWithAvatar): ListMemberUser {
   const { avatarImage } = user

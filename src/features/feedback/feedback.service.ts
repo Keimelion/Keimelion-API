@@ -4,11 +4,13 @@ import { insertFeedback } from './feedback.repository.js'
 import { toFeedbackDetail } from '../../shared/types/feedback.js'
 import type { FeedbackDetail } from '../../shared/types/feedback.js'
 import type { ServiceResult } from '../../shared/types/service.js'
-import type { CreateFeedbackInput } from './endpoints/create.js'
+import type {
+  FeedbackCreateRequestParsed,
+} from '@keimelion/sdk/schemas'
 
 export async function createFeedback(
   userId: string | null,
-  input: CreateFeedbackInput,
+  input: FeedbackCreateRequestParsed,
 ): Promise<ServiceResult<{ feedback: FeedbackDetail }>> {
   const row = await insertFeedback({
     userId,

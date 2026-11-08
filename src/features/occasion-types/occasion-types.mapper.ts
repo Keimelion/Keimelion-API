@@ -1,11 +1,7 @@
 import type { OccasionTypeWithLabel } from '../../db/entities/occasion-types/occasion-types.repository.js'
+import type { OccasionTypeSummaryParsed } from '@keimelion/sdk/schemas'
 
-export interface PublicOccasionType {
-  id: string
-  slug: string
-  label: string
-  emoji: string | null
-}
+export type PublicOccasionType = OccasionTypeSummaryParsed
 
 export function toPublicOccasionType(row: OccasionTypeWithLabel): PublicOccasionType {
   return {

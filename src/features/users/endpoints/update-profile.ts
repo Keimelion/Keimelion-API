@@ -1,10 +1,9 @@
-import { z } from 'zod'
 import { authMiddleware, getAuthUser } from '../../../shared/middlewares/auth.js'
 import { multipartOnly, RATE_LIMITS } from '../../../shared/utils/rate-limiter.js'
 import { jsonResult } from '../../../shared/utils/response.js'
 import type { FeatureRouter } from '../../../shared/types/app.js'
 import { updateProfile } from '../users.service.js'
-import { supportedCurrencyEnum, usernameSchema } from '@keimelion/sdk/schemas'
+import { usernameSchema, usersUpdateProfileRequestSchema } from '@keimelion/sdk/schemas'
 import {
   multipartBoolSchema,
   parseJsonOrMultipart,
@@ -12,24 +11,16 @@ import {
 } from '../../uploads/multipart.js'
 import type { UpdateUserProfileInput } from '../users.service.js'
 
-const jsonUpdateProfileSchema = z.object({
-  username: usernameSchema.nullable().optional(),
-  isMarketingOptedIn: z.boolean().optional(),
-  defaultCurrency: supportedCurrencyEnum.optional(),
-  clearAvatar: z.boolean().optional(),
-})
-
-const multipartUpdateProfileSchema = z.object({
+const multipartUpdateProfileSchema = usersUpdateProfileRequestSchema.extend({
   username: usernameSchema.optional(),
   isMarketingOptedIn: multipartBoolSchema.optional(),
-  defaultCurrency: supportedCurrencyEnum.optional(),
   clearAvatar: multipartBoolSchema.optional(),
 })
 
 export function mountUpdateProfile(router: FeatureRouter): void {
   router.patch('/me', authMiddleware, multipartOnly(RATE_LIMITS.UPLOAD()), async (context) => {
     const parsed = await parseJsonOrMultipart(context, {
-      jsonSchema: jsonUpdateProfileSchema,
+      jsonSchema: usersUpdateProfileRequestSchema,
       multipartSchema: multipartUpdateProfileSchema,
     })
     if (!parsed.ok) {
