@@ -10,4 +10,4 @@ permissions:
 
 jobs:
   deploy:
-    uses: Keimelion/Keimelion-Infra/.github/workflows/deploy.yml@main
+    uses: Keimelion/Keimelion-Infra/.github/workflows/deploy.yml@v0.1.0

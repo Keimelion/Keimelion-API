@@ -24,6 +24,11 @@ updates:
     target-branch: dev
     schedule:
       interval: weekly
+    groups:
+      # Dependabot sees one dependency per reusable workflow file: one PR, and one tag per repo.
+      keimelion-infra:
+        patterns:
+          - 'Keimelion/Keimelion-Infra/*'
     commit-message:
       prefix: chore
       include: scope
