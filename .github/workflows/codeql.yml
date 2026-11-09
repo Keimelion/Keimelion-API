@@ -15,4 +15,4 @@ permissions:
 
 jobs:
   analyze:
-    uses: Keimelion/Keimelion-Infra/.github/workflows/codeql.yml@v0.1.3
+    uses: Keimelion/Keimelion-Infra/.github/workflows/codeql.yml@v0.1.5
