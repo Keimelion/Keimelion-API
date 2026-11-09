@@ -20,6 +20,7 @@ export * from './feedback/feedback.schema.js'
 export * from './images/images.schema.js'
 export * from './reservations/reservations.schema.js'
 export * from './reports/reports.schema.js'
+export * from './waitlist/waitlist.schema.js'
 
 export * from './users/users.relations.js'
 export * from './items/items.relations.js'
