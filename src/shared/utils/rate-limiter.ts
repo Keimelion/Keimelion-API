@@ -14,7 +14,7 @@ const TEN_MINUTES_MS = 10 * 60 * 1000
 const ONE_HOUR_MS = 60 * 60 * 1000
 const MULTIPART_FIELDS_OVERHEAD_BYTES = 64 * 1024
 
-function ipKeyGenerator(context: Context): string {
+export function getClientIp(context: Context): string {
   return context.req.header('x-forwarded-for') ?? context.req.header('cf-connecting-ip') ?? 'unknown'
 }
 
@@ -23,7 +23,7 @@ export function createRateLimiter(limit: number, windowMs: number = ONE_MINUTE_M
     windowMs,
     limit,
     standardHeaders: 'draft-6',
-    keyGenerator: ipKeyGenerator,
+    keyGenerator: getClientIp,
     handler: () => sendError(ErrorCode.RATE_LIMIT_EXCEEDED),
   })
 }
@@ -34,12 +34,14 @@ export function createRateLimiter(limit: number, windowMs: number = ONE_MINUTE_M
 // UPLOAD — image uploads: expensive (sharp decode + webp encode × 3) and disk-bound; tighter than STANDARD.
 // PUBLIC — unauthenticated reads (shared wishlists by slug). Tighter than STANDARD because the
 // anonymous surface is a scraping target; still high enough for a human browsing one list.
+// WAITLIST_SIGNUP — anonymous landing form: a human signs up once, so anything beyond a retry is abuse.
 export const RATE_LIMITS = {
   STRICT: () => createRateLimiter(5, ONE_MINUTE_MS),
   STANDARD: () => createRateLimiter(20, ONE_MINUTE_MS),
   SENSITIVE: () => createRateLimiter(10, TEN_MINUTES_MS),
   UPLOAD: () => createRateLimiter(10, ONE_MINUTE_MS),
   PUBLIC: () => createRateLimiter(10, ONE_MINUTE_MS),
+  WAITLIST_SIGNUP: () => createRateLimiter(3, ONE_MINUTE_MS),
 } as const
 
 // Picks the limiter according to the caller's auth state. Must be mounted AFTER
@@ -87,7 +89,7 @@ function feedbackKeyGenerator(prefix: string): (context: Context<{ Variables: Ap
     // so the typed value can be undefined at runtime despite the AppVariables shape.
     const user = context.get(HonoContextKey.USER) as User | undefined
     if (user) return `${prefix}:user:${user.id}`
-    return `${prefix}:ip:${ipKeyGenerator(context)}`
+    return `${prefix}:ip:${getClientIp(context)}`
   }
 }
 
