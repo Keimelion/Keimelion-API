@@ -16,11 +16,11 @@ permissions:
 
 jobs:
   ci:
-    uses: Keimelion/Keimelion-Infra/.github/workflows/node-ci.yml@v0.1.0
+    uses: Keimelion/Keimelion-Infra/.github/workflows/node-ci.yml@v0.1.3
 
   pr-title:
     if: github.event_name == 'pull_request'
-    uses: Keimelion/Keimelion-Infra/.github/workflows/pr-title.yml@v0.1.0
+    uses: Keimelion/Keimelion-Infra/.github/workflows/pr-title.yml@v0.1.3
 
   # Patch/minor Dependabot bumps merge themselves once ci and pr-title are green.
   dependabot-automerge:
@@ -29,4 +29,4 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-    uses: Keimelion/Keimelion-Infra/.github/workflows/dependabot-automerge.yml@v0.1.0
+    uses: Keimelion/Keimelion-Infra/.github/workflows/dependabot-automerge.yml@v0.1.3
