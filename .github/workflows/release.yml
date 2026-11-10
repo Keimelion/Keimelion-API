@@ -1,7 +1,7 @@
 name: Release
 
 # main only moves through release PRs (dev → main, merge commit): CI → semantic-release.
-# Deploys come from dev (deploy.yml): no production stack exists yet.
+# The production deploy starts when this workflow is green (deploy.yml).
 
 on:
   push:
@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   ci:
-    uses: Keimelion/Keimelion-Infra/.github/workflows/node-ci.yml@v0.1.5
+    uses: Keimelion/Keimelion-Infra/.github/workflows/node-ci.yml@v0.1.7
 
   release:
     needs: ci
@@ -20,5 +20,5 @@ jobs:
       contents: write
       issues: write
       pull-requests: write
-    uses: Keimelion/Keimelion-Infra/.github/workflows/release.yml@v0.1.5
+    uses: Keimelion/Keimelion-Infra/.github/workflows/release.yml@v0.1.7
     secrets: inherit
