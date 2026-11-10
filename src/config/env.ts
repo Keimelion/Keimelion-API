@@ -1,6 +1,10 @@
 import { config } from 'dotenv'
 import { z } from 'zod'
 import { NODE_ENV_VALUES, NodeEnvs } from '../shared/enums/node-env.js'
+import {
+  DEFAULT_MAIL_PROVIDER,
+  MAIL_PROVIDER_NAMES,
+} from '../shared/mail/mail-provider.registry.js'
 
 config()
 
@@ -18,6 +22,7 @@ const envSchema = z.object({
   APP_URL: z.url().default('http://localhost:3000'),
   EMAIL_API_KEY: z.string().optional(),
   EMAIL_FROM: z.string().optional(),
+  EMAIL_PROVIDER: z.enum(MAIL_PROVIDER_NAMES).default(DEFAULT_MAIL_PROVIDER),
   JWT_CLEANUP_INTERVAL_MS: z.coerce.number().int().min(60_000).default(3_600_000),
   REFRESH_TOKEN_CLEANUP_INTERVAL_MS: z.coerce.number().int().min(60_000).default(3_600_000),
   LIST_INVITE_CLEANUP_INTERVAL_MS: z.coerce.number().int().min(60_000).default(3_600_000),

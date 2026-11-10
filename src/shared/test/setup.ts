@@ -1,5 +1,6 @@
 import { beforeEach, vi } from 'vitest'
 import { NodeEnvs } from '../enums/node-env.js'
+import { DEFAULT_MAIL_PROVIDER } from '../mail/mail-provider.registry.js'
 
 vi.mock('../../config/env.js', () => ({
   env: {
@@ -16,6 +17,7 @@ vi.mock('../../config/env.js', () => ({
     APP_URL: 'http://localhost:3000',
     EMAIL_API_KEY: undefined,
     EMAIL_FROM: undefined,
+    EMAIL_PROVIDER: DEFAULT_MAIL_PROVIDER,
     JWT_CLEANUP_INTERVAL_MS: 3_600_000,
     REFRESH_TOKEN_CLEANUP_INTERVAL_MS: 3_600_000,
     LIST_INVITE_CLEANUP_INTERVAL_MS: 3_600_000,
