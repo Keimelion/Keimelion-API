@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { env } from '../../config/env.js'
+import { MailProviderNames } from '../enums/mail-provider.js'
 import { NodeEnvs } from '../enums/node-env.js'
 import { logger } from '../utils/logger.js'
 import type { MailProvider } from './mail-provider.js'
-import { MAIL_PROVIDER_FACTORIES, MAIL_PROVIDER_NAMES } from './mail-provider.registry.js'
+import { MAIL_PROVIDER_FACTORIES } from './mail-provider.registry.js'
 import { MAIL_REQUEST_TIMEOUT_MS, MailFailureReasons, sendMail } from './mail.sender.js'
 import type { SendMailInput } from './mail.sender.js'
 
@@ -94,18 +95,15 @@ describe('sendMail', () => {
       )
     })
 
-    it('returns a failure and logs the provider status and message id', async () => {
-      send.mockResolvedValue({ isSuccess: false, status: 422, messageId: 'message-2' })
+    it('returns a failure and logs the provider status', async () => {
+      send.mockResolvedValue({ isSuccess: false, status: 422 })
 
       await expect(sendMail(input)).resolves.toEqual({
         isSuccess: false,
         reason: MailFailureReasons.PROVIDER_ERROR,
       })
 
-      expect(logger.error).toHaveBeenCalledWith(
-        { status: 422, messageId: 'message-2' },
-        expect.any(String),
-      )
+      expect(logger.error).toHaveBeenCalledWith({ status: 422 }, expect.any(String))
     })
 
     it('uses the documented request timeout', async () => {
@@ -191,7 +189,7 @@ describe('sendMail', () => {
     })
 
     it('does not log recipients, bodies or the key on provider failure', async () => {
-      send.mockResolvedValue({ isSuccess: false, status: 500, messageId: null })
+      send.mockResolvedValue({ isSuccess: false, status: 500 })
 
       await sendMail(input)
 
@@ -205,8 +203,38 @@ describe('sendMail', () => {
 
       await sendMail(input)
 
-      expect(logger.error).toHaveBeenCalledWith({ errorName: 'Error' }, expect.any(String))
+      expect(logger.error).toHaveBeenCalledWith(
+        { errorName: 'Error', errorCode: null },
+        expect.any(String),
+      )
       expect(serializeLogCalls()).not.toMatch(/recipient@example\.com|test-provider-key/)
+    })
+
+    it('logs the system code of a network failure', async () => {
+      const cause = Object.assign(new Error('getaddrinfo failed'), { code: 'ENOTFOUND' })
+      send.mockRejectedValue(new TypeError('fetch failed', { cause }))
+
+      await sendMail(input)
+
+      expect(logger.error).toHaveBeenCalledWith(
+        { errorName: 'TypeError', errorCode: 'ENOTFOUND' },
+        expect.any(String),
+      )
+    })
+  })
+
+  describe('in production with the log provider', () => {
+    it('writes the email to the log without any provider or key', async () => {
+      useProductionEnv({ EMAIL_PROVIDER: MailProviderNames.LOG, EMAIL_API_KEY: undefined })
+
+      await expect(sendMail(input)).resolves.toEqual({ isSuccess: true, messageId: null })
+
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.objectContaining({ to: input.to, from: FROM }),
+        expect.any(String),
+      )
+      expect(fetchMock).not.toHaveBeenCalled()
+      expect(MAIL_PROVIDER_FACTORIES.resend).not.toHaveBeenCalled()
     })
   })
 
@@ -252,12 +280,5 @@ describe('sendMail', () => {
 
       expect(fetchMock).not.toHaveBeenCalled()
     })
-  })
-})
-
-describe('mail provider registry', () => {
-  it('does not let EMAIL_PROVIDER select the log adapter', () => {
-    expect(MAIL_PROVIDER_NAMES).toEqual(Object.keys(MAIL_PROVIDER_FACTORIES))
-    expect(MAIL_PROVIDER_NAMES).not.toContain('log')
   })
 })
