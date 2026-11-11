@@ -45,3 +45,14 @@ export const EMAIL_BANNER_COLORS: Record<EmailBannerTheme, string> = {
   [EmailBannerThemes.ACCOUNT]: '#9FCBF2',
   [EmailBannerThemes.LAUNCH]: '#F2BF3D',
 }
+
+// Email images (assets/mail/), rendered by src/dev/mail/render-mail-assets.ts at these display
+// sizes: the shell and the renderer share them so the PNGs always match the layout.
+export const EMAIL_CONTENT_WIDTH_PX = 600
+export const EMAIL_BANNER_HEIGHT_PX = 136
+export const EMAIL_LOGO_MARK_SIZE_PX = 30
+export const EMAIL_MARK_FILE = 'mark.png'
+
+export function emailBannerFile(theme: EmailBannerTheme): string {
+  return `banner-${theme}.png`
+}

@@ -1,7 +1,7 @@
 import { LOCALES } from '@keimelion/sdk/enums'
-import type { Locale } from '@keimelion/sdk/enums'
 import { env } from '../../config/env.js'
 import { sendMail } from '../../shared/mail/mail.sender.js'
+import { parseLocale } from '../../shared/utils/locale.js'
 import { logger } from '../../shared/utils/logger.js'
 import { EMAIL_CATALOG, findCatalogEmail } from './email-catalog.js'
 
@@ -11,7 +11,7 @@ Locales: ${LOCALES.join(', ')}`
 
 const [templateName = '', localeArgument = ''] = process.argv.slice(2)
 const email = findCatalogEmail(templateName)
-const locale = LOCALES.find((value): value is Locale => value === localeArgument) ?? null
+const locale = parseLocale(localeArgument)
 
 if (email === null || locale === null) exitWithError(USAGE)
 if (!env.MAIL_TEST_TO) exitWithError('MAIL_TEST_TO is missing: set it in your local .env file')

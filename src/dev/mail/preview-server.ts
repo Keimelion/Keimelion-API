@@ -2,14 +2,16 @@ import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
 import { streamSSE } from 'hono/streaming'
 import { LOCALES } from '@keimelion/sdk/enums'
-import type { Locale } from '@keimelion/sdk/enums'
 import { env } from '../../config/env.js'
 import { NodeEnvs } from '../../shared/enums/node-env.js'
 import { escapeHtml } from '../../shared/mail/shell/email-shell.html.js'
+import { parseLocale } from '../../shared/utils/locale.js'
 import { logger } from '../../shared/utils/logger.js'
 import { EMAIL_CATALOG, findCatalogEmail } from './email-catalog.js'
 
 const MAIL_PREVIEW_PORT = 3100
+// Loopback only: the dev tool is never reachable from the local network
+const MAIL_PREVIEW_HOSTNAME = '127.0.0.1'
 const RELOAD_STREAM_PATH = '/__reload'
 const KEEP_ALIVE_INTERVAL_MS = 30_000
 
@@ -40,25 +42,21 @@ previewApp.get(RELOAD_STREAM_PATH, (context) =>
 
 previewApp.get('/:name/:locale', (context) => {
   const email = findCatalogEmail(context.req.param('name'))
-  const locale = toLocale(context.req.param('locale'))
+  const locale = parseLocale(context.req.param('locale'))
   if (email === null || locale === null) return context.notFound()
   return context.html(`${email.render(locale).html}${LIVE_RELOAD_SCRIPT}`)
 })
 
 previewApp.get('/:name/:locale/text', (context) => {
   const email = findCatalogEmail(context.req.param('name'))
-  const locale = toLocale(context.req.param('locale'))
+  const locale = parseLocale(context.req.param('locale'))
   if (email === null || locale === null) return context.notFound()
   return context.text(email.render(locale).text)
 })
 
-serve({ fetch: previewApp.fetch, port: MAIL_PREVIEW_PORT }, () => {
+serve({ fetch: previewApp.fetch, port: MAIL_PREVIEW_PORT, hostname: MAIL_PREVIEW_HOSTNAME }, () => {
   logger.info({ url: `http://localhost:${String(MAIL_PREVIEW_PORT)}` }, 'Email preview started')
 })
-
-function toLocale(value: string): Locale | null {
-  return LOCALES.find((locale) => locale === value) ?? null
-}
 
 function renderIndexPage(): string {
   const rows = EMAIL_CATALOG.map((email) => {

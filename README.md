@@ -157,8 +157,9 @@ them at `APP_URL/assets/mail/*` in every environment.
 
 To change an image or add a banner theme:
 
-1. Edit `scripts/mail/render-mail-assets.mjs`.
-2. Run `node scripts/mail/render-mail-assets.mjs`.
+1. Edit `src/dev/mail/render-mail-assets.ts`. Colours, sizes and file names come from
+   `src/shared/mail/shell/email-shell.theme.ts`, shared with the email HTML.
+2. Run `npm run mail:assets`.
 3. Commit the PNG files it generates.
 
 Emails already sent keep loading these URLs, so a redesign should add new file names instead of

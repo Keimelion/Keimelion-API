@@ -1,17 +1,17 @@
 import { bannerImageUrl, markImageUrl } from './email-shell.assets.js'
-import { EMAIL_SHELL_COPY } from './email-shell.copy.js'
+import { EMAIL_BRAND_NAME, EMAIL_SHELL_COPY } from './email-shell.copy.js'
 import type { EmailShellCopy } from './email-shell.copy.js'
 import type { EmailInfoBox, EmailLink, EmailShellContent } from './email-shell.js'
 import {
   EMAIL_BANNER_COLORS,
+  EMAIL_BANNER_HEIGHT_PX,
+  EMAIL_CONTENT_WIDTH_PX,
+  EMAIL_LOGO_MARK_SIZE_PX,
   EmailColors,
   EmailDarkColors,
   EmailFonts,
 } from './email-shell.theme.js'
 
-const CONTENT_WIDTH_PX = 600
-const BANNER_HEIGHT_PX = 136
-const LOGO_MARK_SIZE_PX = 30
 const SMALL_MARK_SIZE_PX = 22
 const MODULE_GAP_PX = 18
 const KICKER_GAP_PX = 12
@@ -61,8 +61,8 @@ ${renderHead(content.subject)}
 ${renderPreheader(content.preheader)}
 <table role="presentation" class="k-bg" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="${EmailColors.BACKGROUND}" style="background: ${EmailColors.BACKGROUND}">
 <tr><td class="k-outer" align="center" style="padding: 32px 24px; font-family: ${EmailFonts.SANS}; color: ${EmailColors.INK}">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: ${String(CONTENT_WIDTH_PX)}px">
-${renderLogo(copy)}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: ${String(EMAIL_CONTENT_WIDTH_PX)}px">
+${renderLogo()}
 ${renderCard(content, copy)}
 ${renderFooter(content, copy)}
 </table>
@@ -97,11 +97,11 @@ function renderMark(sizePx: number): string {
   return `<img src="${escapeHtml(markImageUrl())}" width="${String(sizePx)}" height="${String(sizePx)}" alt="" style="display: block; width: ${String(sizePx)}px; height: ${String(sizePx)}px; border: 0; outline: none">`
 }
 
-function renderLogo(copy: EmailShellCopy): string {
+function renderLogo(): string {
   return `<tr><td align="center" style="padding: 0 8px 18px">
 <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
-<td valign="middle" style="padding: 0 8px 0 0">${renderMark(LOGO_MARK_SIZE_PX)}</td>
-<td valign="middle"><span class="k-brand" style="display: inline-block; height: 36px; line-height: 36px; font-family: ${EmailFonts.DISPLAY}; font-weight: 800; letter-spacing: -0.05em; font-size: 26px; color: ${EmailColors.BRAND}">${escapeHtml(copy.brandName)}</span></td>
+<td valign="middle" style="padding: 0 8px 0 0">${renderMark(EMAIL_LOGO_MARK_SIZE_PX)}</td>
+<td valign="middle"><span class="k-brand" style="display: inline-block; height: 36px; line-height: 36px; font-family: ${EmailFonts.DISPLAY}; font-weight: 800; letter-spacing: -0.05em; font-size: 26px; color: ${EmailColors.BRAND}">${escapeHtml(EMAIL_BRAND_NAME)}</span></td>
 </tr></table>
 </td></tr>`
 }
@@ -110,7 +110,7 @@ function renderCard(content: EmailShellContent, copy: EmailShellCopy): string {
   const banner = EMAIL_BANNER_COLORS[content.bannerTheme]
   return `<tr><td class="k-card" bgcolor="${EmailColors.CARD}" style="background: ${EmailColors.CARD}; border-radius: 22px; overflow: hidden">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-<tr><td class="k-banner" height="${String(BANNER_HEIGHT_PX)}" bgcolor="${banner}" style="height: ${String(BANNER_HEIGHT_PX)}px; background: ${banner}; border-radius: 22px 22px 0 0; font-size: 0; line-height: 0; overflow: hidden"><img src="${escapeHtml(bannerImageUrl(content.bannerTheme))}" width="${String(CONTENT_WIDTH_PX)}" height="${String(BANNER_HEIGHT_PX)}" alt="" style="display: block; width: 100%; max-width: ${String(CONTENT_WIDTH_PX)}px; height: ${String(BANNER_HEIGHT_PX)}px; border: 0; outline: none; border-radius: 22px 22px 0 0"></td></tr>
+<tr><td class="k-banner" height="${String(EMAIL_BANNER_HEIGHT_PX)}" bgcolor="${banner}" style="height: ${String(EMAIL_BANNER_HEIGHT_PX)}px; background: ${banner}; border-radius: 22px 22px 0 0; font-size: 0; line-height: 0; overflow: hidden"><img src="${escapeHtml(bannerImageUrl(content.bannerTheme))}" width="${String(EMAIL_CONTENT_WIDTH_PX)}" height="${String(EMAIL_BANNER_HEIGHT_PX)}" alt="" style="display: block; width: 100%; max-width: ${String(EMAIL_CONTENT_WIDTH_PX)}px; height: ${String(EMAIL_BANNER_HEIGHT_PX)}px; border: 0; outline: none; border-radius: 22px 22px 0 0"></td></tr>
 <tr><td class="k-content" style="padding: 40px 48px">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
 ${renderContentModules(content, copy)}
@@ -133,7 +133,7 @@ function renderContentModules(content: EmailShellContent, copy: EmailShellCopy):
     renderModule(renderRibbonDivider(), SECONDARY_GAP_PX),
     ...(content.closingNote === null
       ? []
-      : [renderModule(renderMutedNote(content.closingNote), SECONDARY_GAP_PX)]),
+      : [renderModule(renderMutedParagraph(escapeHtml(content.closingNote)), SECONDARY_GAP_PX)]),
     renderModule(renderSignature(copy), 0),
   ].join('\n')
 }
@@ -177,8 +177,10 @@ function renderInfoBox(infoBox: EmailInfoBox): string {
 }
 
 function renderFallbackLink(url: string, label: string): string {
-  return `<p class="k-muted" style="margin: 0; font-size: 14px; line-height: 20px; color: ${EmailColors.INK_MUTED}">${escapeHtml(label)}<br>
-<a class="k-link" href="${escapeHtml(url)}" target="_blank" style="color: ${EmailColors.LINK}; text-decoration: underline; word-break: break-all; font-family: ${EmailFonts.MONO}; font-size: 12px">${escapeHtml(url)}</a></p>`
+  return renderMutedParagraph(
+    `${escapeHtml(label)}<br>
+<a class="k-link" href="${escapeHtml(url)}" target="_blank" style="color: ${EmailColors.LINK}; text-decoration: underline; word-break: break-all; font-family: ${EmailFonts.MONO}; font-size: 12px">${escapeHtml(url)}</a>`,
+  )
 }
 
 function renderRibbonDivider(): string {
@@ -191,8 +193,8 @@ ${dashedRule}
 </tr></table>`
 }
 
-function renderMutedNote(note: string): string {
-  return `<p class="k-muted" style="margin: 0; font-size: 14px; line-height: 20px; color: ${EmailColors.INK_MUTED}">${escapeHtml(note)}</p>`
+function renderMutedParagraph(innerHtml: string): string {
+  return `<p class="k-muted" style="margin: 0; font-size: 14px; line-height: 20px; color: ${EmailColors.INK_MUTED}">${innerHtml}</p>`
 }
 
 function renderSignature(copy: EmailShellCopy): string {

@@ -1,12 +1,11 @@
 import { env } from '../../../config/env.js'
+import { EMAIL_MARK_FILE, emailBannerFile } from './email-shell.theme.js'
 import type { EmailBannerTheme } from './email-shell.theme.js'
 
-// Email images are versioned PNGs (assets/mail/, rendered by scripts/mail/render-mail-assets.mjs)
+// Email images are versioned PNGs (assets/mail/, rendered by src/dev/mail/render-mail-assets.ts)
 // served by the API itself, so they stay separate from the user uploads volume.
 export const MAIL_ASSETS_ROUTE = '/assets/mail'
 export const MAIL_ASSETS_DIR = './assets/mail'
-
-const MARK_FILE = 'mark.png'
 
 // Relative resolution keeps a path prefix of APP_URL (the API behind a sub-path)
 function mailAssetUrl(fileName: string): string {
@@ -15,9 +14,9 @@ function mailAssetUrl(fileName: string): string {
 }
 
 export function markImageUrl(): string {
-  return mailAssetUrl(MARK_FILE)
+  return mailAssetUrl(EMAIL_MARK_FILE)
 }
 
 export function bannerImageUrl(theme: EmailBannerTheme): string {
-  return mailAssetUrl(`banner-${theme}.png`)
+  return mailAssetUrl(emailBannerFile(theme))
 }

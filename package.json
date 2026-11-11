@@ -21,6 +21,7 @@
     "fx:refresh": "tsx src/cron/jobs/fx-rates-refresh.cli.ts",
     "mail:dev": "tsx watch src/dev/mail/preview-server.ts",
     "mail:test": "NODE_ENV=production tsx src/dev/mail/send-test-email.ts",
+    "mail:assets": "tsx src/dev/mail/render-mail-assets.ts",
     "prepare": "husky"
   },
   "dependencies": {
