@@ -27,7 +27,7 @@
   "dependencies": {
     "@hono/node-server": "^2.1.6",
     "@hono/zod-validator": "^0.9.1",
-    "@keimelion/sdk": "0.2.0-dev.7",
+    "@keimelion/sdk": "0.2.0-dev.8",
     "archiver": "^8.0.0",
     "bcryptjs": "^3.0.3",
     "csv-stringify": "^6.8.3",
