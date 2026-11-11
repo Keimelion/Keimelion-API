@@ -15,6 +15,10 @@ const LOGO_MARK_SIZE_PX = 30
 const SMALL_MARK_SIZE_PX = 22
 const MODULE_GAP_PX = 18
 const KICKER_GAP_PX = 12
+// The secondary modules after the button (info box, fallback link, divider, note) get more air
+// than the text above, so they read as separate blocks
+const BUTTON_GAP_PX = 28
+const SECONDARY_GAP_PX = 26
 const HTML_ESCAPES: Record<string, string> = {
   '&': '&amp;',
   '<': '&lt;',
@@ -121,11 +125,15 @@ function renderContentModules(content: EmailShellContent, copy: EmailShellCopy):
     renderModule(renderKicker(content.kicker), KICKER_GAP_PX),
     renderModule(renderTitle(content.title)),
     ...content.paragraphs.map((paragraph) => renderModule(renderParagraph(paragraph))),
-    renderModule(renderButton(content.action)),
-    ...(content.infoBox === null ? [] : [renderModule(renderInfoBox(content.infoBox))]),
-    renderModule(renderFallbackLink(content.action.url, copy.fallbackLabel)),
-    renderModule(renderRibbonDivider()),
-    ...(content.closingNote === null ? [] : [renderModule(renderMutedNote(content.closingNote))]),
+    renderModule(renderButton(content.action), BUTTON_GAP_PX),
+    ...(content.infoBox === null
+      ? []
+      : [renderModule(renderInfoBox(content.infoBox), SECONDARY_GAP_PX)]),
+    renderModule(renderFallbackLink(content.action.url, copy.fallbackLabel), SECONDARY_GAP_PX),
+    renderModule(renderRibbonDivider(), SECONDARY_GAP_PX),
+    ...(content.closingNote === null
+      ? []
+      : [renderModule(renderMutedNote(content.closingNote), SECONDARY_GAP_PX)]),
     renderModule(renderSignature(copy), 0),
   ].join('\n')
 }
