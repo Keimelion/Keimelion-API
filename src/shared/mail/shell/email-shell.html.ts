@@ -30,15 +30,18 @@ const HTML_ESCAPES: Record<string, string> = {
 // Layout rules (KEI-164 v2): tables, one column, inline styles; no flexbox, transform or SVG.
 // The <style> block only carries progressive enhancements (mobile sizes, dark mode).
 // Images are hosted PNGs with an empty alt: decorative, the email reads the same with images off
-// (the banner cell keeps its theme colour as a fallback).
+// (the banner cell keeps its theme colour as a fallback). The banner scales with `height: auto`:
+// a fixed height with `width: 100%` squashes the illustration on narrow screens. The width / height
+// attributes stay for Outlook and to reserve the space before the image loads.
+// The outer padding is small inline (it only shows below 616px wide); the media query also narrows
+// the card padding on phones, where clients support it.
 const HEAD_STYLES = `
 :root { color-scheme: light dark; supported-color-schemes: light dark; }
 body, table, td, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
 table { border-collapse: collapse; }
 @media (max-width: 480px) {
-  .k-outer { padding: 24px 12px !important; }
-  .k-content { padding: 32px 24px !important; }
-  .k-banner, .k-banner img { height: 82px !important; }
+  .k-outer { padding: 16px 8px !important; }
+  .k-content { padding: 32px 22px !important; }
   .k-title { font-size: 28px !important; }
 }
 @media (prefers-color-scheme: dark) {
@@ -60,7 +63,7 @@ ${renderHead(content.subject)}
 <body class="k-bg" style="margin: 0; padding: 0; background: ${EmailColors.BACKGROUND}">
 ${renderPreheader(content.preheader)}
 <table role="presentation" class="k-bg" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="${EmailColors.BACKGROUND}" style="background: ${EmailColors.BACKGROUND}">
-<tr><td class="k-outer" align="center" style="padding: 32px 24px; font-family: ${EmailFonts.SANS}; color: ${EmailColors.INK}">
+<tr><td class="k-outer" align="center" style="padding: 32px 8px; font-family: ${EmailFonts.SANS}; color: ${EmailColors.INK}">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: ${String(EMAIL_CONTENT_WIDTH_PX)}px">
 ${renderLogo()}
 ${renderCard(content, copy)}
@@ -110,7 +113,7 @@ function renderCard(content: EmailShellContent, copy: EmailShellCopy): string {
   const banner = EMAIL_BANNER_COLORS[content.bannerTheme]
   return `<tr><td class="k-card" bgcolor="${EmailColors.CARD}" style="background: ${EmailColors.CARD}; border-radius: 22px; overflow: hidden">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-<tr><td class="k-banner" height="${String(EMAIL_BANNER_HEIGHT_PX)}" bgcolor="${banner}" style="height: ${String(EMAIL_BANNER_HEIGHT_PX)}px; background: ${banner}; border-radius: 22px 22px 0 0; font-size: 0; line-height: 0; overflow: hidden"><img src="${escapeHtml(bannerImageUrl(content.bannerTheme))}" width="${String(EMAIL_CONTENT_WIDTH_PX)}" height="${String(EMAIL_BANNER_HEIGHT_PX)}" alt="" style="display: block; width: 100%; max-width: ${String(EMAIL_CONTENT_WIDTH_PX)}px; height: ${String(EMAIL_BANNER_HEIGHT_PX)}px; border: 0; outline: none; border-radius: 22px 22px 0 0"></td></tr>
+<tr><td class="k-banner" bgcolor="${banner}" style="background: ${banner}; border-radius: 22px 22px 0 0; font-size: 0; line-height: 0; overflow: hidden"><img src="${escapeHtml(bannerImageUrl(content.bannerTheme))}" width="${String(EMAIL_CONTENT_WIDTH_PX)}" height="${String(EMAIL_BANNER_HEIGHT_PX)}" alt="" style="display: block; width: 100%; max-width: ${String(EMAIL_CONTENT_WIDTH_PX)}px; height: auto; border: 0; outline: none; border-radius: 22px 22px 0 0"></td></tr>
 <tr><td class="k-content" style="padding: 40px 48px">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
 ${renderContentModules(content, copy)}

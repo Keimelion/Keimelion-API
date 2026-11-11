@@ -95,6 +95,15 @@ describe('renderEmail', () => {
     expect(html).toContain('src="http://localhost:3000/assets/mail/banner-launch.png"')
   })
 
+  it('scales the banner with its width so the illustration keeps its ratio on phones', () => {
+    const { html } = renderEmail(content)
+    const bannerImage = /<img src="[^"]*banner-waitlist\.png"[^>]*>/.exec(html)?.[0] ?? ''
+
+    expect(bannerImage).toContain('width: 100%')
+    expect(bannerImage).toContain('height: auto')
+    expect(html).not.toMatch(/\.k-banner[^{]*\{[^}]*height/)
+  })
+
   it('loads the logo mark and banner from the API email assets, as decorative images', () => {
     const { html } = renderEmail(content)
 
