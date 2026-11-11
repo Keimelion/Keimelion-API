@@ -1,7 +1,11 @@
-import { createHash } from 'crypto'
+import { createHash, createHmac } from 'crypto'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ErrorCode } from '@keimelion/sdk/enums'
-import { MAX_WAITLIST_EMAIL_LENGTH, waitlistCreateResponseSchema } from '@keimelion/sdk/schemas'
+import {
+  MAX_WAITLIST_EMAIL_LENGTH,
+  WAITLIST_TOKEN_LENGTH,
+  waitlistCreateResponseSchema,
+} from '@keimelion/sdk/schemas'
 import { db } from '../../db/client.js'
 import { sendMail } from '../../shared/mail/mail.sender.js'
 import { apiRequest } from '../../shared/test/api-request.js'
@@ -24,8 +28,10 @@ const FIFTEEN_MINUTES_MS = 15 * 60 * 1000
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000
 const TOKEN_FRAGMENT_REGEX = /#token=([\w-]+)/g
 const PENDING_CONFIRMATION_BODY = { status: 'pending_confirmation' }
+const JWT_SECRET = 'test-secret-key-that-is-at-least-32-chars-long'
 
 interface UpsertedValues {
+  id: string
   email: string
   locale: string
   consentGivenAt: Date
@@ -56,11 +62,30 @@ function sha256Hex(value: string): string {
   return createHash('sha256').update(value).digest('hex')
 }
 
+function expectedUnsubscribeToken(entryId: string): string {
+  return createHmac('sha256', JWT_SECRET)
+    .update(`waitlist-unsubscribe:${entryId}`)
+    .digest('base64url')
+}
+
 function mockUpsert(returnedRows: { id: string }[]): UpsertMock {
   const conflictSpy = vi.fn().mockReturnValueOnce({
     returning: vi.fn().mockResolvedValueOnce(returnedRows),
   })
   const valuesSpy = vi.fn().mockReturnValueOnce({ onConflictDoUpdate: conflictSpy })
+  vi.mocked(db.insert).mockReturnValueOnce({ values: valuesSpy } as never)
+  return { valuesSpy, conflictSpy }
+}
+
+// Insert branch: the row returned is the one built from the id the service generated.
+function mockUpsertReturningInsertedId(): UpsertMock {
+  const conflictSpy = vi.fn()
+  const valuesSpy = vi.fn((values: UpsertedValues) => {
+    conflictSpy.mockReturnValueOnce({
+      returning: vi.fn().mockResolvedValueOnce([{ id: values.id }]),
+    })
+    return { onConflictDoUpdate: conflictSpy }
+  })
   vi.mocked(db.insert).mockReturnValueOnce({ values: valuesSpy } as never)
   return { valuesSpy, conflictSpy }
 }
@@ -157,7 +182,7 @@ describe('POST /v1/public/waitlist', () => {
   })
 
   it('stores only sha256 hashes of the tokens sent in the email', async () => {
-    const { valuesSpy, conflictSpy } = mockUpsert([ENTRY_ROW])
+    const { valuesSpy, conflictSpy } = mockUpsertReturningInsertedId()
 
     await postJson(WAITLIST_PATH, VALID_BODY)
 
@@ -173,7 +198,7 @@ describe('POST /v1/public/waitlist', () => {
     expect(persisted).not.toContain(unsubscribeToken)
   })
 
-  it('issues 43-character base64url tokens', async () => {
+  it('issues base64url tokens of the length the SDK token schema accepts', async () => {
     mockUpsert([ENTRY_ROW])
 
     await postJson(WAITLIST_PATH, VALID_BODY)
@@ -181,8 +206,22 @@ describe('POST /v1/public/waitlist', () => {
     const tokens = extractLinkTokens(await waitForSentMail())
     expect(tokens).toHaveLength(2)
     tokens.forEach((token) => {
-      expect(token).toMatch(/^[\w-]{43}$/)
+      expect(token).toMatch(/^[\w-]+$/)
+      expect(token).toHaveLength(WAITLIST_TOKEN_LENGTH)
     })
+  })
+
+  it('keeps the unsubscribe link of earlier emails valid when the confirmation is resent', async () => {
+    const { valuesSpy, conflictSpy } = mockUpsert([ENTRY_ROW])
+
+    await postJson(WAITLIST_PATH, VALID_BODY)
+
+    const [, unsubscribeToken] = extractLinkTokens(await waitForSentMail())
+    expect(unsubscribeToken).toBe(expectedUnsubscribeToken(ENTRY_ROW.id))
+    const values = valuesSpy.mock.calls[0]?.[0] as UpsertedValues
+    expect(values.id).not.toBe(ENTRY_ROW.id)
+    const { set } = conflictSpy.mock.calls[0]?.[0] as { set: object }
+    expect(set).not.toHaveProperty('unsubscribeTokenHash')
   })
 
   it('sets the link validity and refreshes the tokens of an unconfirmed entry outside the cooldown', async () => {

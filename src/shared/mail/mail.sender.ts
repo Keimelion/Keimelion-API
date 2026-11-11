@@ -1,6 +1,7 @@
 import { env } from '../../config/env.js'
 import { MailProviderNames } from '../enums/mail-provider.js'
 import { NodeEnvs } from '../enums/node-env.js'
+import { readErrorName } from '../utils/error.js'
 import { logger } from '../utils/logger.js'
 import { createLogMailProvider } from './adapters/log.adapter.js'
 import { EMAIL_CONTACT_ADDRESS } from './mail.constants.js'
@@ -115,9 +116,8 @@ function toThrownErrorFailure(error: unknown, signal: AbortSignal): SendMailResu
     return { isSuccess: false, reason: MailFailureReasons.TIMEOUT }
   }
 
-  const errorName = error instanceof Error ? error.name : typeof error
   logger.error(
-    { errorName, errorCode: readErrorCauseCode(error) },
+    { errorName: readErrorName(error), errorCode: readErrorCauseCode(error) },
     'Mail provider failed with an unexpected error',
   )
   return { isSuccess: false, reason: MailFailureReasons.UNEXPECTED_ERROR }

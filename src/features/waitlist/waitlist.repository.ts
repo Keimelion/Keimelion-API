@@ -6,18 +6,21 @@ import { waitlistEntries } from '../../db/entities/waitlist/waitlist.schema.js'
 import { hashSha256Hex } from '../../shared/utils/hash.js'
 
 export interface PendingWaitlistEntryInput {
+  newEntryId: string
   email: string
   locale: Locale
   confirmationToken: string
-  unsubscribeToken: string
+  newEntryUnsubscribeToken: string
   requestedAt: Date
   confirmationExpiresAt: Date
   resendAllowedBefore: Date
 }
 
 // One atomic statement covers every signup branch: a new address is inserted, an unconfirmed one
-// gets fresh tokens unless a confirmation was sent after `resendAllowedBefore`, a confirmed one is
-// left untouched. A returned id means a confirmation email must be sent.
+// gets a fresh confirmation token unless a confirmation was sent after `resendAllowedBefore`, a
+// confirmed one is left untouched. A returned id means a confirmation email must be sent.
+// The unsubscribe token is only written on insert: it is derived from the entry id, so every
+// email ever sent for the entry carries the same, still valid, unsubscribe link.
 export async function upsertPendingWaitlistEntry(
   input: PendingWaitlistEntryInput,
 ): Promise<string | null> {
@@ -26,11 +29,16 @@ export async function upsertPendingWaitlistEntry(
     confirmationTokenHash: hashSha256Hex(input.confirmationToken),
     confirmationTokenExpiresAt: input.confirmationExpiresAt,
     confirmationSentAt: input.requestedAt,
-    unsubscribeTokenHash: hashSha256Hex(input.unsubscribeToken),
   }
   const [entry] = await db
     .insert(waitlistEntries)
-    .values({ email: input.email, locale: input.locale, ...tokenColumns })
+    .values({
+      id: input.newEntryId,
+      email: input.email,
+      locale: input.locale,
+      unsubscribeTokenHash: hashSha256Hex(input.newEntryUnsubscribeToken),
+      ...tokenColumns,
+    })
     .onConflictDoUpdate({
       target: [waitlistEntries.email, waitlistEntries.locale],
       set: tokenColumns,
@@ -82,6 +90,7 @@ export async function deleteWaitlistEntryByUnsubscribeToken(token: string): Prom
     .where(eq(waitlistEntries.unsubscribeTokenHash, hashSha256Hex(token)))
 }
 
+// Raw `sql` on purpose: drizzle types and() / or() as `SQL | undefined`, setWhere requires `SQL`.
 function isUnconfirmedAndResendAllowed(resendAllowedBefore: Date): SQL {
   const { confirmedAt, confirmationSentAt } = waitlistEntries
   return sql`${isNull(confirmedAt)} AND (${isNull(confirmationSentAt)} OR ${lt(confirmationSentAt, resendAllowedBefore)})`
