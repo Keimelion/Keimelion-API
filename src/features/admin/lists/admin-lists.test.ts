@@ -4,6 +4,12 @@ import { apiRequest } from '../../../shared/test/api-request.js'
 import { generateTestToken, makeAccessTokenEntry } from '../../../shared/test/auth.js'
 import { makeAdminUser } from '../../../shared/test/fixtures/users.js'
 import { logger } from '../../../shared/utils/logger.js'
+import {
+  adminListsGetResponseSchema,
+  adminListsListResponseSchema,
+  adminListsRestoreResponseSchema,
+  adminListsUpdateResponseSchema,
+} from '@keimelion/sdk/schemas'
 
 vi.mock('../../../shared/utils/logger.js', () => ({
   logger: {
@@ -43,6 +49,7 @@ const LIST_ROW = {
   id: '00000000-0000-0000-0000-000000000010',
   occasionTypeId: null,
   title: 'Birthday wishlist',
+  slug: 'birthday-list-abc123',
   description: 'Things I want',
   listStatus: 'active' as const,
   deletedAt: null,
@@ -85,17 +92,17 @@ function mockFindListByIdWithOwner(row: unknown, owner: unknown): void {
   const rowOut =
     row === undefined || row === null
       ? undefined
-      : { ...(row), collaborators: buildCollaborators(owner), listTags: [] }
+      : { ...(row), listUsers: buildCollaborators(owner), listTags: [] }
   vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(rowOut as never)
 }
 
 function rowWithOwner(row: object, owner: unknown): object {
-  return { ...row, collaborators: buildCollaborators(owner), listTags: [] }
+  return { ...row, listUsers: buildCollaborators(owner), listTags: [] }
 }
 
-function buildCollaborators(owner: unknown): { userId: string; user: unknown }[] {
+function buildCollaborators(owner: unknown): { userId: string; role: 'owner'; user: unknown }[] {
   if (owner === null) return []
-  return [{ userId: (owner as { id: string }).id, user: owner }]
+  return [{ userId: (owner as { id: string }).id, role: 'owner', user: owner }]
 }
 
 function mockCountChain(total: number): void {
@@ -158,6 +165,7 @@ describe('GET /v1/admin/lists', () => {
       items: { id: string; owner: { id: string } | null }[]
       pagination: { total: number }
     }
+    adminListsListResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.items).toHaveLength(1)
     expect(body.pagination.total).toBe(1)
@@ -476,6 +484,7 @@ describe('GET /v1/admin/lists/:id', () => {
     const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}`, { token })
 
     const body = await response.json() as { list: { title: string; owner: { id: string } } }
+    adminListsGetResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.list.title).toBe(LIST_ROW.title)
     expect(body.list.owner.id).toBe(OWNER_USER.id)
@@ -607,6 +616,7 @@ describe('PATCH /v1/admin/lists/:id', () => {
     })
 
     const body = await response.json() as { list: { title: string } }
+    adminListsUpdateResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.list.title).toBe('Updated title')
   })
@@ -796,7 +806,7 @@ describe('PATCH /v1/admin/lists/:id', () => {
     vi.mocked(db.query.tags.findMany).mockResolvedValueOnce([TAG_GAMING_ROW] as never)
     vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce({
       ...LIST_ROW,
-      collaborators: [{ userId: OWNER_USER.id, user: OWNER_USER }],
+      listUsers: [{ userId: OWNER_USER.id, role: "owner" as const, user: OWNER_USER }],
       listTags: [listTagLink(TAG_GAMING_ROW)],
     } as never)
 
@@ -937,6 +947,7 @@ describe('POST /v1/admin/lists/:id/restore', () => {
     })
 
     const body = await response.json() as { list: { deletedAt: null } }
+    adminListsRestoreResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.list.deletedAt).toBeNull()
   })

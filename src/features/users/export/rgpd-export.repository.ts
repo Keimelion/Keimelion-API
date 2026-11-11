@@ -1,28 +1,35 @@
-import { and, desc, eq, inArray } from 'drizzle-orm'
+import { and, desc, eq, inArray, or, sql } from 'drizzle-orm'
 import { db } from '../../../db/client.js'
 import { feedback } from '../../../db/entities/feedback/feedback.schema.js'
 import { images } from '../../../db/entities/images/images.schema.js'
 import { items } from '../../../db/entities/items/items.schema.js'
 import { itemSources } from '../../../db/entities/item-sources/item-sources.schema.js'
-import { listCollaborators } from '../../../db/entities/list-collaborators/list-collaborators.schema.js'
+import { listUsers } from '../../../db/entities/list-users/list-users.schema.js'
+import { listInvites } from '../../../db/entities/list-invites/list-invites.schema.js'
 import { listItems } from '../../../db/entities/list-items/list-items.schema.js'
 import { listTags } from '../../../db/entities/list-tags/list-tags.schema.js'
 import { lists } from '../../../db/entities/lists/lists.schema.js'
 import { reservations } from '../../../db/entities/reservations/reservations.schema.js'
+import { reports } from '../../../db/entities/reports/reports.schema.js'
 import { tags } from '../../../db/entities/tags/tags.schema.js'
-import { CollabRoles, CONTRIBUTOR_ROLE_VALUES } from '../../../shared/enums/collab-role.js'
+import { users } from '../../../db/entities/users/users.schema.js'
+import { CONTRIBUTOR_ROLE_VALUES, ListUserRoles } from '@keimelion/sdk/enums'
 import type { Feedback } from '../../../db/entities/feedback/feedback.schema.js'
 import type { Image } from '../../../db/entities/images/images.schema.js'
-import type { Item } from '../../../db/entities/items/items.schema.js'
+import type { ItemRowWithImage } from '../../../shared/types/item.js'
 import type { ItemSource } from '../../../db/entities/item-sources/item-sources.schema.js'
+import type { ListUser } from '../../../db/entities/list-users/list-users.schema.js'
+import type { ListInvite } from '../../../db/entities/list-invites/list-invites.schema.js'
 import type { ListItem } from '../../../db/entities/list-items/list-items.schema.js'
 import type { ListTag } from '../../../db/entities/list-tags/list-tags.schema.js'
 import type { List } from '../../../db/entities/lists/lists.schema.js'
 import type { Tag } from '../../../db/entities/tags/tags.schema.js'
+import type { Report } from '../../../db/entities/reports/reports.schema.js'
 
-export async function findItemsByCreator(userId: string): Promise<Item[]> {
+export async function findItemsByCreator(userId: string): Promise<ItemRowWithImage[]> {
   return db.query.items.findMany({
     where: eq(items.createdByUserId, userId),
+    with: { image: true },
   })
 }
 
@@ -38,24 +45,27 @@ export async function findItemSourcesByCreator(userId: string): Promise<ItemSour
 
 export async function findListItemsForContributor(userId: string): Promise<ListItem[]> {
   const contributorListIds = db
-    .select({ id: listCollaborators.listId })
-    .from(listCollaborators)
+    .select({ id: listUsers.listId })
+    .from(listUsers)
     .where(and(
-      eq(listCollaborators.userId, userId),
-      inArray(listCollaborators.collabRole, [...CONTRIBUTOR_ROLE_VALUES]),
+      eq(listUsers.userId, userId),
+      inArray(listUsers.role, [...CONTRIBUTOR_ROLE_VALUES]),
     ))
   return db.query.listItems.findMany({
     where: inArray(listItems.listId, contributorListIds),
   })
 }
 
+function ownedListIds(userId: string) {
+  return db
+    .select({ id: listUsers.listId })
+    .from(listUsers)
+    .where(and(eq(listUsers.userId, userId), eq(listUsers.role, ListUserRoles.OWNER)))
+}
+
 export async function findListsOwnedByForExport(userId: string): Promise<List[]> {
-  const ownedListIds = db
-    .select({ id: listCollaborators.listId })
-    .from(listCollaborators)
-    .where(and(eq(listCollaborators.userId, userId), eq(listCollaborators.collabRole, CollabRoles.OWNER)))
   return db.query.lists.findMany({
-    where: inArray(lists.id, ownedListIds),
+    where: inArray(lists.id, ownedListIds(userId)),
   })
 }
 
@@ -78,12 +88,32 @@ export async function findImagesByUploaderForExport(userId: string): Promise<Ima
 }
 
 export async function findListTagsForOwner(userId: string): Promise<ListTag[]> {
-  const ownedListIds = db
-    .select({ id: listCollaborators.listId })
-    .from(listCollaborators)
-    .where(and(eq(listCollaborators.userId, userId), eq(listCollaborators.collabRole, CollabRoles.OWNER)))
   return db.query.listTags.findMany({
-    where: inArray(listTags.listId, ownedListIds),
+    where: inArray(listTags.listId, ownedListIds(userId)),
+  })
+}
+
+// Memberships on the user's own lists + the user's memberships on other people's lists.
+export async function findListUsersForExport(userId: string): Promise<ListUser[]> {
+  return db.query.listUsers.findMany({
+    where: or(inArray(listUsers.listId, ownedListIds(userId)), eq(listUsers.userId, userId)),
+  })
+}
+
+// Invites sent on the user's lists + invites the user received (by email) or accepted.
+export async function findListInvitesForExport(userId: string): Promise<ListInvite[]> {
+  // Built with the query builder (not a raw sql template): the relational API would rewrite
+  // `users.*` columns of a raw template to the outer `listInvites` alias.
+  const userEmail = db
+    .select({ email: sql<string>`lower(${users.email})` })
+    .from(users)
+    .where(eq(users.id, userId))
+  return db.query.listInvites.findMany({
+    where: or(
+      inArray(listInvites.listId, ownedListIds(userId)),
+      eq(listInvites.acceptedByUserId, userId),
+      inArray(listInvites.invitedEmail, userEmail),
+    ),
   })
 }
 
@@ -118,4 +148,27 @@ export async function findReservationsForExport(userId: string): Promise<Reserva
     quantityBooked: row.quantityBooked,
     createdAt: row.createdAt,
   }))
+}
+
+export type ReportExportSourceRow = Pick<
+  Report,
+  'id' | 'targetType' | 'targetId' | 'reason' | 'description' | 'reportStatus' | 'createdAt'
+>
+
+// Only reports filed by the user: reports about the user belong to the reporters, and the
+// moderation fields (snapshot, admin note, reviewer) are never selected.
+export async function findReportsByUser(userId: string): Promise<ReportExportSourceRow[]> {
+  return db.query.reports.findMany({
+    where: eq(reports.userId, userId),
+    columns: {
+      id: true,
+      targetType: true,
+      targetId: true,
+      reason: true,
+      description: true,
+      reportStatus: true,
+      createdAt: true,
+    },
+    orderBy: desc(reports.createdAt),
+  })
 }

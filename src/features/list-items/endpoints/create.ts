@@ -1,27 +1,15 @@
-import { z } from 'zod'
+import type { ListItemsCreateRequestParsed } from '@keimelion/sdk/schemas'
+import { listItemsCreateRequestSchema } from '@keimelion/sdk/schemas'
 import type { Context } from 'hono'
 import { authMiddleware } from '../../../shared/middlewares/auth.js'
 import { listContributorMiddleware } from '../../../shared/middlewares/list-access.middleware.js'
 import { RATE_LIMITS } from '../../../shared/utils/rate-limiter.js'
-import { ErrorCode } from '../../../shared/enums/error-code.js'
+import { ErrorCode } from '@keimelion/sdk/enums'
 import { jsonResult, sendError } from '../../../shared/utils/response.js'
-import {
-  creatorNoteSchema,
-  quantityDesiredSchema,
-} from '../../../db/entities/list-items/list-items.schemas.js'
 import type { AppVariables, FeatureRouter } from '../../../shared/types/app.js'
 import { createListItem } from '../list-items.service.js'
 
 type AppContext = Context<{ Variables: AppVariables }>
-
-const createListItemSchema = z
-  .object({
-    listId: z.guid(),
-    itemId: z.guid(),
-    quantityDesired: quantityDesiredSchema.optional(),
-    creatorNote: creatorNoteSchema.optional(),
-  })
-  .strict()
 
 export function mountCreateListItem(router: FeatureRouter): void {
   router.post(
@@ -51,10 +39,8 @@ export function mountCreateListItem(router: FeatureRouter): void {
   )
 }
 
-type ParsedCreateListItem = z.infer<typeof createListItemSchema>
-
 interface CreateListItemParseSuccess {
-  data: ParsedCreateListItem
+  data: ListItemsCreateRequestParsed
 }
 
 interface CreateListItemParseError {
@@ -71,7 +57,7 @@ async function parseCreateListItemBody(
   } catch {
     return { errorCode: ErrorCode.BAD_REQUEST }
   }
-  const result = createListItemSchema.safeParse(body)
+  const result = listItemsCreateRequestSchema.safeParse(body)
   if (!result.success) {
     return {
       errorCode: ErrorCode.UNPROCESSABLE_ENTITY,

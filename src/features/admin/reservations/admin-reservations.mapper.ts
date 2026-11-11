@@ -1,20 +1,18 @@
 import { toReservationDetail } from '../../../shared/types/reservation.js'
 import { toUserDetail } from '../../../shared/types/user.js'
-import type { ReservationDetail, ReservationRowHydrated } from '../../../shared/types/reservation.js'
-import type { User } from '../../../db/entities/users/users.schema.js'
-import type { UserDetail } from '../../../shared/types/user.js'
+import type { ReservationRowHydrated } from '../../../shared/types/reservation.js'
+import type { UserRowWithAvatar } from '../../../shared/types/user.js'
+import type { AdminReservationDetailParsed } from '@keimelion/sdk/schemas'
 
 export interface AdminReservationRow extends ReservationRowHydrated {
-  user: User
+  user: UserRowWithAvatar | null
 }
 
-export interface AdminReservation extends ReservationDetail {
-  user: UserDetail
-}
+export type AdminReservation = AdminReservationDetailParsed
 
 export function toAdminReservation(row: AdminReservationRow): AdminReservation {
   return {
     ...toReservationDetail(row),
-    user: toUserDetail(row.user),
+    user: row.user ? toUserDetail(row.user) : null,
   }
 }

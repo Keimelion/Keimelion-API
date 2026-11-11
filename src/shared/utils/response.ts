@@ -1,32 +1,32 @@
 import type { Context } from 'hono'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
-import type { ErrorCode } from '../enums/error-code.js'
-import { HttpStatus } from '../enums/http.js'
-import type { ApiError } from '../types/api.js'
+import { HttpStatus } from '@keimelion/sdk/enums'
+import type { ErrorCode } from '@keimelion/sdk/enums'
+import type { ApiErrorBodyParsed } from '@keimelion/sdk/schemas'
+import {
+  DUPLICATE_SHOP_IN_SOURCES_MESSAGE,
+  SLUG_GENERATION_EXHAUSTED_MESSAGE,
+  CATEGORY_NOT_FOUND_MESSAGE,
+  CATEGORY_MAX_DEPTH_EXCEEDED_MESSAGE,
+  CATEGORY_CYCLE_DETECTED_MESSAGE,
+  TAG_NOT_FOUND_MESSAGE,
+  TAG_INVALID_NAME_MESSAGE,
+  FEEDBACK_NOT_FOUND_MESSAGE,
+  COLLAB_SELF_INVITE_MESSAGE,
+  COLLAB_ALREADY_MEMBER_MESSAGE,
+  COLLAB_INVITE_NOT_FOUND_MESSAGE,
+  COLLAB_INVITE_EXPIRED_MESSAGE,
+  COLLAB_INVITE_ALREADY_RESOLVED_MESSAGE,
+  COLLAB_EMAIL_MISMATCH_MESSAGE,
+  RESERVATION_TOKEN_INVALID_MESSAGE,
+  RESERVATION_REQUIRES_RESERVER_NAME_MESSAGE,
+  RESERVATION_INCONSISTENT_INTENT_MESSAGE,
+  REPORT_TARGET_NOT_FOUND_MESSAGE,
+  REPORT_NOT_FOUND_MESSAGE,
+  WAITLIST_HONEYPOT_TRIGGERED_MESSAGE,
+  WAITLIST_CONFIRMATION_TOKEN_INVALID_MESSAGE,
+} from '@keimelion/sdk/schemas'
 import type { ServiceResult } from '../types/service.js'
-
-export const DUPLICATE_SHOP_IN_SOURCES_MESSAGE =
-  'This shop is already used by another source of this item.'
-
-export const SLUG_GENERATION_EXHAUSTED_MESSAGE =
-  'Could not generate a unique slug, please retry with a different title.'
-
-export const MAX_CATEGORY_DEPTH = 3
-
-export const CATEGORY_NOT_FOUND_MESSAGE = 'Category not found'
-
-export const CATEGORY_MAX_DEPTH_EXCEEDED_MESSAGE =
-  `Category depth cannot exceed ${String(MAX_CATEGORY_DEPTH)} levels`
-
-export const CATEGORY_CYCLE_DETECTED_MESSAGE =
-  'Category parent cannot create a cycle in the hierarchy'
-
-export const TAG_NOT_FOUND_MESSAGE = 'Tag not found'
-
-export const TAG_INVALID_NAME_MESSAGE =
-  'Tag name must contain at least one letter or digit after normalization'
-
-export const FEEDBACK_NOT_FOUND_MESSAGE = 'Feedback not found'
 
 export const errorMap: Record<ErrorCode, { status: ContentfulStatusCode; message: string }> = {
   BAD_REQUEST:             { status: HttpStatus.BAD_REQUEST,           message: 'Bad request' },
@@ -59,16 +59,30 @@ export const errorMap: Record<ErrorCode, { status: ContentfulStatusCode; message
   INVALID_IMAGE:           { status: HttpStatus.BAD_REQUEST,           message: 'The uploaded image is empty or could not be decoded' },
   INVALID_IMAGE_TYPE:      { status: HttpStatus.BAD_REQUEST,           message: 'The uploaded image must be a JPEG, PNG or WEBP file' },
   PAYLOAD_TOO_LARGE:       { status: HttpStatus.PAYLOAD_TOO_LARGE,     message: 'The uploaded file exceeds the maximum allowed size' },
+  IMAGE_AND_CLEAR_CONFLICT: { status: HttpStatus.UNPROCESSABLE_ENTITY,  message: 'An image cannot be uploaded and cleared in the same request' },
+  COLLAB_SELF_INVITE:            { status: HttpStatus.UNPROCESSABLE_ENTITY, message: COLLAB_SELF_INVITE_MESSAGE },
+  COLLAB_ALREADY_MEMBER:         { status: HttpStatus.CONFLICT,            message: COLLAB_ALREADY_MEMBER_MESSAGE },
+  COLLAB_INVITE_NOT_FOUND:       { status: HttpStatus.NOT_FOUND,           message: COLLAB_INVITE_NOT_FOUND_MESSAGE },
+  COLLAB_INVITE_EXPIRED:         { status: HttpStatus.GONE,                message: COLLAB_INVITE_EXPIRED_MESSAGE },
+  COLLAB_INVITE_ALREADY_RESOLVED: { status: HttpStatus.CONFLICT,           message: COLLAB_INVITE_ALREADY_RESOLVED_MESSAGE },
+  COLLAB_EMAIL_MISMATCH:         { status: HttpStatus.FORBIDDEN,           message: COLLAB_EMAIL_MISMATCH_MESSAGE },
+  RESERVATION_TOKEN_INVALID:          { status: HttpStatus.FORBIDDEN,            message: RESERVATION_TOKEN_INVALID_MESSAGE },
+  RESERVATION_REQUIRES_RESERVER_NAME: { status: HttpStatus.UNPROCESSABLE_ENTITY, message: RESERVATION_REQUIRES_RESERVER_NAME_MESSAGE },
+  RESERVATION_INCONSISTENT_INTENT:    { status: HttpStatus.UNPROCESSABLE_ENTITY, message: RESERVATION_INCONSISTENT_INTENT_MESSAGE },
+  REPORT_TARGET_NOT_FOUND: { status: HttpStatus.NOT_FOUND,             message: REPORT_TARGET_NOT_FOUND_MESSAGE },
+  REPORT_NOT_FOUND:        { status: HttpStatus.NOT_FOUND,             message: REPORT_NOT_FOUND_MESSAGE },
+  WAITLIST_HONEYPOT_TRIGGERED: { status: HttpStatus.BAD_REQUEST,       message: WAITLIST_HONEYPOT_TRIGGERED_MESSAGE },
+  WAITLIST_CONFIRMATION_TOKEN_INVALID: { status: HttpStatus.BAD_REQUEST, message: WAITLIST_CONFIRMATION_TOKEN_INVALID_MESSAGE },
   INTERNAL_ERROR:          { status: HttpStatus.INTERNAL_SERVER_ERROR, message: 'An unexpected error occurred' },
 }
 
 export function sendError(code: ErrorCode, metadata: Record<string, unknown> = {}): Response {
   const { status, message } = errorMap[code]
-  const body: ApiError = { message, code, metadata }
+  const body: ApiErrorBodyParsed = { message, code, metadata }
   return Response.json(body, { status })
 }
 
-export function serviceError(code: ErrorCode, metadata: Record<string, unknown> = {}): { data: ApiError; httpStatus: number } {
+export function serviceError(code: ErrorCode, metadata: Record<string, unknown> = {}): { data: ApiErrorBodyParsed; httpStatus: number } {
   const { status, message } = errorMap[code]
   return { data: { message, code, metadata }, httpStatus: status }
 }

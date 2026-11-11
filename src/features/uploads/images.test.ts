@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { Readable } from 'stream'
-import { ErrorCode } from '../../shared/enums/error-code.js'
+import { ErrorCode } from '@keimelion/sdk/enums'
 
 const mockToFile = vi.fn().mockResolvedValue(undefined)
 const mockWebp = vi.fn(() => ({ toFile: mockToFile }))
@@ -14,12 +14,14 @@ const mockMkdir = vi.fn().mockResolvedValue(undefined)
 const mockAccess = vi.fn().mockRejectedValue(new Error('ENOENT'))
 
 const mockInsertImage = vi.fn()
+const mockLockImageHash = vi.fn()
 
 vi.mock('sharp', () => ({ default: mockSharp }))
 vi.mock('file-type', () => ({ fileTypeFromBuffer: mockFileType }))
 vi.mock('fs/promises', () => ({ mkdir: mockMkdir, access: mockAccess }))
 vi.mock('../../db/entities/images/images.repository.js', () => ({
   insertImage: mockInsertImage,
+  lockImageHash: mockLockImageHash,
 }))
 
 const INSERTED_IMAGE = {
@@ -55,6 +57,8 @@ describe('processImage', () => {
     const { processImage } = await import('./image.pipeline.js')
     const result = await processImage(Buffer.from([1, 2, 3, 4]), USER_ID)
     expect('image' in result).toBe(true)
+    expect(mockLockImageHash).toHaveBeenCalledExactlyOnceWith(expect.stringMatching(/^[0-9a-f]{64}$/), expect.anything())
+    expect(mockLockImageHash.mock.invocationCallOrder[0]).toBeLessThan(mockToFile.mock.invocationCallOrder[0] ?? 0)
     if ('image' in result) {
       expect(result.image.id).toBe(INSERTED_IMAGE.id)
       expect(result.image.mime).toBe('image/png')
@@ -112,5 +116,33 @@ describe('processImage', () => {
     const result = await processImage(Buffer.from([1, 2, 3, 4]), USER_ID)
     expect('image' in result).toBe(true)
     expect(mockToFile).not.toHaveBeenCalled()
+  })
+})
+
+describe('multipartJsonSchema', () => {
+  it('decodes a JSON-encoded string and validates it against the inner schema', async () => {
+    const { multipartJsonSchema } = await import('./multipart.js')
+    const { z } = await import('zod')
+    const schema = multipartJsonSchema(z.array(z.string()))
+
+    expect(schema.parse('["a","b,c"]')).toEqual(['a', 'b,c'])
+  })
+
+  it('reports invalid JSON as a Zod issue instead of throwing', async () => {
+    const { multipartJsonSchema } = await import('./multipart.js')
+    const { z } = await import('zod')
+    const result = multipartJsonSchema(z.array(z.string())).safeParse('[not json')
+
+    expect(result.success).toBe(false)
+    expect(result.error?.issues[0]?.message).toBe('Expected a JSON-encoded value')
+  })
+
+  it('reports inner schema mismatches after decoding', async () => {
+    const { multipartJsonSchema } = await import('./multipart.js')
+    const { z } = await import('zod')
+    const result = multipartJsonSchema(z.array(z.string())).safeParse('{"a":1}')
+
+    expect(result.success).toBe(false)
+    expect(result.error?.issues[0]?.code).toBe('invalid_type')
   })
 })

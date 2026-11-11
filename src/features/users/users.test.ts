@@ -1,8 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { db } from '../../db/client.js'
-import { apiRequest } from '../../shared/test/api-request.js'
+import { env } from '../../config/env.js'
+import { apiMultipartRequest, apiRequest } from '../../shared/test/api-request.js'
 import { generateTestToken, makeAccessTokenEntry } from '../../shared/test/auth.js'
 import { EXPORT_ENTITY_REGISTRY } from './export/export-entities.js'
+import { PgDialect } from 'drizzle-orm/pg-core'
+import type { SQL } from 'drizzle-orm'
+import {
+  messageResponseSchema,
+  usersGetProfileResponseSchema,
+  usersListReservationsResponseSchema,
+  usersUpdateProfileResponseSchema,
+} from '@keimelion/sdk/schemas'
 
 const SAFE_USER = {
   id: '00000000-0000-0000-0000-000000000001',
@@ -11,7 +20,6 @@ const SAFE_USER = {
   passwordHash: 'hashed',
   authProvider: 'email' as const,
   role: 'user' as const,
-  avatarUrl: null,
   avatarImageId: null,
   isCgvAccepted: true,
   cgvAcceptedAt: new Date('2024-01-01'),
@@ -31,6 +39,7 @@ const SAFE_USER = {
 }
 
 const ACCESS_TOKEN_ENTRY = makeAccessTokenEntry(SAFE_USER.id)
+const UPLOAD_BODY_LIMIT_OVERFLOW_BYTES = 64 * 1024 + 1
 
 describe('GET /v1/users/me', () => {
   beforeEach(() => {
@@ -46,6 +55,7 @@ describe('GET /v1/users/me', () => {
     const response = await apiRequest('/v1/users/me', { token })
 
     const body = await response.json() as { user: { email: string } }
+    usersGetProfileResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.user.email).toBe('user@example.com')
   })
@@ -120,18 +130,59 @@ describe('PATCH /v1/users/me', () => {
     })
 
     const body = await response.json() as { user: { username: string } }
+    usersUpdateProfileResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.user.username).toBe('newusername')
   })
 
-  it('returns 422 when avatar_url is not a valid URL', async () => {
+  it('keeps returning the current avatar when the avatar is not changed', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    const avatarImage = {
+      id: '00000000-0000-0000-0000-00000000e001',
+      hash: 'e'.repeat(64),
+      fileKey: 'ee/ee/' + 'e'.repeat(64),
+      mime: 'image/png',
+      sizeBytes: 4,
+      width: 640,
+      height: 480,
+      uploadedBy: SAFE_USER.id,
+      createdAt: new Date('2024-05-01'),
+      updatedAt: new Date('2024-05-01'),
+    }
+    const userWithAvatar = { ...SAFE_USER, avatarImageId: avatarImage.id }
+
+    vi.mocked(db.query.users.findFirst)
+      .mockResolvedValueOnce(SAFE_USER)
+      .mockResolvedValueOnce({ ...userWithAvatar, avatarImage } as never)
+    vi.mocked(db.update).mockReturnValueOnce({
+      set: vi.fn().mockReturnValueOnce({
+        where: vi.fn().mockReturnValueOnce({
+          returning: vi.fn().mockResolvedValueOnce([{ ...userWithAvatar, username: 'newusername' }]),
+        }),
+      }),
+    } as never)
+
+    const response = await apiRequest('/v1/users/me', {
+      method: 'PATCH',
+      token,
+      body: { username: 'newusername' },
+    })
+
+    const body = await response.json() as { user: { avatar: { id: string; urls: { md: string } } | null } }
+    expect(response.status).toBe(200)
+    expect(body.user.avatar?.id).toBe(avatarImage.id)
+    expect(body.user.avatar?.urls.md).toContain('-800.webp')
+    expect(vi.mocked(db.delete)).not.toHaveBeenCalled()
+  })
+
+  it('returns 422 when avatarUrl is sent (avatars are upload-only)', async () => {
     const token = await generateTestToken(SAFE_USER.id)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
 
     const response = await apiRequest('/v1/users/me', {
       method: 'PATCH',
       token,
-      body: { avatarUrl: 'not-a-url' },
+      body: { avatarUrl: 'https://example.com/avatar.png' },
     })
 
     expect(response.status).toBe(422)
@@ -246,6 +297,7 @@ describe('POST /v1/users/me/change-password', () => {
     })
 
     const body = await response.json() as { message: string }
+    messageResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.message).toBe('Password changed successfully')
     expect(vi.mocked(db.transaction)).toHaveBeenCalledOnce()
@@ -365,6 +417,7 @@ describe('DELETE /v1/users/me', () => {
     const response = await apiRequest('/v1/users/me', { method: 'DELETE', token })
 
     const body = await response.json() as { message: string }
+    messageResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.message).toBe('Account deleted successfully')
     expect(vi.mocked(db.transaction)).toHaveBeenCalledOnce()
@@ -387,7 +440,7 @@ describe('DELETE /v1/users/me', () => {
 
     expect(setArgs.email).toMatch(/^deleted_.*@deleted\.keimelion\.fr$/)
     expect(setArgs.username).toBeNull()
-    expect(setArgs.avatarUrl).toBeNull()
+    expect(setArgs.avatarImageId).toBeNull()
     expect(setArgs.passwordHash).toBeNull()
     expect(setArgs.deletedAt).toBeInstanceOf(Date)
 
@@ -532,7 +585,6 @@ describe('GET /v1/users/me/export', () => {
       id: '00000000-0000-0000-0000-000000000020',
       name: 'Test Item',
       description: null,
-      imageUrl: null,
       imageId: null,
       createdByUserId: SAFE_USER.id,
       createdAt: new Date('2024-01-01'),
@@ -542,7 +594,7 @@ describe('GET /v1/users/me/export', () => {
     vi.mocked(db.query.items.findMany).mockResolvedValueOnce([mockItem] as never)
     vi.mocked(db.query.items.findMany).mockResolvedValueOnce([mockItem] as never)
     vi.mocked(db.query.itemSources.findMany).mockResolvedValueOnce([])
-    vi.mocked(db.query.listCollaborators.findMany).mockResolvedValueOnce([])
+    vi.mocked(db.query.listUsers.findMany).mockResolvedValueOnce([])
 
     const response = await apiRequest('/v1/users/me/export?format=json', { token })
 
@@ -562,7 +614,7 @@ describe('GET /v1/users/me/export', () => {
     vi.mocked(db.query.items.findMany).mockResolvedValueOnce([])
     vi.mocked(db.query.items.findMany).mockResolvedValueOnce([])
     vi.mocked(db.query.itemSources.findMany).mockResolvedValueOnce([])
-    vi.mocked(db.query.listCollaborators.findMany).mockResolvedValueOnce([])
+    vi.mocked(db.query.listUsers.findMany).mockResolvedValueOnce([])
 
     const response = await apiRequest('/v1/users/me/export?format=json', { token })
 
@@ -627,7 +679,7 @@ describe('GET /v1/users/me/export', () => {
     }
     const deletedList = { ...activeList, id: '00000000-0000-0000-0000-0000000000a2', slug: 'deleted-a2', deletedAt: new Date('2024-06-01') }
 
-    vi.mocked(db.query.listCollaborators.findMany).mockResolvedValueOnce([
+    vi.mocked(db.query.listUsers.findMany).mockResolvedValueOnce([
       { listId: activeList.id },
       { listId: deletedList.id },
     ] as never)
@@ -645,7 +697,7 @@ describe('GET /v1/users/me/export', () => {
     const listsDescriptor = EXPORT_ENTITY_REGISTRY.find(
       (descriptor) => descriptor.filename === 'lists.csv',
     )
-    vi.mocked(db.query.listCollaborators.findMany).mockResolvedValueOnce([] as never)
+    vi.mocked(db.query.listUsers.findMany).mockResolvedValueOnce([] as never)
 
     expect(listsDescriptor).toBeDefined()
     const rows = await (listsDescriptor as { fetchRows: (userId: string) => Promise<object[]> }).fetchRows(SAFE_USER.id)
@@ -660,8 +712,8 @@ describe('GET /v1/users/me/export', () => {
     vi.mocked(db.query.items.findMany).mockResolvedValueOnce([])
     vi.mocked(db.query.items.findMany).mockResolvedValueOnce([])
     vi.mocked(db.query.itemSources.findMany).mockResolvedValueOnce([])
-    vi.mocked(db.query.listCollaborators.findMany).mockResolvedValueOnce([])
-    vi.mocked(db.query.listCollaborators.findMany).mockResolvedValueOnce([])
+    vi.mocked(db.query.listUsers.findMany).mockResolvedValueOnce([])
+    vi.mocked(db.query.listUsers.findMany).mockResolvedValueOnce([])
 
     const response = await apiRequest('/v1/users/me/export?format=json', { token })
 
@@ -679,7 +731,7 @@ describe('GET /v1/users/me/export', () => {
     vi.mocked(db.query.items.findMany).mockResolvedValueOnce([] as never)
     vi.mocked(db.query.items.findMany).mockResolvedValueOnce([] as never)
     vi.mocked(db.query.itemSources.findMany).mockResolvedValueOnce([])
-    vi.mocked(db.query.listCollaborators.findMany).mockResolvedValueOnce([])
+    vi.mocked(db.query.listUsers.findMany).mockResolvedValueOnce([])
 
     const response = await apiRequest('/v1/users/me/export?format=json', { token })
 
@@ -805,8 +857,8 @@ describe('GET /v1/users/me/export', () => {
 
     vi.mocked(db.query.items.findMany).mockResolvedValueOnce([])
     vi.mocked(db.query.itemSources.findMany).mockResolvedValueOnce([])
-    vi.mocked(db.query.listCollaborators.findMany).mockResolvedValueOnce([])
-    vi.mocked(db.query.listCollaborators.findMany).mockResolvedValueOnce([])
+    vi.mocked(db.query.listUsers.findMany).mockResolvedValueOnce([])
+    vi.mocked(db.query.listUsers.findMany).mockResolvedValueOnce([])
     vi.mocked(db.query.tags.findMany).mockResolvedValueOnce([])
     vi.mocked(db.query.listTags.findMany).mockResolvedValueOnce([
       {
@@ -825,6 +877,179 @@ describe('GET /v1/users/me/export', () => {
     expect(body).toHaveProperty('listTags')
     expect(body.listTags).toHaveLength(1)
     expect(body.listTags[0]?.listId).toBe('00000000-0000-0000-0000-00000000c010')
+  })
+
+  it('registers list-users.csv with the membership allow-list', () => {
+    const descriptor = EXPORT_ENTITY_REGISTRY.find((d) => d.filename === 'list-users.csv')
+    expect(descriptor).toBeDefined()
+    expect(descriptor?.columns).toEqual(['listId', 'role', 'createdAt', 'updatedAt'])
+    expect(descriptor?.columns).not.toContain('userId')
+  })
+
+  it('registers list-invites.csv with the invite allow-list (no token columns)', () => {
+    const descriptor = EXPORT_ENTITY_REGISTRY.find((d) => d.filename === 'list-invites.csv')
+    expect(descriptor).toBeDefined()
+    expect(descriptor?.columns).toEqual([
+      'listId',
+      'invitedEmail',
+      'role',
+      'inviteStatus',
+      'acceptedAt',
+      'createdAt',
+    ])
+    expect(descriptor?.columns).not.toContain('inviteToken')
+    expect(descriptor?.columns).not.toContain('inviteTokenExpiresAt')
+  })
+
+  it('fetches list_users for RGPD without userId', async () => {
+    const descriptor = EXPORT_ENTITY_REGISTRY.find((d) => d.filename === 'list-users.csv')
+    const ownedListId = '00000000-0000-0000-0000-00000000e001'
+    const listUserRow = {
+      id: '00000000-0000-0000-0000-00000000e002',
+      listId: ownedListId,
+      userId: SAFE_USER.id,
+      role: 'owner' as const,
+      createdAt: new Date('2024-02-01'),
+      updatedAt: new Date('2024-02-01'),
+    }
+
+    vi.mocked(db.query.listUsers.findMany).mockResolvedValueOnce([listUserRow] as never)
+
+    expect(descriptor).toBeDefined()
+    const rows = await (descriptor as { fetchRows: (userId: string) => Promise<object[]> }).fetchRows(SAFE_USER.id)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ listId: ownedListId, role: 'owner' })
+    expect(rows[0]).not.toHaveProperty('userId')
+    expect(rows[0]).not.toHaveProperty('id')
+  })
+
+  it('fetches list_invites for RGPD and omits inviteToken / inviteTokenExpiresAt from rows', async () => {
+    const descriptor = EXPORT_ENTITY_REGISTRY.find((d) => d.filename === 'list-invites.csv')
+    const ownedListId = '00000000-0000-0000-0000-00000000e003'
+    const inviteRow = {
+      id: '00000000-0000-0000-0000-00000000e004',
+      listId: ownedListId,
+      invitedByUserId: SAFE_USER.id,
+      invitedEmail: 'invitee@example.com',
+      role: 'editor' as const,
+      inviteToken: 'a'.repeat(64),
+      inviteTokenExpiresAt: new Date('2024-10-01'),
+      inviteStatus: 'pending' as const,
+      acceptedAt: null,
+      acceptedByUserId: null,
+      createdAt: new Date('2024-02-01'),
+      updatedAt: new Date('2024-02-01'),
+    }
+
+    vi.mocked(db.query.listInvites.findMany).mockResolvedValueOnce([inviteRow] as never)
+
+    expect(descriptor).toBeDefined()
+    const rows = await (descriptor as { fetchRows: (userId: string) => Promise<object[]> }).fetchRows(SAFE_USER.id)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({
+      listId: ownedListId,
+      invitedEmail: 'invitee@example.com',
+      role: 'editor',
+      inviteStatus: 'pending',
+    })
+    expect(rows[0]).not.toHaveProperty('inviteToken')
+    expect(rows[0]).not.toHaveProperty('inviteTokenExpiresAt')
+    expect(rows[0]).not.toHaveProperty('invitedByUserId')
+    expect(rows[0]).not.toHaveProperty('id')
+  })
+
+  it('exports the user\'s editor membership on someone else\'s list', async () => {
+    const descriptor = EXPORT_ENTITY_REGISTRY.find((d) => d.filename === 'list-users.csv')
+    const foreignListId = '00000000-0000-0000-0000-00000000e030'
+    vi.mocked(db.query.listUsers.findMany).mockResolvedValueOnce([
+      {
+        id: '00000000-0000-0000-0000-00000000e031',
+        listId: foreignListId,
+        userId: SAFE_USER.id,
+        role: 'editor' as const,
+        createdAt: new Date('2024-03-01'),
+        updatedAt: new Date('2024-03-01'),
+      },
+    ] as never)
+
+    const rows = await (descriptor as { fetchRows: (userId: string) => Promise<object[]> }).fetchRows(SAFE_USER.id)
+    expect(rows).toEqual([
+      { listId: foreignListId, role: 'editor', createdAt: new Date('2024-03-01'), updatedAt: new Date('2024-03-01') },
+    ])
+  })
+
+  it('exports an invite the user accepted on someone else\'s list', async () => {
+    const descriptor = EXPORT_ENTITY_REGISTRY.find((d) => d.filename === 'list-invites.csv')
+    const foreignListId = '00000000-0000-0000-0000-00000000e040'
+    vi.mocked(db.query.listInvites.findMany).mockResolvedValueOnce([
+      {
+        id: '00000000-0000-0000-0000-00000000e041',
+        listId: foreignListId,
+        invitedByUserId: '00000000-0000-0000-0000-00000000e042',
+        invitedEmail: SAFE_USER.email,
+        role: 'editor' as const,
+        inviteToken: 'c'.repeat(64),
+        inviteTokenExpiresAt: new Date('2024-10-01'),
+        inviteStatus: 'accepted' as const,
+        acceptedAt: new Date('2024-03-02'),
+        acceptedByUserId: SAFE_USER.id,
+        createdAt: new Date('2024-03-01'),
+        updatedAt: new Date('2024-03-02'),
+      },
+    ] as never)
+
+    const rows = await (descriptor as { fetchRows: (userId: string) => Promise<object[]> }).fetchRows(SAFE_USER.id)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ listId: foreignListId, inviteStatus: 'accepted' })
+    expect(rows[0]).not.toHaveProperty('invitedByUserId')
+    expect(rows[0]).not.toHaveProperty('acceptedByUserId')
+  })
+
+  it('includes listUsers and listInvites keys in the JSON export payload', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+
+    vi.mocked(db.query.listUsers.findMany).mockResolvedValueOnce([
+      {
+        id: '00000000-0000-0000-0000-00000000e011',
+        listId: '00000000-0000-0000-0000-00000000e010',
+        userId: SAFE_USER.id,
+        role: 'owner' as const,
+        createdAt: new Date('2024-02-01'),
+        updatedAt: new Date('2024-02-01'),
+      },
+    ] as never)
+    vi.mocked(db.query.listInvites.findMany).mockResolvedValueOnce([
+      {
+        id: '00000000-0000-0000-0000-00000000e021',
+        listId: '00000000-0000-0000-0000-00000000e010',
+        invitedByUserId: SAFE_USER.id,
+        invitedEmail: 'later@example.com',
+        role: 'editor' as const,
+        inviteToken: 'b'.repeat(64),
+        inviteTokenExpiresAt: new Date('2024-10-01'),
+        inviteStatus: 'pending' as const,
+        acceptedAt: null,
+        acceptedByUserId: null,
+        createdAt: new Date('2024-02-01'),
+        updatedAt: new Date('2024-02-01'),
+      },
+    ] as never)
+
+    const response = await apiRequest('/v1/users/me/export?format=json', { token })
+
+    expect(response.status).toBe(200)
+    const body = await response.json() as {
+      listUsers: { role: string }[]
+      listInvites: { invitedEmail: string | null; role: string }[]
+    }
+    expect(body).toHaveProperty('listUsers')
+    expect(body).toHaveProperty('listInvites')
+    expect(body.listUsers).toHaveLength(1)
+    expect(body.listInvites).toHaveLength(1)
+    expect(body.listInvites[0]?.invitedEmail).toBe('later@example.com')
+    expect(JSON.stringify(body.listInvites)).not.toContain('inviteToken')
   })
 
   it('includes a feedback key in the JSON export payload with only entries submitted by the user', async () => {
@@ -1072,7 +1297,7 @@ describe('GET /v1/users/me/export', () => {
       },
     ]
 
-    vi.mocked(db.query.reservations.findMany).mockResolvedValueOnce(rows)
+    vi.mocked(db.query.reservations.findMany).mockResolvedValueOnce(rows as never)
 
     const response = await apiRequest('/v1/users/me/export?format=json', { token })
 
@@ -1083,6 +1308,47 @@ describe('GET /v1/users/me/export', () => {
       rows[0]?.id,
       rows[1]?.id,
     ])
+  })
+
+  it('scopes the reservations export to the caller user_id so anonymous and proxy rows never leak', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    vi.mocked(db.query.reservations.findMany).mockResolvedValueOnce([])
+
+    await apiRequest('/v1/users/me/export?format=json', { token })
+
+    const exportQuery = vi.mocked(db.query.reservations.findMany).mock.calls[0]?.[0]
+    const whereClause = new PgDialect().sqlToQuery(exportQuery?.where as SQL)
+    expect(whereClause.sql).toBe('"reservations"."user_id" = $1')
+    expect(whereClause.params).toEqual([SAFE_USER.id])
+  })
+
+  it('never serialises reserver identity or the anonymous token hash in the reservations export', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    vi.mocked(db.query.reservations.findMany).mockResolvedValueOnce([
+      {
+        id: '00000000-0000-0000-0000-00000000f401',
+        listItemId: '00000000-0000-0000-0000-00000000f501',
+        userId: SAFE_USER.id,
+        reserverName: 'Leaky Name',
+        reserverEmail: 'leaky@example.com',
+        anonymousTokenHash: 'a'.repeat(64),
+        quantityBooked: 1,
+        createdAt: new Date('2024-05-12'),
+        listItem: { list: { title: 'List C' }, item: { name: 'Item C' } },
+      },
+    ] as never)
+
+    const response = await apiRequest('/v1/users/me/export?format=json', { token })
+
+    const rawBody = await response.text()
+    expect(response.status).toBe(200)
+    expect(rawBody).not.toContain('Leaky Name')
+    expect(rawBody).not.toContain('leaky@example.com')
+    expect(rawBody).not.toContain('a'.repeat(64))
   })
 
   it('fetches uploader-scoped images for RGPD', async () => {
@@ -1144,7 +1410,6 @@ const RESERVATION_PROFILE_ROW = {
       id: '00000000-0000-0000-0000-00000001b100',
       name: 'Fancy vase',
       description: null,
-      imageUrl: null,
       imageId: '00000000-0000-0000-0000-00000001b200',
       createdByUserId: null,
       createdAt: new Date('2024-04-01'),
@@ -1160,13 +1425,13 @@ const RESERVATION_PROFILE_ROW = {
       deletedAt: null,
       createdAt: new Date('2024-01-01'),
       updatedAt: new Date('2024-01-01'),
-      collaborators: [
+      listUsers: [
         {
           id: '00000000-0000-0000-0000-00000001d001',
           listId: RESERVATION_LIST_ID,
           userId: OTHER_USER_ID,
           invitedEmail: null,
-          collabRole: 'owner' as const,
+          role: 'owner' as const,
           inviteStatus: 'accepted' as const,
           inviteToken: null,
           inviteTokenExpiresAt: null,
@@ -1241,6 +1506,7 @@ describe('GET /v1/users/me/reservations', () => {
       }[]
       pagination: { total: number }
     }
+    usersListReservationsResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.pagination.total).toBe(1)
     expect(body.items).toHaveLength(1)
@@ -1305,9 +1571,9 @@ describe('GET /v1/users/me/reservations', () => {
         ...RESERVATION_PROFILE_ROW.listItem,
         list: {
           ...RESERVATION_PROFILE_ROW.listItem.list,
-          collaborators: [
+          listUsers: [
             {
-              ...RESERVATION_PROFILE_ROW.listItem.list.collaborators[0],
+              ...RESERVATION_PROFILE_ROW.listItem.list.listUsers[0],
               user: { ...SAFE_USER, id: OTHER_USER_ID, username: null },
             },
           ],
@@ -1395,5 +1661,206 @@ describe('GET /v1/users/me/reservations', () => {
   it('returns 401 when no authorization header is provided', async () => {
     const response = await apiRequest('/v1/users/me/reservations')
     expect(response.status).toBe(401)
+  })
+})
+
+describe('RGPD export — item images uploaded via /items', () => {
+  const ITEM_IMAGE_ROW = {
+    id: '00000000-0000-0000-0000-00000000f001',
+    hash: 'f'.repeat(64),
+    fileKey: 'ff/ff/' + 'f'.repeat(64),
+    mime: 'image/png',
+    sizeBytes: 2048,
+    width: 800,
+    height: 600,
+    uploadedBy: SAFE_USER.id,
+    createdAt: new Date('2024-06-01'),
+    updatedAt: new Date('2024-06-01'),
+  }
+
+  const ITEM_WITH_UPLOADED_IMAGE = {
+    id: '00000000-0000-0000-0000-00000000f010',
+    name: 'Item with uploaded image',
+    description: null,
+    imageId: ITEM_IMAGE_ROW.id,
+    createdByUserId: SAFE_USER.id,
+    createdAt: new Date('2024-06-01'),
+    updatedAt: new Date('2024-06-01'),
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
+    vi.mocked(db.query.items.findMany).mockResolvedValue([ITEM_WITH_UPLOADED_IMAGE] as never)
+    vi.mocked(db.query.images.findMany).mockResolvedValue([ITEM_IMAGE_ROW] as never)
+  })
+
+  it('lists the item image in the JSON images section, referenced by items[].imageId', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+
+    const response = await apiRequest('/v1/users/me/export?format=json', { token })
+
+    expect(response.status).toBe(200)
+    const body = await response.json() as {
+      items: { id: string; imageId: string | null }[]
+      images: { id: string }[]
+    }
+    const exportedItem = body.items.find((item) => item.id === ITEM_WITH_UPLOADED_IMAGE.id)
+    expect(exportedItem?.imageId).toBe(ITEM_IMAGE_ROW.id)
+    expect(body.images.map((image) => image.id)).toContain(ITEM_IMAGE_ROW.id)
+    const serialized = JSON.stringify(body)
+    expect(serialized).not.toContain('fileKey')
+    expect(serialized).not.toContain(env.UPLOADS_DIR)
+  })
+
+  it('references the images.csv row from the items.csv imageId column without leaking storage paths', async () => {
+    const itemsDescriptor = EXPORT_ENTITY_REGISTRY.find((descriptor) => descriptor.filename === 'items.csv')
+    const imagesDescriptor = EXPORT_ENTITY_REGISTRY.find((descriptor) => descriptor.filename === 'images.csv')
+
+    const itemRows = await itemsDescriptor?.fetchRows(SAFE_USER.id) ?? []
+    const imageRows = await imagesDescriptor?.fetchRows(SAFE_USER.id) ?? []
+
+    expect(itemsDescriptor?.columns).toContain('imageId')
+    expect(itemRows[0]).toMatchObject({ imageId: ITEM_IMAGE_ROW.id })
+    expect(imageRows[0]).toMatchObject({ id: ITEM_IMAGE_ROW.id })
+    expect(imageRows[0]).not.toHaveProperty('fileKey')
+    expect(imagesDescriptor?.columns).not.toContain('fileKey')
+  })
+})
+
+describe('PATCH /v1/users/me — multipart guards', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
+  })
+
+  it('returns 422 issues in the {path, message, code} shape', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+
+    const response = await apiRequest('/v1/users/me', { method: 'PATCH', token, body: { isMarketingOptedIn: 'yes' } })
+
+    const body = await response.json() as { metadata: { issues: { path: string; message: string; code: string }[] } }
+    expect(response.status).toBe(422)
+    expect(body.metadata.issues[0]).toEqual({
+      path: 'isMarketingOptedIn',
+      message: expect.any(String) as string,
+      code: 'invalid_type',
+    })
+  })
+
+  it('returns 413 PAYLOAD_TOO_LARGE when the multipart body exceeds the upload body limit', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    const oversized = Buffer.alloc(env.UPLOADS_MAX_SIZE_BYTES + UPLOAD_BODY_LIMIT_OVERFLOW_BYTES)
+
+    const response = await apiMultipartRequest('/v1/users/me', { method: 'PATCH', token, image: { buffer: oversized } })
+
+    const body = await response.json() as { code: string }
+    expect(response.status).toBe(413)
+    expect(body.code).toBe('PAYLOAD_TOO_LARGE')
+    expect(vi.mocked(db.update)).not.toHaveBeenCalled()
+  })
+
+  it('returns 422 IMAGE_AND_CLEAR_CONFLICT when an avatar and clearAvatar=true are both sent', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+
+    const response = await apiMultipartRequest('/v1/users/me', {
+      method: 'PATCH',
+      token,
+      fields: { clearAvatar: 'true' },
+      image: { buffer: Buffer.from([0x89, 0x50, 0x4e, 0x47]) },
+    })
+
+    const body = await response.json() as { code: string }
+    expect(response.status).toBe(422)
+    expect(body.code).toBe('IMAGE_AND_CLEAR_CONFLICT')
+    expect(vi.mocked(db.update)).not.toHaveBeenCalled()
+  })
+})
+
+describe('GET /v1/users/me/export — reports', () => {
+  const REPORT_ROW = {
+    id: '00000000-0000-0000-0000-00000000e001',
+    userId: SAFE_USER.id,
+    targetType: 'item' as const,
+    targetId: '00000000-0000-0000-0000-00000000e101',
+    targetSnapshot: { name: 'Snapshot that must stay internal' },
+    targetImageId: '00000000-0000-0000-0000-00000000e201',
+    reason: 'scam_fraud' as const,
+    description: 'Links to a phishing shop',
+    reportStatus: 'upheld' as const,
+    adminNote: 'Internal moderation note',
+    reviewedByUserId: '00000000-0000-0000-0000-00000000e301',
+    reviewedAt: new Date('2024-07-02'),
+    createdAt: new Date('2024-07-01'),
+    updatedAt: new Date('2024-07-02'),
+  }
+  const EXPECTED_EXPORT_KEYS = ['id', 'targetType', 'targetId', 'reason', 'description', 'status', 'createdAt']
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
+  })
+
+  it('includes a reports key with the reports filed by the user, without moderation fields', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    vi.mocked(db.query.reports.findMany).mockResolvedValueOnce([REPORT_ROW] as never)
+
+    const response = await apiRequest('/v1/users/me/export?format=json', { token })
+
+    expect(response.status).toBe(200)
+    const body = await response.json() as { reports: Record<string, unknown>[] }
+    expect(body.reports).toHaveLength(1)
+    expect(Object.keys(body.reports[0] ?? {}).sort()).toEqual([...EXPECTED_EXPORT_KEYS].sort())
+    expect(body.reports[0]).toMatchObject({ id: REPORT_ROW.id, status: 'upheld', reason: 'scam_fraud' })
+    const serialized = JSON.stringify(body.reports)
+    expect(serialized).not.toContain('Internal moderation note')
+    expect(serialized).not.toContain('Snapshot that must stay internal')
+    expect(serialized).not.toContain(REPORT_ROW.reviewedByUserId)
+  })
+
+  it('scopes the reports export to reports filed by the caller and never selects moderation columns', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    vi.mocked(db.query.reports.findMany).mockResolvedValueOnce([])
+
+    await apiRequest('/v1/users/me/export?format=json', { token })
+
+    const exportQuery = vi.mocked(db.query.reports.findMany).mock.calls[0]?.[0]
+    const whereClause = new PgDialect().sqlToQuery(exportQuery?.where as SQL)
+    expect(whereClause.sql).toBe('"reports"."user_id" = $1')
+    expect(whereClause.params).toEqual([SAFE_USER.id])
+    expect(exportQuery?.columns).not.toHaveProperty('adminNote')
+    expect(exportQuery?.columns).not.toHaveProperty('targetSnapshot')
+    expect(exportQuery?.columns).not.toHaveProperty('reviewedByUserId')
+  })
+
+  it('registers reports.csv with the exact allow-list required by RGPD', () => {
+    const descriptor = EXPORT_ENTITY_REGISTRY.find((entry) => entry.filename === 'reports.csv')
+    expect(descriptor?.columns).toEqual(EXPECTED_EXPORT_KEYS)
+  })
+
+  it('maps reports.csv rows through the allow-list mapper', async () => {
+    const descriptor = EXPORT_ENTITY_REGISTRY.find((entry) => entry.filename === 'reports.csv')
+    vi.mocked(db.query.reports.findMany).mockResolvedValueOnce([REPORT_ROW] as never)
+
+    const rows = await (descriptor as { fetchRows: (userId: string) => Promise<object[]> }).fetchRows(SAFE_USER.id)
+
+    expect(rows).toEqual([{
+      id: REPORT_ROW.id,
+      targetType: 'item',
+      targetId: REPORT_ROW.targetId,
+      reason: 'scam_fraud',
+      description: 'Links to a phishing shop',
+      status: 'upheld',
+      createdAt: REPORT_ROW.createdAt,
+    }])
   })
 })

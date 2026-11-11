@@ -5,6 +5,8 @@ import { mountListUserLists } from './endpoints/list.js'
 import { mountGetUserList } from './endpoints/get.js'
 import { mountUpdateUserList } from './endpoints/update.js'
 import { mountDeleteUserList } from './endpoints/delete.js'
+import { mountCreateInvite } from './endpoints/collaborators/create-invite.js'
+import { mountAcceptInvite } from './endpoints/collaborators/accept-invite.js'
 
 export const listsRouter = createFeatureRouter()
 
@@ -14,3 +16,8 @@ mountGetUserList(listsRouter)
 mountUpdateUserList(listsRouter)
 mountDeleteUserList(listsRouter)
 mountAddItem(listsRouter)
+mountCreateInvite(listsRouter)
+
+export const collaboratorsRouter = createFeatureRouter()
+
+mountAcceptInvite(collaboratorsRouter)

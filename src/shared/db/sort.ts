@@ -1,5 +1,5 @@
 import { asc, desc, type AnyColumn, type SQL } from 'drizzle-orm'
-import type { SortDirection, SortInput } from '../schemas/sort.js'
+import type { SortDirection, SortInput } from '@keimelion/sdk/schemas'
 
 export interface SortConfig<TField extends string> {
   columns: Readonly<Record<TField, AnyColumn>>

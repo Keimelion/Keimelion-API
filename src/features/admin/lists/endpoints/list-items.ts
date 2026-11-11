@@ -5,20 +5,17 @@ import { getLocale } from '../../../../shared/middlewares/resolve-locale.js'
 import { jsonResult } from '../../../../shared/utils/response.js'
 import { validationErrorHandler } from '../../../../shared/utils/validation.js'
 import { uuidParamSchema } from '../../../../shared/schemas/params.js'
-import { paginationQuerySchema } from '../../../../shared/schemas/pagination.js'
-import { displayCurrencyQuerySchema } from '../../../../shared/schemas/currency.js'
+import { adminListsListItemsQuerySchema } from '@keimelion/sdk/schemas'
 import type { FeatureRouter } from '../../../../shared/types/app.js'
 import { listListItemsByListId } from '../admin-lists.service.js'
 import { resolveDisplayCurrency } from '../display-currency.js'
-
-const listListItemsQuerySchema = paginationQuerySchema.extend(displayCurrencyQuerySchema.shape)
 
 export function mountListListItems(router: FeatureRouter): void {
   router.get(
     '/:id/items',
     ...adminOnly,
     zValidator('param', uuidParamSchema, validationErrorHandler),
-    zValidator('query', listListItemsQuerySchema, validationErrorHandler),
+    zValidator('query', adminListsListItemsQuerySchema, validationErrorHandler),
     async (context) => {
       const { id } = context.req.valid('param')
       const { currency: queryCurrency, ...pagination } = context.req.valid('query')

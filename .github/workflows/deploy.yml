@@ -1,13 +1,28 @@
 name: Deploy
 
-# Manual (re)deploy of main; releases deploy automatically from release.yml.
+# Deploys dev to the pre-prod once CI is green on a push, and main to the production once
+# Release is green (ci.yml does not run on main); can also be run by hand.
+# Not a job of ci.yml: its cancel-in-progress could stop a deploy during a migration.
 
 on:
+  workflow_run:
+    workflows: [CI, Release]
+    types: [completed]
+    branches: [dev, main]
   workflow_dispatch:
+    inputs:
+      environment:
+        description: Stack to deploy
+        type: choice
+        options: [preprod, production]
+        default: preprod
 
 permissions:
   contents: read
 
 jobs:
   deploy:
-    uses: Keimelion/Keimelion-Infra/.github/workflows/deploy.yml@main
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.event == 'push' && github.event.workflow_run.conclusion == 'success')
+    uses: Keimelion/Keimelion-Infra/.github/workflows/deploy.yml@v0.2.0
+    with:
+      environment: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || (github.event.workflow_run.head_branch == 'main' && 'production' || 'preprod') }}

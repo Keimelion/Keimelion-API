@@ -1,18 +1,25 @@
 import { randomBytes } from 'crypto'
 import { db } from '../../../db/client.js'
 import { env } from '../../../config/env.js'
-import { HttpStatus } from '../../../shared/enums/http.js'
-import { ErrorCode } from '../../../shared/enums/error-code.js'
+import { buildPaginatedResponse } from '../../../shared/utils/pagination.js'
+import { ErrorCode, HttpStatus, UserRoles } from '@keimelion/sdk/enums'
+import type { UserRole } from '@keimelion/sdk/enums'
+import type {
+  AdminUsersCreateRequestParsed,
+  AdminUsersCreateResponseParsed,
+  AdminUsersUpdateRequestParsed,
+  PaginatedResponse,
+} from '@keimelion/sdk/schemas'
 import { NodeEnvs } from '../../../shared/enums/node-env.js'
-import { UserRoles } from '../../../shared/enums/user-role.js'
 import { serviceError } from '../../../shared/utils/response.js'
 import { logger } from '../../../shared/utils/logger.js'
 import { hashPassword, hashSha256Hex } from '../../../shared/utils/hash.js'
 import { pickDefined } from '../../../shared/utils/partial-update.js'
 import { runWrite } from '../../../shared/utils/admin-write.js'
 import { findAllUsers, countUsers, adminUpdateUser, adminInsertUser } from './admin-users.repository.js'
-import { findUserById, softDeleteUser } from '../../../db/entities/users/users.repository.js'
+import { findUserById, findUserByIdWithAvatar, softDeleteUser } from '../../../db/entities/users/users.repository.js'
 import { revokeAllUserSessions } from '../../../shared/db/user-sessions.js'
+import { cleanupReplacedImage } from '../../uploads/images.service.js'
 import { toAdminUser } from './admin-users.mapper.js'
 import {
   countReservationsByUserIds,
@@ -21,21 +28,16 @@ import {
 import { AdminAction } from '../admin.enums.js'
 import type { AdminUser } from './admin-users.mapper.js'
 import type { User } from '../../../db/entities/users/users.schema.js'
-import type { UserRole } from '../../../shared/enums/user-role.js'
 import type { ServiceResult } from '../../../shared/types/service.js'
-import type { PaginatedResponse } from '../../../shared/types/api.js'
-import { buildPaginatedResponse } from '../../../shared/schemas/pagination.js'
 import type { ListUsersInput } from './endpoints/list-users.js'
-import type { AdminUpdateUserInput } from './endpoints/update-user.js'
-import type { AdminCreateUserInput } from './endpoints/create-user.js'
 
 const ADMIN_PASSWORD_RESET_TOKEN_TTL_MS = 24 * 60 * 60 * 1000
 const PASSWORD_RESET_TOKEN_BYTE_LENGTH = 32
 
 export async function createUser(
   adminId: string,
-  input: AdminCreateUserInput,
-): Promise<ServiceResult<{ user: AdminUser; passwordResetToken?: string }>> {
+  input: AdminUsersCreateRequestParsed,
+): Promise<ServiceResult<AdminUsersCreateResponseParsed & { passwordResetToken?: string }>> {
   const rawPasswordResetToken = randomBytes(PASSWORD_RESET_TOKEN_BYTE_LENGTH).toString('hex')
   const hashedPasswordResetToken = hashSha256Hex(rawPasswordResetToken)
   const passwordResetTokenExpiresAt = new Date(Date.now() + ADMIN_PASSWORD_RESET_TOKEN_TTL_MS)
@@ -58,7 +60,7 @@ export async function createUser(
 
   if ('errorCode' in outcome) return serviceError(outcome.errorCode)
 
-  const createdUser = toAdminUser(outcome.row, 0)
+  const createdUser = toAdminUser({ ...outcome.row, avatarImage: null }, 0)
 
   logAdminUserCreation(adminId, createdUser.id, input.role)
   sendAdminInvitationEmail(input.email, rawPasswordResetToken)
@@ -87,7 +89,7 @@ export async function listUsers(input: ListUsersInput): Promise<ServiceResult<Pa
 }
 
 export async function getUserById(id: string): Promise<ServiceResult<{ user: AdminUser }>> {
-  const user = await findUserById(id)
+  const user = await findUserByIdWithAvatar(id)
 
   if (!user) {
     return serviceError(ErrorCode.NOT_FOUND)
@@ -100,13 +102,17 @@ export async function getUserById(id: string): Promise<ServiceResult<{ user: Adm
 export async function updateUser(
   adminId: string,
   targetUserId: string,
-  input: AdminUpdateUserInput,
+  input: AdminUsersUpdateRequestParsed,
 ): Promise<ServiceResult<{ user: AdminUser }>> {
   if (targetUserId === adminId) {
     return serviceError(ErrorCode.FORBIDDEN)
   }
 
-  const targetUser = await findUserById(targetUserId)
+  const { clearAvatar, ...fields } = input
+  const patch = { ...pickDefined(fields), ...(clearAvatar && { avatarImageId: null }) }
+  if (Object.keys(patch).length === 0) return serviceError(ErrorCode.NO_FIELDS_TO_UPDATE)
+
+  const targetUser = await findUserByIdWithAvatar(targetUserId)
 
   if (!targetUser) {
     return serviceError(ErrorCode.NOT_FOUND)
@@ -117,7 +123,7 @@ export async function updateUser(
   let updatedRow: User | undefined
 
   await db.transaction(async (tx) => {
-    const result = await adminUpdateUser(targetUserId, pickDefined(input), tx)
+    const result = await adminUpdateUser(targetUserId, patch, tx)
     if (!result) return
     updatedRow = result
     if (shouldRevoke) {
@@ -128,9 +134,11 @@ export async function updateUser(
   if (!updatedRow) {
     return serviceError(ErrorCode.USER_UPDATE_FAILED)
   }
+  await cleanupReplacedImage(targetUser.avatarImageId, updatedRow.avatarImageId, 'admin.update_user')
 
   const reservationsCount = await countReservationsForUser(targetUserId)
-  const updatedUser = toAdminUser(updatedRow, reservationsCount)
+  const avatarImage = updatedRow.avatarImageId === null ? null : targetUser.avatarImage
+  const updatedUser = toAdminUser({ ...updatedRow, avatarImage }, reservationsCount)
 
   logger.info({
     adminId,

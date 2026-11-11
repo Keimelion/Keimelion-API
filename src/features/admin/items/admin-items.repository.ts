@@ -1,11 +1,12 @@
 import { count, type SQL } from 'drizzle-orm'
+import type { AnyColumn } from 'drizzle-orm'
+import type { ADMIN_ITEMS_SORT_FIELDS } from '@keimelion/sdk/schemas'
 import { db } from '../../../db/client.js'
 import { items } from '../../../db/entities/items/items.schema.js'
 import { defineEntity } from '../../../shared/db/entity-descriptor.js'
 import type { ItemRowWithSources } from '../../../shared/types/item.js'
-import { getOffset } from '../../../shared/schemas/pagination.js'
-import type { PaginationInput } from '../../../shared/schemas/pagination.js'
-import type { SortInput } from '../../../shared/schemas/sort.js'
+import { getOffset } from '../../../shared/utils/pagination.js'
+import type { PaginationQueryParsed, SortInput } from '@keimelion/sdk/schemas'
 import type { FilterInput } from '../../../shared/db/filter-parser.js'
 
 export const itemsEntity = defineEntity({
@@ -13,7 +14,7 @@ export const itemsEntity = defineEntity({
     name:      items.name,
     createdAt: items.createdAt,
     updatedAt: items.updatedAt,
-  },
+  } satisfies Record<(typeof ADMIN_ITEMS_SORT_FIELDS)[number], AnyColumn>,
   defaultSort: [{ field: 'createdAt', direction: 'desc' }],
   filterable: {
     id:              { column: items.id,              operators: ['eq', 'in'] },
@@ -36,7 +37,7 @@ function buildItemsWhere(filters: ListItemsFilters): SQL | undefined {
 }
 
 export function findAllItemsWithSources(
-  input: PaginationInput,
+  input: PaginationQueryParsed,
   filters: ListItemsFilters,
 ): Promise<ItemRowWithSources[]> {
   const offset = getOffset(input)

@@ -1,15 +1,8 @@
 import type { ItemSource } from '../../../db/entities/item-sources/item-sources.schema.js'
 import type { Item } from '../../../db/entities/items/items.schema.js'
+import type { AdminShopItemSourceSummaryParsed } from '@keimelion/sdk/schemas'
 
-export interface AdminShopItemSource {
-  id: string
-  itemId: string
-  itemName: string
-  sourceUrl: string | null
-  price: string | null
-  currency: string
-  createdAt: Date
-}
+export type AdminShopItemSource = AdminShopItemSourceSummaryParsed
 
 export interface ItemSourceWithItem extends ItemSource {
   item: Pick<Item, 'id' | 'name'>

@@ -3,8 +3,7 @@ import { describe, it, expect } from 'vitest'
 import { z, ZodError } from 'zod'
 import { zValidator } from '@hono/zod-validator'
 import { validationErrorHandler } from './validation.js'
-import { HttpStatus } from '../enums/http.js'
-import { ErrorCode } from '../enums/error-code.js'
+import { ErrorCode, HttpStatus } from '@keimelion/sdk/enums'
 
 interface ValidationErrorBody {
   message: string

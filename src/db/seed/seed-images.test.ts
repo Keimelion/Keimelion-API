@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { ErrorCode } from '../../shared/enums/error-code.js'
+import { ErrorCode } from '@keimelion/sdk/enums'
 import { users } from '../entities/users/users.schema.js'
 import { items } from '../entities/items/items.schema.js'
 import { ITEM_IDS } from '../entities/items/items.fixture.js'

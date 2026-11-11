@@ -1,8 +1,10 @@
 import { eq } from 'drizzle-orm'
 import { db } from '../../client.js'
+import { ListUserRoles } from '@keimelion/sdk/enums'
+import type { ItemStatus } from '@keimelion/sdk/enums'
+import { listUsers } from '../list-users/list-users.schema.js'
 import { listItems } from './list-items.schema.js'
 import type { ListItem } from './list-items.schema.js'
-import type { ItemStatus } from '../../../shared/enums/item-status.js'
 
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 type DbOrTx = typeof db | DbTransaction
@@ -30,6 +32,26 @@ export async function insertListItem(input: InsertListItemInput, tx?: DbTransact
 
 export function findListItemById(id: string): Promise<ListItem | undefined> {
   return db.query.listItems.findFirst({ where: eq(listItems.id, id) })
+}
+
+export async function findListItemOwnerUserId(listItemId: string, tx: DbOrTx): Promise<string | null> {
+  const row = await tx.query.listItems.findFirst({
+    where: eq(listItems.id, listItemId),
+    columns: { id: true },
+    with: {
+      list: {
+        columns: { id: true },
+        with: {
+          listUsers: {
+            where: eq(listUsers.role, ListUserRoles.OWNER),
+            columns: { userId: true },
+            limit: 1,
+          },
+        },
+      },
+    },
+  })
+  return row?.list.listUsers[0]?.userId ?? null
 }
 
 export async function findListItemByIdForUpdate(id: string, tx: DbOrTx): Promise<ListItem | undefined> {

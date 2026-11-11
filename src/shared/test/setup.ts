@@ -1,4 +1,5 @@
 import { beforeEach, vi } from 'vitest'
+import { DEFAULT_MAIL_PROVIDER } from '../enums/mail-provider.js'
 import { NodeEnvs } from '../enums/node-env.js'
 
 vi.mock('../../config/env.js', () => ({
@@ -14,10 +15,14 @@ vi.mock('../../config/env.js', () => ({
     EMAIL_VERIFY_TOKEN_TTL_HOURS: 24,
     BCRYPT_ROUNDS: 4,
     APP_URL: 'http://localhost:3000',
+    LANDING_URL: 'https://keimelion.test',
     EMAIL_API_KEY: undefined,
     EMAIL_FROM: undefined,
+    EMAIL_PROVIDER: DEFAULT_MAIL_PROVIDER,
+    MAIL_TEST_TO: undefined,
     JWT_CLEANUP_INTERVAL_MS: 3_600_000,
     REFRESH_TOKEN_CLEANUP_INTERVAL_MS: 3_600_000,
+    LIST_INVITE_CLEANUP_INTERVAL_MS: 3_600_000,
     USER_HARD_DELETE_INTERVAL_MS: 3_600_000,
     USER_HARD_DELETE_GRACE_DAYS: 30,
     REFRESH_TOKEN_EXPIRES_IN: 2592000,
@@ -29,6 +34,10 @@ vi.mock('../../config/env.js', () => ({
     UPLOADS_DIR: '/tmp/keimelion-test-uploads',
     UPLOADS_MAX_SIZE_BYTES: 10_000_000,
     UPLOADS_PUBLIC_BASE_URL: 'http://localhost:3000/uploads',
+    IMAGE_ORPHAN_CLEANUP_INTERVAL_MS: 86_400_000,
+    IMAGE_ORPHAN_GRACE_HOURS: 24,
+    WAITLIST_CONFIRMATION_VALIDITY_DAYS: 7,
+    WAITLIST_PURGE_INTERVAL_MS: 3_600_000,
   },
 }))
 
@@ -71,7 +80,7 @@ const applyDbMockDefaults = (db: Record<string, unknown>): void => {
   }))
   const passThrough = (async (callback: (tx: unknown) => Promise<unknown>) => callback(db)) as never
   vi.mocked(db.transaction as ReturnType<typeof vi.fn>).mockImplementation(passThrough)
-  const emptyFindMany = ['lists', 'listCollaborators', 'items', 'itemSources', 'listItems', 'shops', 'categories', 'itemCategories', 'tags', 'itemTags', 'listTags', 'feedback', 'images', 'reservations']
+  const emptyFindMany = ['lists', 'listUsers', 'listInvites', 'items', 'itemSources', 'listItems', 'shops', 'categories', 'itemCategories', 'tags', 'itemTags', 'listTags', 'feedback', 'images', 'reservations', 'reports']
   for (const table of emptyFindMany) {
     const q = (db.query as Record<string, { findMany: ReturnType<typeof vi.fn> }>)[table]
     if (q !== undefined) q.findMany.mockResolvedValue([])
@@ -104,7 +113,11 @@ vi.mock('../../db/client.js', () => {
         findFirst: vi.fn(),
         findMany: vi.fn().mockResolvedValue([]),
       },
-      listCollaborators: {
+      listUsers: {
+        findFirst: vi.fn(),
+        findMany: vi.fn().mockResolvedValue([]),
+      },
+      listInvites: {
         findFirst: vi.fn(),
         findMany: vi.fn().mockResolvedValue([]),
       },
@@ -153,6 +166,10 @@ vi.mock('../../db/client.js', () => {
         findMany: vi.fn().mockResolvedValue([]),
       },
       reservations: {
+        findFirst: vi.fn(),
+        findMany: vi.fn().mockResolvedValue([]),
+      },
+      reports: {
         findFirst: vi.fn(),
         findMany: vi.fn().mockResolvedValue([]),
       },

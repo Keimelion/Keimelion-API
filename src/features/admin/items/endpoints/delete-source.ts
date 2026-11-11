@@ -1,10 +1,10 @@
 import { zValidator } from '@hono/zod-validator'
+import { itemSourceParamSchema } from '../../../../shared/schemas/params.js'
 import { adminOnly } from '../../../../shared/middlewares/admin-only.js'
 import { jsonResult } from '../../../../shared/utils/response.js'
 import { validationErrorHandler } from '../../../../shared/utils/validation.js'
 import { getAuthUser } from '../../../../shared/middlewares/auth.js'
 import { RATE_LIMITS } from '../../../../shared/utils/rate-limiter.js'
-import { itemSourceParamSchema } from '../../../../db/entities/item-sources/item-sources.schemas.js'
 import type { FeatureRouter } from '../../../../shared/types/app.js'
 import { deleteItemSourceById } from '../admin-item-sources.service.js'
 

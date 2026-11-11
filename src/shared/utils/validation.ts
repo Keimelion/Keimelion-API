@@ -1,15 +1,9 @@
 import type { Context } from 'hono'
 import type { $ZodError } from 'zod/v4/core'
-import { ErrorCode } from '../enums/error-code.js'
+import { ErrorCode } from '@keimelion/sdk/enums'
+import { VALIDATION_ROOT_PATH } from '@keimelion/sdk/schemas'
+import type { ValidationIssueParsed } from '@keimelion/sdk/schemas'
 import { errorMap } from './response.js'
-
-const ROOT_PATH = '<root>'
-
-interface ValidationIssue {
-  path: string
-  message: string
-  code: string
-}
 
 type ValidationResult = { success: true } | { success: false; error: $ZodError }
 
@@ -25,7 +19,7 @@ export function validationErrorHandler(result: ValidationResult, c: Context): Re
   return undefined
 }
 
-function mapZodIssues(error: $ZodError): ValidationIssue[] {
+export function mapZodIssues(error: $ZodError): ValidationIssueParsed[] {
   return error.issues.map((issue) => ({
     path: formatIssuePath(issue.path),
     message: issue.message,
@@ -34,6 +28,6 @@ function mapZodIssues(error: $ZodError): ValidationIssue[] {
 }
 
 function formatIssuePath(path: readonly PropertyKey[]): string {
-  if (path.length === 0) return ROOT_PATH
+  if (path.length === 0) return VALIDATION_ROOT_PATH
   return path.map(String).join('.')
 }

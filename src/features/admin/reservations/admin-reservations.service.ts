@@ -1,9 +1,9 @@
 import { db } from '../../../db/client.js'
-import { HttpStatus } from '../../../shared/enums/http.js'
-import { ErrorCode } from '../../../shared/enums/error-code.js'
+import { buildPaginatedResponse } from '../../../shared/utils/pagination.js'
+import { ErrorCode, HttpStatus } from '@keimelion/sdk/enums'
+import type { PaginatedResponse, PaginationQueryParsed, SortInput } from '@keimelion/sdk/schemas'
 import { serviceError } from '../../../shared/utils/response.js'
 import { logger } from '../../../shared/utils/logger.js'
-import { buildPaginatedResponse } from '../../../shared/schemas/pagination.js'
 import { cancelReservationAtomic } from '../../reservations/reservations.service.js'
 import { findReservationByIdForUpdate } from '../../../db/entities/reservations/reservations.repository.js'
 import { AdminAction } from '../admin.enums.js'
@@ -21,11 +21,8 @@ import type {
 } from './admin-reservations.repository.js'
 import type { Reservation } from '../../../db/entities/reservations/reservations.schema.js'
 import type { ServiceResult } from '../../../shared/types/service.js'
-import type { PaginatedResponse } from '../../../shared/types/api.js'
-import type { PaginationInput } from '../../../shared/schemas/pagination.js'
-import type { SortInput } from '../../../shared/schemas/sort.js'
 
-export interface ListReservationsInput extends PaginationInput {
+export interface ListReservationsInput extends PaginationQueryParsed {
   userId?: string | undefined
   listItemId?: string | undefined
   listId?: string | undefined

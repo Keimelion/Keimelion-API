@@ -5,9 +5,9 @@ import { itemSources } from '../../../db/entities/item-sources/item-sources.sche
 import { currencies } from '../../../db/entities/currencies/currencies.schema.js'
 import type { ListItem } from '../../../db/entities/list-items/list-items.schema.js'
 import type { ItemRowWithSources } from '../../../shared/types/item.js'
-import { getOffset } from '../../../shared/schemas/pagination.js'
-import type { PaginationInput } from '../../../shared/schemas/pagination.js'
-import type { SupportedCurrency } from '../../../shared/enums/currency.js'
+import { getOffset } from '../../../shared/utils/pagination.js'
+import type { SupportedCurrency } from '@keimelion/sdk/enums'
+import type { PaginationQueryParsed } from '@keimelion/sdk/schemas'
 
 export interface AdminListItemRow extends ListItem {
   item: ItemRowWithSources
@@ -25,7 +25,7 @@ interface RawListItemAverageRow extends Record<string, unknown> {
 
 export function findListItemsByListIdPaged(
   listId: string,
-  pagination: PaginationInput,
+  pagination: PaginationQueryParsed,
 ): Promise<AdminListItemRow[]> {
   const offset = getOffset(pagination)
   return db.query.listItems.findMany({

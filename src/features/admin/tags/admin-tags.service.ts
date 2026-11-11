@@ -1,9 +1,13 @@
-import { HttpStatus } from '../../../shared/enums/http.js'
-import { ErrorCode } from '../../../shared/enums/error-code.js'
+import { buildPaginatedResponse } from '../../../shared/utils/pagination.js'
+import { ErrorCode, HttpStatus } from '@keimelion/sdk/enums'
+import type {
+  AdminTagsCreateRequestParsed,
+  AdminTagsUpdateRequestParsed,
+  PaginatedResponse,
+} from '@keimelion/sdk/schemas'
 import { serviceError } from '../../../shared/utils/response.js'
 import { logger } from '../../../shared/utils/logger.js'
 import { runWrite } from '../../../shared/utils/admin-write.js'
-import { buildPaginatedResponse } from '../../../shared/schemas/pagination.js'
 import { findAllTags, countTags } from './admin-tags.repository.js'
 import {
   deleteTag,
@@ -15,14 +19,11 @@ import { AdminAction } from '../admin.enums.js'
 import { toTagDetail } from '../../../shared/types/tag.js'
 import type { TagDetail } from '../../../shared/types/tag.js'
 import type { ServiceResult } from '../../../shared/types/service.js'
-import type { PaginatedResponse } from '../../../shared/types/api.js'
 import type { ListTagsInput } from './endpoints/list.js'
-import type { CreateTagInput } from './endpoints/create.js'
-import type { UpdateTagInput } from './endpoints/update.js'
 
 export async function createTag(
   adminId: string,
-  input: CreateTagInput,
+  input: AdminTagsCreateRequestParsed,
 ): Promise<ServiceResult<{ tag: TagDetail }>> {
   const outcome = await runWrite(() =>
     insertTag({ name: input.name, slug: input.slug, createdByUserId: adminId }),
@@ -56,7 +57,7 @@ export async function getTagById(
 export async function updateTagById(
   adminId: string,
   id: string,
-  input: UpdateTagInput,
+  input: AdminTagsUpdateRequestParsed,
 ): Promise<ServiceResult<{ tag: TagDetail }>> {
   const existing = await findTagById(id)
   if (!existing) return serviceError(ErrorCode.TAG_NOT_FOUND)

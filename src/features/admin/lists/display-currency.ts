@@ -1,4 +1,4 @@
-import type { SupportedCurrency } from '../../../shared/enums/currency.js'
+import type { SupportedCurrency } from '@keimelion/sdk/enums'
 import type { User } from '../../../db/entities/users/users.schema.js'
 
 /**

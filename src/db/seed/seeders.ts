@@ -5,7 +5,8 @@ import { seedCategories } from '../entities/categories/categories.fixture.js'
 import { seedShops } from '../entities/shops/shops.fixture.js'
 import { seedTags } from '../entities/tags/tags.fixture.js'
 import { seedLists } from '../entities/lists/lists.fixture.js'
-import { seedListCollaborators } from '../entities/list-collaborators/list-collaborators.fixture.js'
+import { seedListUsers } from '../entities/list-users/list-users.fixture.js'
+import { seedListInvites } from '../entities/list-invites/list-invites.fixture.js'
 import { seedListTags } from '../entities/list-tags/list-tags.fixture.js'
 import { seedItems } from '../entities/items/items.fixture.js'
 import { seedItemSources } from '../entities/item-sources/item-sources.fixture.js'
@@ -25,7 +26,8 @@ export const SEEDERS: readonly Seeder[] = [
   seedShops,
   seedTags,
   seedLists,
-  seedListCollaborators,
+  seedListUsers,
+  seedListInvites,
   seedListTags,
   seedItems,
   seedItemSources,

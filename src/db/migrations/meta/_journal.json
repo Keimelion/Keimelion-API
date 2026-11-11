@@ -169,6 +169,48 @@
       "when": 1793633177572,
       "tag": "0023_drop_list_items_image_id",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1793723375334,
+      "tag": "0024_split_list_collaborators_into_list_users_and_list_invites",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1793808092073,
+      "tag": "0025_upload_only_images",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1793819032002,
+      "tag": "0026_reservations_anonymous",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1793969826633,
+      "tag": "0027_reports",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1794239994336,
+      "tag": "0028_add_waitlist_entries",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1794396190900,
+      "tag": "0029_waitlist_double_opt_in",
+      "breakpoints": true
     }
   ]
 }

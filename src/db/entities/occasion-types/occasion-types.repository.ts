@@ -1,12 +1,12 @@
 import { and, asc, count, eq, sql } from 'drizzle-orm'
 import { db } from '../../client.js'
 import { occasionTypes, occasionTypeTranslations } from './occasion-types.schema.js'
-import { DEFAULT_LOCALE } from '../../../shared/enums/locale.js'
-import type { Locale } from '../../../shared/enums/locale.js'
+import { getOffset } from '../../../shared/utils/pagination.js'
+import { DEFAULT_LOCALE } from '@keimelion/sdk/enums'
+import type { Locale } from '@keimelion/sdk/enums'
+import type { PaginationQueryParsed } from '@keimelion/sdk/schemas'
 import type { OccasionType, OccasionTypeTranslation } from './occasion-types.schema.js'
 import type { OccasionTypeRowWithTranslations } from '../../../shared/types/occasion-type.js'
-import { getOffset } from '../../../shared/schemas/pagination.js'
-import type { PaginationInput } from '../../../shared/schemas/pagination.js'
 
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
@@ -72,7 +72,7 @@ export function findOccasionTypeByIdWithTranslations(
 }
 
 export function findAllOccasionTypesWithTranslations(
-  input: PaginationInput,
+  input: PaginationQueryParsed,
 ): Promise<OccasionTypeRowWithTranslations[]> {
   const offset = getOffset(input)
   return db.query.occasionTypes.findMany({

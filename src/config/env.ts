@@ -1,10 +1,34 @@
 import { config } from 'dotenv'
 import { z } from 'zod'
+import {
+  DEFAULT_MAIL_PROVIDER,
+  MAIL_PROVIDER_NAMES,
+  MailProviderNames,
+} from '../shared/enums/mail-provider.js'
+import type { MailProviderName } from '../shared/enums/mail-provider.js'
 import { NODE_ENV_VALUES, NodeEnvs } from '../shared/enums/node-env.js'
+import type { NodeEnv } from '../shared/enums/node-env.js'
 
 config()
 
-const envSchema = z.object({
+interface MailDeliverySettings {
+  NODE_ENV: NodeEnv
+  EMAIL_PROVIDER: MailProviderName
+}
+
+function sendsRealEmails(settings: MailDeliverySettings): boolean {
+  return (
+    settings.NODE_ENV === NodeEnvs.PRODUCTION && settings.EMAIL_PROVIDER !== MailProviderNames.LOG
+  )
+}
+
+const LOCAL_HOSTNAMES = ['localhost', '127.0.0.1', '[::1]']
+
+function isLocalUrl(url: string): boolean {
+  return LOCAL_HOSTNAMES.includes(new URL(url).hostname)
+}
+
+const baseEnvSchema = z.object({
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
   PORT: z.coerce.number().int().positive().default(3000),
   NODE_ENV: z.enum(NODE_ENV_VALUES).default(NodeEnvs.DEVELOPMENT),
@@ -16,10 +40,14 @@ const envSchema = z.object({
   EMAIL_VERIFY_TOKEN_TTL_HOURS: z.coerce.number().int().positive().default(24),
   BCRYPT_ROUNDS: z.coerce.number().int().positive().default(12),
   APP_URL: z.url().default('http://localhost:3000'),
+  LANDING_URL: z.url().default('http://localhost:4321'),
   EMAIL_API_KEY: z.string().optional(),
   EMAIL_FROM: z.string().optional(),
+  EMAIL_PROVIDER: z.enum(MAIL_PROVIDER_NAMES).default(DEFAULT_MAIL_PROVIDER),
+  MAIL_TEST_TO: z.email().or(z.literal('')).optional(),
   JWT_CLEANUP_INTERVAL_MS: z.coerce.number().int().min(60_000).default(3_600_000),
   REFRESH_TOKEN_CLEANUP_INTERVAL_MS: z.coerce.number().int().min(60_000).default(3_600_000),
+  LIST_INVITE_CLEANUP_INTERVAL_MS: z.coerce.number().int().min(60_000).default(3_600_000),
   USER_HARD_DELETE_INTERVAL_MS: z.coerce.number().int().min(60_000).default(3_600_000),
   USER_HARD_DELETE_GRACE_DAYS: z.coerce.number().int().min(1).default(30),
   REFRESH_TOKEN_EXPIRES_IN: z.coerce.number().int().positive().min(3600).default(2592000),
@@ -36,7 +64,26 @@ const envSchema = z.object({
   UPLOADS_DIR: z.string().min(1).default('./uploads'),
   UPLOADS_MAX_SIZE_BYTES: z.coerce.number().int().positive().default(10_000_000),
   UPLOADS_PUBLIC_BASE_URL: z.url().default('http://localhost:3000/uploads'),
+  IMAGE_ORPHAN_CLEANUP_INTERVAL_MS: z.coerce.number().int().min(60_000).default(86_400_000),
+  IMAGE_ORPHAN_GRACE_HOURS: z.coerce.number().int().min(1).default(24),
+  WAITLIST_CONFIRMATION_VALIDITY_DAYS: z.coerce.number().int().min(1).default(7),
+  WAITLIST_PURGE_INTERVAL_MS: z.coerce.number().int().min(60_000).default(3_600_000),
 })
+
+const envSchema = baseEnvSchema
+  .refine((settings) => !sendsRealEmails(settings) || Boolean(settings.EMAIL_API_KEY), {
+    path: ['EMAIL_API_KEY'],
+    message: 'EMAIL_API_KEY is required in production unless EMAIL_PROVIDER is log',
+  })
+  .refine((settings) => !sendsRealEmails(settings) || Boolean(settings.EMAIL_FROM), {
+    path: ['EMAIL_FROM'],
+    message: 'EMAIL_FROM is required in production unless EMAIL_PROVIDER is log',
+  })
+  .refine((settings) => !sendsRealEmails(settings) || !isLocalUrl(settings.LANDING_URL), {
+    path: ['LANDING_URL'],
+    message:
+      'LANDING_URL must be the public landing URL in production unless EMAIL_PROVIDER is log',
+  })
 
 const parsed = envSchema.safeParse(process.env)
 

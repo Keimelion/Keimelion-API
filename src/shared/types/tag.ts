@@ -1,16 +1,9 @@
 import type { Tag } from '../../db/entities/tags/tags.schema.js'
+import type { TagDetailParsed, TagSummaryParsed } from '@keimelion/sdk/schemas'
 
-export interface TagPublic {
-  id: string
-  name: string
-  slug: string
-}
+export type TagPublic = TagSummaryParsed
 
-export interface TagDetail extends TagPublic {
-  createdByUserId: string | null
-  createdAt: Date
-  updatedAt: Date
-}
+export type TagDetail = TagDetailParsed
 
 export function toTagPublic(row: Tag): TagPublic {
   return {

@@ -1,13 +1,15 @@
 import { createHash } from 'crypto'
 import { access, mkdir } from 'fs/promises'
-import { dirname, join } from 'path'
+import { dirname } from 'path'
 import type { Readable } from 'stream'
 import sharp from 'sharp'
 import { fileTypeFromBuffer } from 'file-type'
 import { env } from '../../config/env.js'
-import { ErrorCode } from '../../shared/enums/error-code.js'
+import { ErrorCode } from '@keimelion/sdk/enums'
 import { logger } from '../../shared/utils/logger.js'
-import { insertImage } from '../../db/entities/images/images.repository.js'
+import { db } from '../../db/client.js'
+import { insertImage, lockImageHash } from '../../db/entities/images/images.repository.js'
+import { buildFileKey, buildVariantPath } from './image.storage.js'
 import { IMAGE_VARIANT_WIDTHS } from './images.mapper.js'
 import type { Image } from '../../db/entities/images/images.schema.js'
 
@@ -44,16 +46,13 @@ export async function processImage(
 
   const hash = sha256Hex(buffer)
   const fileKey = buildFileKey(hash)
-  await writeAllVariants(buffer, fileKey)
-
-  const image = await insertImage({
-    hash,
-    fileKey,
-    mime,
-    sizeBytes: buffer.length,
-    width: metadata.width,
-    height: metadata.height,
-    uploadedBy,
+  const image = await db.transaction(async (tx) => {
+    await lockImageHash(hash, tx)
+    await writeAllVariants(buffer, fileKey)
+    return insertImage(
+      { hash, fileKey, mime, sizeBytes: buffer.length, width: metadata.width, height: metadata.height, uploadedBy },
+      tx,
+    )
   })
   if (!image) return { errorCode: ErrorCode.INTERNAL_ERROR }
 
@@ -120,10 +119,6 @@ function sha256Hex(buffer: Buffer): string {
   return createHash('sha256').update(buffer).digest('hex')
 }
 
-function buildFileKey(hash: string): string {
-  return `${hash.slice(0, 2)}/${hash.slice(2, 4)}/${hash}`
-}
-
 async function writeAllVariants(buffer: Buffer, fileKey: string): Promise<void> {
   await Promise.all(
     Object.values(IMAGE_VARIANT_WIDTHS).map((width) => writeVariant(buffer, fileKey, width)),
@@ -131,7 +126,7 @@ async function writeAllVariants(buffer: Buffer, fileKey: string): Promise<void> 
 }
 
 async function writeVariant(buffer: Buffer, fileKey: string, width: number): Promise<void> {
-  const outputPath = join(env.UPLOADS_DIR, `${fileKey}-${String(width)}.webp`)
+  const outputPath = buildVariantPath(fileKey, width)
   if (await fileExists(outputPath)) return
   await mkdir(dirname(outputPath), { recursive: true })
   await sharp(buffer)

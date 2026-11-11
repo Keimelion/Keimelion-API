@@ -1,27 +1,10 @@
 import { db } from '../../db/client.js'
 import { sql } from 'drizzle-orm'
-import { HttpStatus } from '../../shared/enums/http.js'
+import { DatabaseHealthStatuses, HealthStatuses, HttpStatus } from '@keimelion/sdk/enums'
+import type { HealthGetResponseParsed } from '@keimelion/sdk/schemas'
 import pkg from '../../../package.json' with { type: 'json' }
 
-const HealthStatus = {
-  OK: 'ok',
-  DEGRADED: 'degraded',
-} as const
-
-const DbStatus = {
-  OK: 'ok',
-  ERROR: 'error',
-} as const
-
-type HealthStatusValue = (typeof HealthStatus)[keyof typeof HealthStatus]
-type DbStatusValue = (typeof DbStatus)[keyof typeof DbStatus]
-
-export interface HealthResult {
-  status: HealthStatusValue
-  database: DbStatusValue
-  timestamp: string
-  version: string
-}
+export type HealthResult = HealthGetResponseParsed
 
 export interface HealthCheckResult {
   data: HealthResult
@@ -30,17 +13,17 @@ export interface HealthCheckResult {
 
 export async function checkHealth(): Promise<HealthCheckResult> {
   const { version } = pkg
-  const timestamp = new Date().toISOString()
+  const timestamp = new Date()
 
   try {
     await db.execute(sql`SELECT 1`)
     return {
-      data: { status: HealthStatus.OK, database: DbStatus.OK, timestamp, version },
+      data: { status: HealthStatuses.OK, database: DatabaseHealthStatuses.OK, timestamp, version },
       httpStatus: HttpStatus.OK,
     }
   } catch {
     return {
-      data: { status: HealthStatus.DEGRADED, database: DbStatus.ERROR, timestamp, version },
+      data: { status: HealthStatuses.DEGRADED, database: DatabaseHealthStatuses.ERROR, timestamp, version },
       httpStatus: HttpStatus.INTERNAL_SERVER_ERROR,
     }
   }

@@ -1,16 +1,16 @@
 import type { Context, MiddlewareHandler } from 'hono'
-import { ErrorCode } from '../enums/error-code.js'
+import { ErrorCode } from '@keimelion/sdk/enums'
 import { HonoContextKey } from '../enums/context-key.js'
 import { sendError } from '../utils/response.js'
 import { logger } from '../utils/logger.js'
 import { findListWithOwner } from '../../db/entities/lists/lists.repository.js'
-import { findListContributor } from '../../db/entities/list-collaborators/list-collaborators.repository.js'
+import { isListContributor, isListOwner } from '../types/list.js'
 import { getAuthUser } from './auth.js'
 import type { AppVariables } from '../types/app.js'
 import type { ListRowWithOwner } from '../types/list.js'
 
 type AppContext = Context<{ Variables: AppVariables }>
-type AccessCheck = (list: ListRowWithOwner, userId: string) => Promise<boolean>
+type AccessCheck = (list: ListRowWithOwner, userId: string) => boolean
 
 export interface ListAccessMiddlewareOptions {
   paramName: string
@@ -20,13 +20,13 @@ export interface ListAccessMiddlewareOptions {
 export function listOwnershipMiddleware(
   options: ListAccessMiddlewareOptions,
 ): MiddlewareHandler<{ Variables: AppVariables }> {
-  return buildListAccessMiddleware(options, isListOwner)
+  return buildListAccessMiddleware(options, (list, userId) => isListOwner(list.listUsers, userId))
 }
 
 export function listContributorMiddleware(
   options: ListAccessMiddlewareOptions,
 ): MiddlewareHandler<{ Variables: AppVariables }> {
-  return buildListAccessMiddleware(options, isListContributor)
+  return buildListAccessMiddleware(options, (list, userId) => isListContributor(list.listUsers, userId))
 }
 
 function buildListAccessMiddleware(
@@ -42,8 +42,7 @@ function buildListAccessMiddleware(
       if (!list) return sendError(ErrorCode.NOT_FOUND)
 
       const user = getAuthUser(context)
-      const hasAccess = await checkAccess(list, user.id)
-      if (!hasAccess) return sendError(ErrorCode.FORBIDDEN)
+      if (!checkAccess(list, user.id)) return sendError(ErrorCode.FORBIDDEN)
 
       context.set(HonoContextKey.LIST, list)
       await next()
@@ -66,13 +65,4 @@ async function resolveListId(
   if (options.resolveListId) return options.resolveListId(context)
   const paramValue = context.req.param(options.paramName)
   return paramValue ?? null
-}
-
-function isListOwner(list: ListRowWithOwner, userId: string): Promise<boolean> {
-  return Promise.resolve(list.collaborators[0]?.userId === userId)
-}
-
-async function isListContributor(list: ListRowWithOwner, userId: string): Promise<boolean> {
-  const row = await findListContributor(list.id, userId)
-  return row !== undefined
 }

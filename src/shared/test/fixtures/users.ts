@@ -1,5 +1,5 @@
 import type { User } from '../../../db/entities/users/users.schema.js'
-import { SupportedCurrencies } from '../../enums/currency.js'
+import { SupportedCurrencies } from '@keimelion/sdk/enums'
 
 /**
  * Canonical admin user row used across admin feature tests.
@@ -17,7 +17,6 @@ export const ADMIN_USER_FIXTURE: User = {
   passwordHash: 'hashed',
   authProvider: 'email',
   role: 'admin',
-  avatarUrl: null,
   avatarImageId: null,
   isCgvAccepted: true,
   cgvAcceptedAt: new Date('2024-01-01'),

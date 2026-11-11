@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import { HTTPException } from 'hono/http-exception'
 import { cors } from 'hono/cors'
 import { secureHeaders } from 'hono/secure-headers'
 import { serveStatic } from '@hono/node-server/serve-static'
@@ -8,11 +9,15 @@ import { rateLimitMiddleware } from './shared/middlewares/rate-limit.js'
 import { loggerMiddleware } from './shared/middlewares/logger.js'
 import { resolveLocaleMiddleware } from './shared/middlewares/resolve-locale.js'
 import { mountRoutes } from './features/index.js'
-import { ErrorCode } from './shared/enums/error-code.js'
-import { HttpMethod, HttpHeader } from './shared/enums/http.js'
+import { ErrorCode, HttpHeader, HttpMethod, HttpStatus } from '@keimelion/sdk/enums'
 import { NodeEnvs } from './shared/enums/node-env.js'
 import { sendError } from './shared/utils/response.js'
 import { logger } from './shared/utils/logger.js'
+import { MAIL_ASSETS_DIR, MAIL_ASSETS_ROUTE } from './shared/mail/shell/email-shell.assets.js'
+
+// Emails stay in inboxes for years: a file changed in place would also change old emails, so a
+// redesign ships new file names rather than relying on this cache expiring.
+const MAIL_ASSETS_CACHE_CONTROL = 'public, max-age=604800'
 
 const CORS_ALLOW_METHODS = [HttpMethod.GET, HttpMethod.POST, HttpMethod.PUT, HttpMethod.PATCH, HttpMethod.DELETE, HttpMethod.OPTIONS]
 const CORS_ALLOW_HEADERS = [HttpHeader.CONTENT_TYPE, HttpHeader.AUTHORIZATION]
@@ -34,6 +39,23 @@ if (env.NODE_ENV !== NodeEnvs.PRODUCTION) {
     c.res.headers.set('Cross-Origin-Resource-Policy', 'cross-origin')
   })
 }
+
+// 1c. Email images, in every environment (Caddy only serves /uploads/*). Mounted before the
+// secure headers and the rate limiter: mail clients and their image proxies load them from any
+// origin, and one recipient's inbox can fetch them many times.
+app.use(
+  `${MAIL_ASSETS_ROUTE}/*`,
+  async (c, next) => {
+    await next()
+    if (!c.res.ok) return
+    c.res.headers.set('Cross-Origin-Resource-Policy', 'cross-origin')
+    c.res.headers.set('Cache-Control', MAIL_ASSETS_CACHE_CONTROL)
+  },
+  serveStatic({
+    root: MAIL_ASSETS_DIR,
+    rewriteRequestPath: (path) => path.slice(MAIL_ASSETS_ROUTE.length),
+  }),
+)
 
 // 2. Secure HTTP headers
 app.use('*', secureHeaders())
@@ -79,6 +101,10 @@ app.notFound((context) => sendError(ErrorCode.NOT_FOUND, { path: context.req.pat
 
 // Global error handler
 app.onError((err, _c) => {
+  // Hono's validator throws a 400 HTTPException on a malformed JSON body
+  if (err instanceof HTTPException && err.status === HttpStatus.BAD_REQUEST) {
+    return sendError(ErrorCode.BAD_REQUEST)
+  }
   logger.error({ err }, 'Unhandled error')
   return sendError(ErrorCode.INTERNAL_ERROR)
 })

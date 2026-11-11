@@ -11,7 +11,6 @@ export const items = pgTable(
     id: uuidPrimaryKey(),
     name: nonEmptyVarchar('name', 300).notNull(),
     description: text('description'),
-    imageUrl: text('image_url'),
     imageId: uuid('image_id').references((): AnyPgColumn => images.id, { onDelete: 'set null' }),
     createdByUserId: uuid('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
     ...timestamps(),

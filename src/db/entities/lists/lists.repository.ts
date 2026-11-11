@@ -1,31 +1,36 @@
 import { and, asc, eq, isNull, sql } from 'drizzle-orm'
+import type { AnyColumn } from 'drizzle-orm'
+import type { LIST_SORT_FIELDS } from '@keimelion/sdk/schemas'
 import { db } from '../../client.js'
-import { CollabRoles } from '../../../shared/enums/collab-role.js'
 import { pickDefined } from '../../../shared/utils/partial-update.js'
-import { listCollaborators } from '../list-collaborators/list-collaborators.schema.js'
+import { listUsers } from '../list-users/list-users.schema.js'
 import { listItems } from '../list-items/list-items.schema.js'
 import { lists } from './lists.schema.js'
-import type { ListStatus } from '../../../shared/enums/list-status.js'
+import type { ListStatus } from '@keimelion/sdk/enums'
 import type { ListRowWithOwner, PublicListRow } from '../../../shared/types/list.js'
 import type { List } from './lists.schema.js'
 
+// Hydrates every list_users row so callers can treat `row.listUsers` as the full membership
+// array (e.g. `.some(…)` on it is safe). Owner-only filtering is done at the mapper level
+// via `findOwnerUser`.
 export const LIST_WITH_OWNER = {
-  collaborators: {
-    where: eq(listCollaborators.collabRole, CollabRoles.OWNER),
-    limit: 1,
-    with: { user: true },
+  listUsers: {
+    orderBy: [asc(listUsers.createdAt)],
+    with: { user: { with: { avatarImage: true } } },
   },
   listTags: {
     with: { tag: true },
   },
-} as const
+} satisfies ListWithOwnerConfig
+
+type ListWithOwnerConfig = NonNullable<Parameters<typeof db.query.lists.findFirst>[0]>['with']
 
 export const LIST_SORTABLE_FIELDS = {
   createdAt:  lists.createdAt,
   updatedAt:  lists.updatedAt,
   title:      lists.title,
   listStatus: lists.listStatus,
-} as const
+} as const satisfies Record<(typeof LIST_SORT_FIELDS)[number], AnyColumn>
 
 export const LIST_DEFAULT_SORT = [{ field: 'createdAt' as const, direction: 'desc' as const }]
 
@@ -64,9 +69,8 @@ export function findListBySlug(
   return db.query.lists.findFirst({
     where,
     with: {
-      collaborators: {
-        where: eq(listCollaborators.collabRole, CollabRoles.OWNER),
-        limit: 1,
+      listUsers: {
+        orderBy: [asc(listUsers.createdAt)],
         with: { user: { with: { avatarImage: true } } },
       },
       listTags: {

@@ -1,0 +1,3 @@
+export const RESERVATION_TOKEN_PREFIX = 'rsv_'
+
+export const RESERVATION_TOKEN_BYTE_LENGTH = 32

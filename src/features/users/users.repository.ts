@@ -4,30 +4,30 @@ import { users } from '../../db/entities/users/users.schema.js'
 import { reservations } from '../../db/entities/reservations/reservations.schema.js'
 import { listItems } from '../../db/entities/list-items/list-items.schema.js'
 import { lists } from '../../db/entities/lists/lists.schema.js'
-import { listCollaborators } from '../../db/entities/list-collaborators/list-collaborators.schema.js'
+import { listUsers } from '../../db/entities/list-users/list-users.schema.js'
 import {
   userReservationsEntity,
   type UserReservationsSortField,
 } from '../../db/entities/reservations/reservations.repository.js'
-import { CollabRoles } from '../../shared/enums/collab-role.js'
-import { getOffset } from '../../shared/schemas/pagination.js'
+import { getOffset } from '../../shared/utils/pagination.js'
+import { ListUserRoles } from '@keimelion/sdk/enums'
+import type { PaginationQueryParsed, SortInput } from '@keimelion/sdk/schemas'
 import { env } from '../../config/env.js'
 import { hashPassword } from '../../shared/utils/hash.js'
 import type { User } from '../../db/entities/users/users.schema.js'
-import type { RegisterInput } from '../auth/endpoints/register.js'
+import type { UserRowWithAvatar } from '../../shared/types/user.js'
+import type { RegisterRequestParsed } from '@keimelion/sdk/schemas'
 import type { ReservationProfileRow } from '../reservations/reservations.types.js'
-import type { PaginationInput } from '../../shared/schemas/pagination.js'
-import type { SortInput } from '../../shared/schemas/sort.js'
 
 type SetPasswordResetTokenFields = Partial<Pick<typeof users.$inferInsert, 'passwordResetToken' | 'passwordResetTokenExpiresAt'>>
 type ResetPasswordFields = Pick<typeof users.$inferInsert, 'passwordHash' | 'passwordResetToken' | 'passwordResetTokenExpiresAt'>
 
 type UpdateUserProfileFields = Partial<
-  Pick<typeof users.$inferInsert, 'username' | 'avatarUrl' | 'avatarImageId' | 'isMarketingOptedIn' | 'defaultCurrencyCode'>
+  Pick<typeof users.$inferInsert, 'username' | 'avatarImageId' | 'isMarketingOptedIn' | 'defaultCurrencyCode'>
 >
 
-export function findUserByEmail(email: string): Promise<User | undefined> {
-  return db.query.users.findFirst({ where: eq(users.email, email) })
+export function findUserByEmail(email: string): Promise<UserRowWithAvatar | undefined> {
+  return db.query.users.findFirst({ where: eq(users.email, email), with: { avatarImage: true } })
 }
 
 export function findUserByEmailVerifyToken(token: string): Promise<User | undefined> {
@@ -35,7 +35,7 @@ export function findUserByEmailVerifyToken(token: string): Promise<User | undefi
 }
 
 export async function insertUser(
-  input: RegisterInput,
+  input: RegisterRequestParsed,
   emailVerifyToken: string,
   avatarImageId: string | null = null,
 ): Promise<User | undefined> {
@@ -101,13 +101,13 @@ export async function resetUserPassword(userId: string, input: ResetPasswordFiel
 const MY_RESERVATIONS_HYDRATION = {
   listItem: {
     with: {
-      item: true,
+      item: { with: { image: true } },
       list: {
         with: {
-          collaborators: {
-            where: eq(listCollaborators.collabRole, CollabRoles.OWNER),
+          listUsers: {
+            where: eq(listUsers.role, ListUserRoles.OWNER),
             limit: 1,
-            with: { user: true },
+            with: { user: { with: { avatarImage: true } } },
           },
         },
       },
@@ -129,7 +129,7 @@ function myReservationsWhere(userId: string): ReturnType<typeof and> {
 
 export async function findMyReservationsPaged(
   userId: string,
-  pagination: PaginationInput,
+  pagination: PaginationQueryParsed,
   sort: SortInput<UserReservationsSortField> | undefined,
 ): Promise<ReservationProfileRow[]> {
   const offset = getOffset(pagination)

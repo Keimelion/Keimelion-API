@@ -1,5 +1,5 @@
 import type { Context, MiddlewareHandler } from 'hono'
-import { ErrorCode } from '../enums/error-code.js'
+import { ErrorCode } from '@keimelion/sdk/enums'
 import { sendError } from '../utils/response.js'
 import { verifyJwt } from '../../features/auth/jwt.service.js'
 import type { JwtPayload } from '../../features/auth/jwt.service.js'
@@ -9,6 +9,7 @@ import { HonoContextKey } from '../enums/context-key.js'
 import type { AppVariables } from '../types/app.js'
 import type { User } from '../../db/entities/users/users.schema.js'
 import { logger } from '../utils/logger.js'
+import { extractBearerToken } from '../utils/bearer.js'
 
 export function getAuthUser(context: Context<{ Variables: AppVariables }>): User {
   return context.get(HonoContextKey.USER)
@@ -63,9 +64,4 @@ async function resolveTokenPayload(authHeader: string | undefined): Promise<JwtP
   const token = extractBearerToken(authHeader)
   if (!token) return null
   return verifyJwt(token)
-}
-
-function extractBearerToken(authHeader: string | undefined): string | null {
-  if (!authHeader?.startsWith('Bearer ')) return null
-  return authHeader.slice(7)
 }

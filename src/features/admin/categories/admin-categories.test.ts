@@ -4,6 +4,12 @@ import { apiRequest } from '../../../shared/test/api-request.js'
 import { generateTestToken, makeAccessTokenEntry } from '../../../shared/test/auth.js'
 import { ADMIN_USER_FIXTURE as ADMIN_USER, makeAdminUser } from '../../../shared/test/fixtures/users.js'
 import { logger } from '../../../shared/utils/logger.js'
+import {
+  adminCategoriesCreateResponseSchema,
+  adminCategoriesGetResponseSchema,
+  adminCategoriesListResponseSchema,
+  adminCategoriesUpdateResponseSchema,
+} from '@keimelion/sdk/schemas'
 
 vi.mock('../../../shared/utils/logger.js', () => ({
   logger: {
@@ -225,6 +231,7 @@ describe('POST /v1/admin/categories', () => {
     const body = (await response.json()) as {
       category: { slug: string; depth: number; parentId: string | null; translations: Record<string, string> }
     }
+    adminCategoriesCreateResponseSchema.parse(body)
     expect(response.status).toBe(201)
     expect(body.category.slug).toBe('electronics')
     expect(body.category.depth).toBe(0)
@@ -442,6 +449,7 @@ describe('GET /v1/admin/categories', () => {
       items: { slug: string; translations: Record<string, string> }[]
       pagination?: unknown
     }
+    adminCategoriesListResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.items).toHaveLength(3)
     expect(body.items.map((item) => item.slug)).toEqual(['electronics', 'smartphones', 'android'])
@@ -495,6 +503,7 @@ describe('GET /v1/admin/categories/:id', () => {
     const body = (await response.json()) as {
       category: { id: string; translations: Record<string, string> }
     }
+    adminCategoriesGetResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.category.id).toBe(ROOT_CATEGORY.id)
     expect(body.category.translations).toEqual({ fr: 'Électronique', en: 'Electronics' })
@@ -557,6 +566,7 @@ describe('PATCH /v1/admin/categories/:id', () => {
     const body = (await response.json()) as {
       category: { translations: Record<string, string> }
     }
+    adminCategoriesUpdateResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.category.translations.fr).toBe('Électronique mise à jour')
     expect(body.category.translations.en).toBe('Electronics')

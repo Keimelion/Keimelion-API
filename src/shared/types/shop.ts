@@ -1,20 +1,9 @@
 import type { Shop } from '../../db/entities/shops/shops.schema.js'
+import type { ShopDetailParsed, ShopSummaryParsed } from '@keimelion/sdk/schemas'
 
-export interface ShopPublic {
-  id: string
-  slug: string
-  name: string
-  domain: string | null
-  logoUrl: string | null
-  isAffiliated: boolean
-}
+export type ShopPublic = ShopSummaryParsed
 
-export interface ShopDetail extends ShopPublic {
-  sortOrder: number
-  isActive: boolean
-  createdAt: Date
-  updatedAt: Date
-}
+export type ShopDetail = ShopDetailParsed
 
 export interface ShopWrite {
   slug: string

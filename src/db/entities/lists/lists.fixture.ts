@@ -1,5 +1,6 @@
 import type { db as Db } from '../../client.js'
-import { type ListStatus, ListStatuses } from '../../../shared/enums/list-status.js'
+import { ListStatuses } from '@keimelion/sdk/enums'
+import type { ListStatus } from '@keimelion/sdk/enums'
 import { lists } from './lists.schema.js'
 
 /**

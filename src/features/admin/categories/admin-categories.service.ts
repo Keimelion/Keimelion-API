@@ -1,7 +1,7 @@
 import { db } from '../../../db/client.js'
-import { HttpStatus } from '../../../shared/enums/http.js'
-import { ErrorCode } from '../../../shared/enums/error-code.js'
-import { MAX_CATEGORY_DEPTH, serviceError } from '../../../shared/utils/response.js'
+import { ErrorCode, HttpStatus } from '@keimelion/sdk/enums'
+import { MAX_CATEGORY_DEPTH } from '@keimelion/sdk/schemas'
+import { serviceError } from '../../../shared/utils/response.js'
 import { logger } from '../../../shared/utils/logger.js'
 import { pickDefined } from '../../../shared/utils/partial-update.js'
 import { runWrite } from '../../../shared/utils/admin-write.js'
@@ -21,8 +21,10 @@ import { toAdminCategoryDetail } from '../../../shared/types/category.js'
 import type { AdminCategoryDetail } from '../../../shared/types/category.js'
 import type { Category } from '../../../db/entities/categories/categories.schema.js'
 import type { ServiceResult } from '../../../shared/types/service.js'
-import type { CreateCategoryInput } from './endpoints/create.js'
-import type { UpdateCategoryInput } from './endpoints/update.js'
+import type {
+  AdminCategoriesCreateRequestParsed,
+  AdminCategoriesUpdateRequestParsed,
+} from '@keimelion/sdk/schemas'
 
 const MAX_ALLOWED_DEPTH = MAX_CATEGORY_DEPTH - 1
 
@@ -35,7 +37,7 @@ interface NameTranslationsPatch {
 
 export async function createCategory(
   adminId: string,
-  input: CreateCategoryInput,
+  input: AdminCategoriesCreateRequestParsed,
 ): Promise<ServiceResult<{ category: AdminCategoryDetail }>> {
   const depthResolution = await resolveDepthForNewParent(input.parentId)
   if ('errorCode' in depthResolution) return serviceError(depthResolution.errorCode)
@@ -90,7 +92,7 @@ export async function getCategoryById(
 export async function updateCategoryById(
   adminId: string,
   id: string,
-  input: UpdateCategoryInput,
+  input: AdminCategoriesUpdateRequestParsed,
 ): Promise<ServiceResult<{ category: AdminCategoryDetail }>> {
   const existing = await findCategoryById(id)
   if (!existing) return serviceError(ErrorCode.CATEGORY_NOT_FOUND)

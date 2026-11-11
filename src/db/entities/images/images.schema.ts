@@ -20,6 +20,7 @@ export const images = pgTable(
   },
   (table) => [
     index('images_uploaded_by_idx').on(table.uploadedBy),
+    index('images_hash_idx').on(table.hash),
     nonNegativeCheck(table.sizeBytes),
     nonNegativeCheck(table.width),
     nonNegativeCheck(table.height),

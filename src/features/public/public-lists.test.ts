@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { db } from '../../db/client.js'
 import { apiRequest } from '../../shared/test/api-request.js'
+import {
+  publicListsGetResponseSchema,
+} from '@keimelion/sdk/schemas'
 
 const OWNER_USER = {
   id: '00000000-0000-0000-0000-000000000001',
@@ -9,7 +12,6 @@ const OWNER_USER = {
   passwordHash: 'hashed',
   authProvider: 'email' as const,
   role: 'user' as const,
-  avatarUrl: null,
   avatarImageId: null,
   isCgvAccepted: true,
   cgvAcceptedAt: new Date('2024-01-01'),
@@ -44,13 +46,13 @@ const PUBLIC_LIST_ROW = {
   deletedAt: null,
   createdAt: new Date('2024-01-01'),
   updatedAt: new Date('2024-01-01'),
-  collaborators: [
+  listUsers: [
     {
       id: '00000000-0000-0000-0000-000000000040',
       listId: LIST_ID,
       userId: OWNER_USER.id,
       invitedEmail: null,
-      collabRole: 'owner' as const,
+      role: 'owner' as const,
       inviteStatus: 'accepted',
       inviteToken: null,
       inviteTokenExpiresAt: null,
@@ -77,7 +79,6 @@ const PUBLIC_LIST_ROW = {
         id: ITEM_ID,
         name: 'A nice item',
         description: null,
-        imageUrl: null,
         imageId: null,
         image: null,
         createdByUserId: OWNER_USER.id,
@@ -114,6 +115,7 @@ describe('GET /v1/public/lists/:slug', () => {
 
     const response = await apiRequest(`/v1/public/lists/${LIST_SLUG}`)
     const body = await response.json() as PublicListResponse
+    publicListsGetResponseSchema.parse(body)
 
     expect(response.status).toBe(200)
     expect(body.list.id).toBe(LIST_ID)

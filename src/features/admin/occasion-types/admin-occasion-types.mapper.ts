@@ -1,17 +1,8 @@
-import type {
-  OccasionTypeDetail,
-  OccasionTypeRowWithTranslations,
-} from '../../../shared/types/occasion-type.js'
+import type { OccasionTypeRowWithTranslations } from '../../../shared/types/occasion-type.js'
 import { toOccasionTypeDetail } from '../../../shared/types/occasion-type.js'
+import type { AdminOccasionTypeDetailParsed } from '@keimelion/sdk/schemas'
 
-export interface AdminOccasionTypeTranslation {
-  locale: string
-  label: string
-}
-
-export interface AdminOccasionType extends OccasionTypeDetail {
-  translations: AdminOccasionTypeTranslation[]
-}
+export type AdminOccasionType = AdminOccasionTypeDetailParsed
 
 export function toAdminOccasionType(row: OccasionTypeRowWithTranslations): AdminOccasionType {
   return {

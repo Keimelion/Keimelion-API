@@ -293,9 +293,8 @@ interface ListCollaboratorFixture {
   inviteStatus: string
 }
 
-// ✅ — import the derived type from the enum file
-import type { ItemStatus } from '../../shared/enums/item-status.js'
-import type { InviteStatus } from '../../shared/enums/invite-status.js'
+// ✅ — import the derived type from the SDK enums
+import type { InviteStatus, ItemStatus } from '@keimelion/sdk/enums'
 
 interface AdminListItemRow {
   itemStatus: ItemStatus
@@ -575,11 +574,11 @@ export { findUserById, softDeleteUser } from '../../db/entities/users/users.repo
 export async function updateUserProfile(...) { ... }  // users-feature-specific
 ```
 
-**Shared Zod schemas** used across multiple features go in `src/shared/schemas/`:
+**Contract schemas, shared contract primitives and enums live in `@keimelion/sdk`** (see **API contract — `@keimelion/sdk`** below). `src/shared/schemas/` only keeps API-internal, non-contract validation used across features:
 
 ```
 src/shared/schemas/
-  pagination.ts    # paginationQuerySchema + PaginationInput + constants
+  params.ts        # uuidParamSchema (route path params)
 ```
 
 **Shared infrastructure** lives in `src/shared/`:
@@ -587,28 +586,29 @@ src/shared/schemas/
 ```
 src/shared/
   schemas/
-    pagination.ts
+    params.ts
   types/
     api.ts  app.ts  service.ts
   enums/
-    error-code.ts  http.ts  user-role.ts  auth-provider.ts
+    context-key.ts  node-env.ts          # API-internal only; contract enums come from the SDK
   utils/
-    hash.ts  logger.ts  rate-limiter.ts  response.ts  validation.ts
+    hash.ts  logger.ts  pagination.ts  rate-limiter.ts  response.ts  validation.ts
   middlewares/
     auth.ts  require-admin.ts  logger.ts  rate-limit.ts  request-id.ts
 ```
 
 Rules:
 
-- **Zod schemas belong next to their endpoint** — define the schema and `z.infer<>` type inline in the endpoint file, not in a separate `schemas.ts`
+- **Contract schemas live in `@keimelion/sdk`** — every request / response schema of an endpoint is defined in the SDK and imported by the endpoint file (`import { loginRequestSchema } from '@keimelion/sdk/schemas'`). Only API-internal, non-contract validation may stay local in the endpoint file (path params, multipart transport coercion such as `registerRequestSchema.extend({ isMarketingOptedIn: multipartBoolSchema… })`)
+- **Use the SDK `XParsed` types in services** — a service receives `LoginRequestParsed` (the `z.output` of the SDK schema), never a hand-written duplicate
 - **Types used in one place stay inline** — only extract to a shared file when two or more files need the same type
 - **Mappers own shared interfaces** — `BaseUser`, `PublicUser`, `AdminUser` live in mapper files, not in standalone `types.ts` files
-- **Repository functions accept generic shared types** — a repository that paginates takes `PaginationInput`, not a feature-specific `AdminListUsersInput`
-- **TypeScript is the source of truth for enums** — define `const ... as const` in the feature or `src/shared/enums/`, derive the DB `pgEnum` from it; the DB schema imports from features/shared, never the reverse
+- **Repository functions accept generic shared types** — a repository that paginates takes `PaginationQueryParsed` (from `@keimelion/sdk/schemas`), not a feature-specific `AdminListUsersInput`
+- **The SDK is the source of truth for contract enums** — `const ... as const` objects / `*_VALUES` tuples are defined in `@keimelion/sdk/enums`, the DB `pgEnum` derives from them; the DB schema imports from the SDK, never the reverse. **Changing an SDK enum requires a paired DB migration in the API.** API-internal enums (`HonoContextKey`, `NodeEnvs`) stay in `src/shared/enums/`
 
 ```typescript
-// ✅ — feature defines the enum; array derived from object to avoid duplication
-// src/shared/enums/user-role.ts
+// ✅ — the SDK defines the enum; array derived from object to avoid duplication
+// Keimelion-SDK: src/enums/user-role.ts
 export const UserRoles = {
   USER: 'user',
   MODERATOR: 'moderator',
@@ -622,9 +622,22 @@ export const USER_ROLE_VALUES = Object.values(UserRoles) as [UserRole, ...UserRo
 
 // ✅ — DB schema derives from it
 // src/db/entities/users/users.schema.ts
-import { USER_ROLE_VALUES } from '../../../shared/enums/user-role.js'
+import { USER_ROLE_VALUES } from '@keimelion/sdk/enums'
 export const userRoleEnum = pgEnum('user_role', USER_ROLE_VALUES)
 ```
+
+---
+
+## API contract — `@keimelion/sdk`
+
+`@keimelion/sdk` (repo `Keimelion-SDK`, public on npmjs) is the **single source of truth for the API contract**: request / response Zod schemas, `ErrorCode`, `HttpStatus`, domain enums, shared primitives (pagination, password, username, slug, url, currency, sort) and refine / error message constants.
+
+- **SDK first, then the API** — any change to a request or response shape (new field, renamed field, new enum value, new error code) needs a paired SDK PR, merged and **released first**; the API PR then bumps `@keimelion/sdk` and adapts the endpoint
+- **Mappers are typed on SDK output types** — `toUserDetail(row): UserDetailParsed`; the API-side name (`UserDetail`) is an alias of the SDK type, never a hand-written interface, so a missing / renamed field fails `tsc`
+- **Contract assertion in tests** — each happy path parses the body with the SDK response schema: `const body = loginResponseSchema.parse(await response.json())`
+- **Wire format** — response schemas strip unknown keys (additive fields are non-breaking), timestamps are ISO strings decoded into `Date` by a codec (mappers keep returning `Date`), Postgres `numeric` columns are strings
+- **Never declare internal columns** in an SDK schema (password / token hashes, internal tokens): the package and repo are public
+- **Local dev** — `npx yalc link @keimelion/sdk` (never `yalc add`); `.yalc/` and `yalc.lock` are gitignored and the husky `pre-commit` hook rejects a staged `yalc.lock` or a `file:.yalc` dependency. `npm ci` restores the registry version
 
 ---
 
@@ -688,7 +701,7 @@ export async function adminUpdateUser(id: string, input: AdminUpdateUserInput): 
 
 Additional rules:
 
-- Repository functions that paginate accept `PaginationInput` from `src/shared/schemas/pagination.ts`, not a feature-specific input type — this keeps the repository reusable
+- Repository functions that paginate accept `PaginationQueryParsed` from `@keimelion/sdk/schemas`, not a feature-specific input type — this keeps the repository reusable
 - Implementation details that belong to persistence (e.g. password hashing before insert) live in the repository, not in the calling service
 
 ```typescript

@@ -2,6 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { db } from '../../db/client.js'
 import { apiRequest } from '../../shared/test/api-request.js'
 import { generateTestToken, makeAccessTokenEntry } from '../../shared/test/auth.js'
+import {
+  tagsListResponseSchema,
+} from '@keimelion/sdk/schemas'
 
 const USER = {
   id: '00000000-0000-0000-0000-000000000001',
@@ -10,7 +13,6 @@ const USER = {
   passwordHash: 'hashed',
   authProvider: 'email' as const,
   role: 'user' as const,
-  avatarUrl: null,
   avatarImageId: null,
   isCgvAccepted: true,
   cgvAcceptedAt: new Date('2024-01-01'),
@@ -77,6 +79,7 @@ describe('GET /v1/tags', () => {
       items: { id: string; slug: string; name: string }[]
       pagination: { total: number; page: number }
     }
+    tagsListResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.items).toHaveLength(2)
     expect(body.pagination.total).toBe(2)

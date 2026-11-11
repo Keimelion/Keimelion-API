@@ -1,14 +1,15 @@
 import { count, eq, type SQL } from 'drizzle-orm'
+import type { AnyColumn } from 'drizzle-orm'
+import type { ADMIN_FEEDBACK_SORT_FIELDS } from '@keimelion/sdk/schemas'
 import { z } from 'zod'
 import { db } from '../../../db/client.js'
 import { feedback } from '../../../db/entities/feedback/feedback.schema.js'
-import { FEEDBACK_STATUS_VALUES } from '../../../shared/enums/feedback-status.js'
+import { getOffset } from '../../../shared/utils/pagination.js'
+import { FEEDBACK_STATUS_VALUES } from '@keimelion/sdk/enums'
+import type { FeedbackStatus } from '@keimelion/sdk/enums'
+import type { PaginationQueryParsed, SortInput } from '@keimelion/sdk/schemas'
 import { defineEntity } from '../../../shared/db/entity-descriptor.js'
-import { getOffset } from '../../../shared/schemas/pagination.js'
 import type { Feedback } from '../../../db/entities/feedback/feedback.schema.js'
-import type { FeedbackStatus } from '../../../shared/enums/feedback-status.js'
-import type { PaginationInput } from '../../../shared/schemas/pagination.js'
-import type { SortInput } from '../../../shared/schemas/sort.js'
 import type { FilterInput } from '../../../shared/db/filter-parser.js'
 import type { FeedbackRowWithUser } from './admin-feedback.mapper.js'
 
@@ -20,7 +21,7 @@ export const feedbackEntity = defineEntity({
     createdAt: feedback.createdAt,
     updatedAt: feedback.updatedAt,
     status:    feedback.status,
-  },
+  } satisfies Record<(typeof ADMIN_FEEDBACK_SORT_FIELDS)[number], AnyColumn>,
   defaultSort: [{ field: 'createdAt', direction: 'desc' }],
   filterable: {
     status:    { column: feedback.status,    operators: ['eq', 'in'], valueSchema: feedbackStatusSchema },
@@ -44,7 +45,7 @@ function buildFeedbackWhere(filters: ListFeedbackFilters): SQL | undefined {
 }
 
 export function findAllFeedback(
-  input: PaginationInput,
+  input: PaginationQueryParsed,
   filters: ListFeedbackFilters,
 ): Promise<FeedbackRowWithUser[]> {
   const offset = getOffset(input)

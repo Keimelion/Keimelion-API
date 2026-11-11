@@ -1,28 +1,20 @@
-import type { ItemStatus } from '../../shared/enums/item-status.js'
 import type { Reservation } from '../../db/entities/reservations/reservations.schema.js'
 import type { ListItem } from '../../db/entities/list-items/list-items.schema.js'
 import type { List } from '../../db/entities/lists/lists.schema.js'
-import type { Item } from '../../db/entities/items/items.schema.js'
-import type { ListCollaborator } from '../../db/entities/list-collaborators/list-collaborators.schema.js'
-import type { User } from '../../db/entities/users/users.schema.js'
+import type { ItemRowWithImage } from '../../shared/types/item.js'
+import { toImageDetail } from '../uploads/images.mapper.js'
+import { findOwnerUser } from '../../shared/types/list.js'
+import type { ListUserWithUser } from '../../shared/types/list.js'
+import type { ListItemReservationSummaryParsed, ReservationsCreateResponseParsed, ReservationSummaryParsed, UserReservationSummaryParsed } from '@keimelion/sdk/schemas'
 
-export interface ReservationSummary {
-  id: string
-  listItemId: string
-  userId: string
-  quantityBooked: number
-  createdAt: Date
-}
+export type ReservationSummary = ReservationSummaryParsed
 
-export interface ListItemReservationSummary {
-  id: string
-  quantityReservedTotal: number
-  itemStatus: ItemStatus
-}
+export type ListItemReservationSummary = ListItemReservationSummaryParsed
 
-export interface ReservationActionResponse {
-  reservation: ReservationSummary
-  listItem: ListItemReservationSummary
+export type ReservationActionResponse = Omit<ReservationsCreateResponseParsed, 'token'>
+
+export interface AnonymousReservationActionResponse extends ReservationActionResponse {
+  token: string
 }
 
 export function toReservationSummary(row: Reservation): ReservationSummary {
@@ -30,21 +22,19 @@ export function toReservationSummary(row: Reservation): ReservationSummary {
     id: row.id,
     listItemId: row.listItemId,
     userId: row.userId,
+    reserverName: row.reserverName,
+    reserverEmail: row.reserverEmail,
     quantityBooked: row.quantityBooked,
     createdAt: row.createdAt,
   }
 }
 
-export interface ReservationProfileCollaboratorRow extends ListCollaborator {
-  user: User | null
-}
-
 export interface ReservationProfileListRow extends List {
-  collaborators: ReservationProfileCollaboratorRow[]
+  listUsers: ListUserWithUser[]
 }
 
 export interface ReservationProfileListItemRow extends ListItem {
-  item: Item
+  item: ItemRowWithImage
   list: ReservationProfileListRow
 }
 
@@ -52,28 +42,10 @@ export interface ReservationProfileRow extends Reservation {
   listItem: ReservationProfileListItemRow
 }
 
-export interface ReservationProfileEntry {
-  reservation: {
-    id: string
-    quantityBooked: number
-    createdAt: Date
-  }
-  listItem: {
-    id: string
-    name: string
-    quantityDesired: number
-    imageId: string | null
-  }
-  list: {
-    id: string
-    slug: string
-    title: string
-    ownerDisplayName: string | null
-  }
-}
+export type ReservationProfileEntry = UserReservationSummaryParsed
 
 export function toReservationProfileEntry(row: ReservationProfileRow): ReservationProfileEntry {
-  const ownerUser = row.listItem.list.collaborators[0]?.user ?? null
+  const ownerUser = findOwnerUser(row.listItem.list.listUsers)
   return {
     reservation: {
       id: row.id,
@@ -85,6 +57,7 @@ export function toReservationProfileEntry(row: ReservationProfileRow): Reservati
       name: row.listItem.item.name,
       quantityDesired: row.listItem.quantityDesired,
       imageId: row.listItem.item.imageId ?? null,
+      image: row.listItem.item.image ? toImageDetail(row.listItem.item.image) : null,
     },
     list: {
       id: row.listItem.list.id,

@@ -2,17 +2,15 @@ import { and, count, eq, inArray, type SQL } from 'drizzle-orm'
 import { db } from '../../../db/client.js'
 import { reservations } from '../../../db/entities/reservations/reservations.schema.js'
 import { listItems } from '../../../db/entities/list-items/list-items.schema.js'
-import { listCollaborators } from '../../../db/entities/list-collaborators/list-collaborators.schema.js'
-import { CollabRoles } from '../../../shared/enums/collab-role.js'
 import {
+  RESERVATION_LIST_ITEM_HYDRATION,
   RESERVATION_SORTABLE_FIELDS,
   RESERVATION_DEFAULT_SORT,
 } from '../../../db/entities/reservations/reservations.repository.js'
 import { defineEntity } from '../../../shared/db/entity-descriptor.js'
-import { getOffset } from '../../../shared/schemas/pagination.js'
+import { getOffset } from '../../../shared/utils/pagination.js'
+import type { PaginationQueryParsed, SortInput } from '@keimelion/sdk/schemas'
 import type { AdminReservationRow } from './admin-reservations.mapper.js'
-import type { PaginationInput } from '../../../shared/schemas/pagination.js'
-import type { SortInput } from '../../../shared/schemas/sort.js'
 
 export const adminReservationsEntity = defineEntity({
   sortable: RESERVATION_SORTABLE_FIELDS,
@@ -41,21 +39,8 @@ export interface ListItemsScope {
 }
 
 const RESERVATION_HYDRATION = {
-  user: true,
-  listItem: {
-    with: {
-      item: { with: { image: true } },
-      list: {
-        with: {
-          collaborators: {
-            where: eq(listCollaborators.collabRole, CollabRoles.OWNER),
-            limit: 1,
-            with: { user: true },
-          },
-        },
-      },
-    },
-  },
+  user: { with: { avatarImage: true } },
+  ...RESERVATION_LIST_ITEM_HYDRATION,
 } as const
 
 export async function resolveListItemIds(scope: ListItemsScope): Promise<string[] | null> {
@@ -84,7 +69,7 @@ function buildWhere(filters: AdminReservationsScopedFilters): SQL | undefined {
 
 export async function findReservationsPaged(
   filters: AdminReservationsScopedFilters,
-  pagination: PaginationInput,
+  pagination: PaginationQueryParsed,
   sort: SortInput<AdminReservationsSortField> | undefined,
 ): Promise<AdminReservationRow[]> {
   const offset = getOffset(pagination)

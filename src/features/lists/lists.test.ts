@@ -2,6 +2,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { db } from '../../db/client.js'
 import { apiRequest } from '../../shared/test/api-request.js'
 import { generateTestToken, makeAccessTokenEntry } from '../../shared/test/auth.js'
+import {
+  listsAddItemResponseSchema,
+  listsCreateResponseSchema,
+  listsGetResponseSchema,
+  listsListResponseSchema,
+  listsUpdateResponseSchema,
+} from '@keimelion/sdk/schemas'
 
 const AUTH_USER = {
   id: '00000000-0000-0000-0000-000000000001',
@@ -10,7 +17,6 @@ const AUTH_USER = {
   passwordHash: 'hashed',
   authProvider: 'email' as const,
   role: 'user' as const,
-  avatarUrl: null,
   avatarImageId: null,
   isCgvAccepted: true,
   cgvAcceptedAt: new Date('2024-01-01'),
@@ -52,7 +58,7 @@ const MOCK_COLLABORATOR = {
   listId: LIST_ID,
   userId: AUTH_USER.id,
   invitedEmail: null,
-  collabRole: 'owner' as const,
+  role: 'owner' as const,
   inviteStatus: 'accepted',
   inviteToken: null,
   inviteTokenExpiresAt: null,
@@ -65,7 +71,6 @@ const MOCK_ITEM = {
   id: ITEM_ID,
   name: 'My Item',
   description: null,
-  imageUrl: null,
   imageId: null,
   createdByUserId: AUTH_USER.id,
   deletedAt: null,
@@ -137,9 +142,9 @@ function mockCountChain(total: number): void {
 }
 
 function rowWithOwner(row: object, owner: unknown): object {
-  if (owner === null) return { ...row, collaborators: [], listTags: [] }
+  if (owner === null) return { ...row, listUsers: [], listTags: [] }
   const ownerId = (owner as { id: string }).id
-  return { ...row, collaborators: [{ userId: ownerId, user: owner }], listTags: [] }
+  return { ...row, listUsers: [{ userId: ownerId, role: "owner" as const, user: owner }], listTags: [] }
 }
 
 function mockUpdateList(returnRow: unknown): void {
@@ -180,6 +185,7 @@ describe('POST /v1/lists', () => {
     })
 
     const body = await response.json() as { list: { title: string; slug: string } }
+    listsCreateResponseSchema.parse(body)
     expect(response.status).toBe(201)
     expect(body.list.title).toBe('My Wishlist')
     expect(body.list.slug).toBe('my-wishlist-abc123')
@@ -209,7 +215,7 @@ describe('POST /v1/lists', () => {
     })
     vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce({
       ...MOCK_LIST,
-      collaborators: [{ userId: AUTH_USER.id, user: AUTH_USER }],
+      listUsers: [{ userId: AUTH_USER.id, role: "owner" as const, user: AUTH_USER }],
       listTags: [listTagLink(TAG_GAMING_ROW)],
     } as never)
 
@@ -424,6 +430,7 @@ describe('GET /v1/lists', () => {
       items: { id: string; owner: { id: string } }[]
       pagination: { total: number }
     }
+    listsListResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.items).toHaveLength(1)
     expect(body.pagination.total).toBe(1)
@@ -474,6 +481,7 @@ describe('GET /v1/lists/:id', () => {
     const response = await apiRequest(`/v1/lists/${LIST_ID}`, { token })
 
     const body = await response.json() as { list: { title: string; owner: { id: string } | null } }
+    listsGetResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.list.title).toBe(MOCK_LIST.title)
     expect(body.list.owner?.id).toBe(AUTH_USER.id)
@@ -541,6 +549,7 @@ describe('PATCH /v1/lists/:id', () => {
     })
 
     const body = await response.json() as { list: { title: string } }
+    listsUpdateResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.list.title).toBe('Updated')
   })
@@ -646,7 +655,7 @@ describe('PATCH /v1/lists/:id', () => {
     vi.mocked(db.query.tags.findMany).mockResolvedValueOnce([TAG_GAMING_ROW, TAG_READING_ROW] as never)
     vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce({
       ...MOCK_LIST,
-      collaborators: [{ userId: AUTH_USER.id, user: AUTH_USER }],
+      listUsers: [{ userId: AUTH_USER.id, role: "owner" as const, user: AUTH_USER }],
       listTags: [listTagLink(TAG_GAMING_ROW), listTagLink(TAG_READING_ROW)],
     } as never)
 
@@ -667,7 +676,7 @@ describe('PATCH /v1/lists/:id', () => {
     mockListAndOwner()
     vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce({
       ...MOCK_LIST,
-      collaborators: [{ userId: AUTH_USER.id, user: AUTH_USER }],
+      listUsers: [{ userId: AUTH_USER.id, role: "owner" as const, user: AUTH_USER }],
       listTags: [],
     } as never)
 
@@ -781,6 +790,7 @@ describe('POST /v1/lists/:id/items', () => {
     })
 
     const body = await response.json() as { listItem: { item: { id: string; name: string }; itemStatus: string } }
+    listsAddItemResponseSchema.parse(body)
     expect(response.status).toBe(201)
     expect(body.listItem.item.id).toBe(ITEM_ID)
     expect(body.listItem.item.name).toBe('My Item')
@@ -923,7 +933,7 @@ describe('lists mapper hydrates tags', () => {
     mockAuthChain()
     vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce({
       ...MOCK_LIST,
-      collaborators: [{ userId: AUTH_USER.id, user: AUTH_USER }],
+      listUsers: [{ userId: AUTH_USER.id, role: "owner" as const, user: AUTH_USER }],
       listTags: [listTagLink(TAG_GAMING_ROW)],
     } as never)
 
@@ -942,7 +952,7 @@ describe('lists mapper hydrates tags', () => {
     vi.mocked(db.query.lists.findMany).mockResolvedValueOnce([
       {
         ...MOCK_LIST,
-        collaborators: [{ userId: AUTH_USER.id, user: AUTH_USER }],
+        listUsers: [{ userId: AUTH_USER.id, role: "owner" as const, user: AUTH_USER }],
         listTags: [listTagLink(TAG_READING_ROW)],
       },
     ] as never)

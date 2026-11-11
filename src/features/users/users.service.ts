@@ -1,21 +1,30 @@
 import { db } from '../../db/client.js'
-import { HttpStatus } from '../../shared/enums/http.js'
-import { ErrorCode } from '../../shared/enums/error-code.js'
+import { buildPaginatedResponse } from '../../shared/utils/pagination.js'
+import { ErrorCode, HttpStatus } from '@keimelion/sdk/enums'
+import type {
+  PaginatedResponse,
+  UsersChangePasswordRequestParsed,
+  UsersExportQueryParsed,
+  UsersListReservationsQueryParsed,
+} from '@keimelion/sdk/schemas'
 import { serviceError } from '../../shared/utils/response.js'
 import { pickDefined } from '../../shared/utils/partial-update.js'
 import { hashPassword, verifyPassword } from '../../shared/utils/hash.js'
 import { findUserById, findUserByIdWithAvatar, anonymizeUser, updatePasswordHash, insertDeletionAudit } from '../../db/entities/users/users.repository.js'
 import { deleteAllUserTokens } from '../../db/entities/access-tokens/access-tokens.repository.js'
 import { revokeAllUserSessions } from '../../shared/db/user-sessions.js'
-import { cleanupReplacedImage, processOptionalImage, rollbackImage } from '../uploads/images.service.js'
+import { cleanupReplacedImage, processOptionalImage, runWithImageRollback } from '../uploads/images.service.js'
 import {
   findFeedbackByUser,
   findImagesByUploaderForExport,
   findItemsByCreator,
   findItemSourcesByCreator,
+  findListInvitesForExport,
   findListItemsForContributor,
   findListsOwnedByForExport,
   findListTagsForOwner,
+  findListUsersForExport,
+  findReportsByUser,
   findReservationsForExport,
   findTagsCreatedByUser,
 } from './export/rgpd-export.repository.js'
@@ -32,19 +41,19 @@ import { toImageDetail } from '../uploads/images.mapper.js'
 import { buildExportZipStream } from './export/csv-archive-writer.js'
 import {
   EXPORT_ENTITY_REGISTRY,
+  toExportListInviteRow,
   toExportListRow,
   toExportListTagRow,
+  toExportListUserRow,
+  toExportReportRow,
 } from './export/export-entities.js'
-import { buildPaginatedResponse } from '../../shared/schemas/pagination.js'
 import { toReservationProfileEntry } from '../reservations/reservations.types.js'
 import type { ReservationProfileEntry } from '../reservations/reservations.types.js'
-import type { UserDetail, UserWrite } from '../../shared/types/user.js'
+import type { UserDetail, UserRowWithAvatar, UserWrite } from '../../shared/types/user.js'
+import type { User } from '../../db/entities/users/users.schema.js'
+import type { Image } from '../../db/entities/images/images.schema.js'
 import type { ServiceResult } from '../../shared/types/service.js'
-import type { PaginatedResponse } from '../../shared/types/api.js'
 import type { PartialWrite } from '../../shared/types/api.js'
-import type { ChangePasswordInput } from './endpoints/change-password.js'
-import type { ExportFormat } from './endpoints/export-data.js'
-import type { ListMyReservationsInput } from './endpoints/get-my-reservations.js'
 
 export interface UpdateUserProfileInput extends PartialWrite<UserWrite> {
   avatarBuffer: Buffer | null
@@ -90,10 +99,10 @@ export async function updateProfile(
   const fieldPatch = pickDefined(rest)
 
   if (avatarBuffer && clearAvatar) {
-    return serviceError(ErrorCode.UNPROCESSABLE_ENTITY)
+    return serviceError(ErrorCode.IMAGE_AND_CLEAR_CONFLICT)
   }
 
-  const previous = await findUserById(userId)
+  const previous = await findUserByIdWithAvatar(userId)
   const previousAvatarImageId = previous?.avatarImageId ?? null
 
   const imageOutcome = await processOptionalImage(avatarBuffer, userId)
@@ -105,11 +114,10 @@ export async function updateProfile(
     return serviceError(ErrorCode.NO_FIELDS_TO_UPDATE)
   }
 
-  const updatedUser = await updateUserProfile(userId, patch)
-  if (!updatedUser) {
-    await rollbackImage(newImageId, 'user.update_profile')
-    return serviceError(ErrorCode.USER_UPDATE_FAILED)
-  }
+  const updatedUser = await runWithImageRollback(newImageId, 'user.update_profile', () =>
+    updateUserProfile(userId, patch),
+  )
+  if (!updatedUser) return serviceError(ErrorCode.USER_UPDATE_FAILED)
 
   await cleanupReplacedImage(
     previousAvatarImageId,
@@ -118,9 +126,20 @@ export async function updateProfile(
   )
 
   return {
-    data: { user: toUserDetail({ ...updatedUser, avatarImage: imageOutcome.image }) },
+    data: { user: toUserDetail({ ...updatedUser, avatarImage: resolveAvatarImage(updatedUser, imageOutcome.image, previous) }) },
     httpStatus: HttpStatus.OK,
   }
+}
+
+// The avatar image row is only loaded for the previous state; reuse it when the avatar did not change.
+function resolveAvatarImage(
+  updatedUser: User,
+  uploadedImage: Image | null,
+  previous: UserRowWithAvatar | undefined,
+): Image | null {
+  if (uploadedImage) return uploadedImage
+  if (updatedUser.avatarImageId === null) return null
+  return previous?.avatarImage ?? null
 }
 
 function buildAvatarPatch(
@@ -149,7 +168,7 @@ export async function deleteAccount(userId: string, originalEmail: string): Prom
   return { data: { message: 'Account deleted successfully' }, httpStatus: HttpStatus.OK }
 }
 
-export async function changePassword(userId: string, input: ChangePasswordInput): Promise<ServiceResult<{ message: string }>> {
+export async function changePassword(userId: string, input: UsersChangePasswordRequestParsed): Promise<ServiceResult<{ message: string }>> {
   const user = await findUserById(userId)
 
   if (!user) {
@@ -178,7 +197,7 @@ export async function changePassword(userId: string, input: ChangePasswordInput)
 
 export async function listMyReservations(
   userId: string,
-  input: ListMyReservationsInput,
+  input: UsersListReservationsQueryParsed,
 ): Promise<ServiceResult<PaginatedResponse<ReservationProfileEntry>>> {
   const [rows, total] = await Promise.all([
     findMyReservationsPaged(userId, input, input.sort),
@@ -191,7 +210,7 @@ export async function listMyReservations(
   }
 }
 
-export async function exportUserData(userId: string, format: ExportFormat): Promise<ExportResult> {
+export async function exportUserData(userId: string, format: UsersExportQueryParsed['format']): Promise<ExportResult> {
   if (format === 'csv') {
     const zipStream = await buildExportZipStream(userId, EXPORT_ENTITY_REGISTRY)
     return {
@@ -202,7 +221,7 @@ export async function exportUserData(userId: string, format: ExportFormat): Prom
     }
   }
 
-  const user = await findUserById(userId)
+  const user = await findUserByIdWithAvatar(userId)
   const profile = user ? toUserDetail(user) : null
 
   const [
@@ -212,8 +231,11 @@ export async function exportUserData(userId: string, format: ExportFormat): Prom
     rawLists,
     rawTags,
     rawListTags,
+    rawListUsers,
+    rawListInvites,
     rawFeedback,
     rawReservations,
+    rawReports,
     rawImages,
   ] = await Promise.all([
     findItemsByCreator(userId),
@@ -222,8 +244,11 @@ export async function exportUserData(userId: string, format: ExportFormat): Prom
     findListsOwnedByForExport(userId),
     findTagsCreatedByUser(userId),
     findListTagsForOwner(userId),
+    findListUsersForExport(userId),
+    findListInvitesForExport(userId),
     findFeedbackByUser(userId),
     findReservationsForExport(userId),
+    findReportsByUser(userId),
     findImagesByUploaderForExport(userId),
   ])
 
@@ -237,8 +262,11 @@ export async function exportUserData(userId: string, format: ExportFormat): Prom
       lists: rawLists.map(toExportListRow),
       tags: rawTags.map(toTagDetail),
       listTags: rawListTags.map(toExportListTagRow),
+      listUsers: rawListUsers.map(toExportListUserRow),
+      listInvites: rawListInvites.map(toExportListInviteRow),
       feedback: rawFeedback.map(toFeedbackDetail),
       reservations: rawReservations,
+      reports: rawReports.map(toExportReportRow),
       images: rawImages.map(toImageDetail),
     },
     contentType: EXPORT_JSON_CONTENT_TYPE,

@@ -1,10 +1,16 @@
 import { db } from '../../../db/client.js'
-import { HttpStatus } from '../../../shared/enums/http.js'
-import { ErrorCode } from '../../../shared/enums/error-code.js'
+import { buildPaginatedResponse } from '../../../shared/utils/pagination.js'
+import { ErrorCode, HttpStatus } from '@keimelion/sdk/enums'
+import type { Locale, SupportedCurrency } from '@keimelion/sdk/enums'
+import { DEFAULT_DISPLAY_CURRENCY } from '@keimelion/sdk/schemas'
+import type {
+  AdminListsUpdateRequestParsed,
+  PaginatedResponse,
+  PaginationQueryParsed,
+} from '@keimelion/sdk/schemas'
 import { serviceError } from '../../../shared/utils/response.js'
 import { logger } from '../../../shared/utils/logger.js'
 import { runWrite, buildChanges } from '../../../shared/utils/admin-write.js'
-import { buildPaginatedResponse } from '../../../shared/schemas/pagination.js'
 import { normalizeTagSlugs } from '../../../shared/utils/slug.js'
 import {
   buildListUpdatePatch,
@@ -31,18 +37,12 @@ import {
 import { toAdminListDetail } from './admin-lists.mapper.js'
 import { toAdminListItemResponse } from './admin-list-items.mapper.js'
 import { AdminAction } from '../admin.enums.js'
-import { DEFAULT_DISPLAY_CURRENCY } from '../../../shared/schemas/currency.js'
 import type { List } from '../../../db/entities/lists/lists.schema.js'
 import type { UpdateListFields } from '../../../db/entities/lists/lists.repository.js'
 import type { AdminListAggregate, AdminListDetail } from './admin-lists.mapper.js'
 import type { AdminListItemResponse } from './admin-list-items.mapper.js'
 import type { ServiceResult } from '../../../shared/types/service.js'
-import type { PaginatedResponse } from '../../../shared/types/api.js'
-import type { PaginationInput } from '../../../shared/schemas/pagination.js'
-import type { Locale } from '../../../shared/enums/locale.js'
-import type { SupportedCurrency } from '../../../shared/enums/currency.js'
 import type { ListListsInput } from './endpoints/list.js'
-import type { UpdateListInput } from './endpoints/update.js'
 
 const FREE_TEXT_FIELDS = new Set(['title', 'description'])
 
@@ -89,7 +89,7 @@ export async function getListById(
 
 export async function listListItemsByListId(
   id: string,
-  pagination: PaginationInput,
+  pagination: PaginationQueryParsed,
   locale: Locale,
   displayCurrency: SupportedCurrency,
 ): Promise<ServiceResult<PaginatedResponse<AdminListItemResponse>>> {
@@ -119,7 +119,7 @@ export async function listListItemsByListId(
 export async function updateListById(
   adminId: string,
   id: string,
-  input: UpdateListInput,
+  input: AdminListsUpdateRequestParsed,
 ): Promise<ServiceResult<{ list: AdminListDetail }>> {
   const existingRow = await findAdminListByIdWithOwner(id)
   if (!existingRow || existingRow.deletedAt) return serviceError(ErrorCode.NOT_FOUND)
@@ -161,7 +161,7 @@ export async function updateListById(
   if (tagSlugs === null) {
     const updatedRow = {
       ...outcome.row,
-      collaborators: existingRow.collaborators,
+      listUsers: existingRow.listUsers,
       listTags: existingRow.listTags,
     }
     return {
@@ -204,7 +204,7 @@ export async function restoreListById(
 
   const restoredRow = {
     ...restored,
-    collaborators: existingRow.collaborators,
+    listUsers: existingRow.listUsers,
     listTags: existingRow.listTags,
   }
   return {

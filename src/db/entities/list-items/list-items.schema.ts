@@ -5,7 +5,7 @@ import {
   nonNegativeInt,
   nonNegativeSmallInt,
 } from '../../../shared/db/checks.js'
-import { ITEM_STATUS_VALUES, ItemStatuses } from '../../../shared/enums/item-status.js'
+import { ITEM_STATUS_VALUES, ItemStatuses } from '@keimelion/sdk/enums'
 import { lists } from '../lists/lists.schema.js'
 import { items } from '../items/items.schema.js'
 

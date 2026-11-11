@@ -1,9 +1,15 @@
 import { db } from '../../db/client.js'
-import { HttpStatus } from '../../shared/enums/http.js'
-import { ErrorCode } from '../../shared/enums/error-code.js'
+import { buildPaginatedResponse } from '../../shared/utils/pagination.js'
+import { ErrorCode, HttpStatus } from '@keimelion/sdk/enums'
+import type { Locale } from '@keimelion/sdk/enums'
+import type {
+  ItemsCreateRequestParsed,
+  ItemsUpdateRequestParsed,
+  PaginatedResponse,
+  PaginationQueryParsed,
+} from '@keimelion/sdk/schemas'
 import { serviceError } from '../../shared/utils/response.js'
-import { buildPaginatedResponse } from '../../shared/schemas/pagination.js'
-import { normalizeTagSlugs } from '../../shared/utils/slug.js'
+import { pickDefined } from '../../shared/utils/partial-update.js'
 import {
   countAllItems,
   findAllItemsWithSources,
@@ -12,21 +18,42 @@ import {
   insertItem,
   updateItem,
 } from '../../db/entities/items/items.repository.js'
-import { findCategoriesByIds } from '../../db/entities/categories/categories.repository.js'
-import { replaceItemCategories } from '../../db/entities/item-categories/item-categories.repository.js'
-import { upsertTagsBySlugs } from '../../db/entities/tags/tags.repository.js'
-import { replaceItemTags } from '../../db/entities/item-tags/item-tags.repository.js'
+import { resolveItemRelations, writeItemRelations } from '../../shared/db/item-relations.js'
 import { toItemWithSources } from '../../shared/types/item.js'
+import {
+  cleanupReplacedImage,
+  processOptionalImage,
+  runWithImageRollback,
+} from '../uploads/images.service.js'
+import type { Item } from '../../db/entities/items/items.schema.js'
+import type { ItemRelations } from '../../shared/db/item-relations.js'
 import type { ItemWithSources } from '../../shared/types/item.js'
-import type { PaginationInput } from '../../shared/schemas/pagination.js'
-import type { PaginatedResponse } from '../../shared/types/api.js'
 import type { ServiceResult } from '../../shared/types/service.js'
-import type { Locale } from '../../shared/enums/locale.js'
-import type { CreateItemInput } from './endpoints/create.js'
-import type { UpdateItemInput } from './endpoints/update.js'
+
+export interface CreateUserItemInput extends ItemsCreateRequestParsed {
+  imageBuffer: Buffer | null
+}
+
+export interface UpdateUserItemInput extends Omit<ItemsUpdateRequestParsed, 'clearImage'> {
+  imageBuffer: Buffer | null
+  clearImage: boolean
+}
+
+type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
+type ItemPatch = Parameters<typeof updateItem>[1]
+
+interface ItemUpdateWrite {
+  item: Item
+  patch: ItemPatch
+  userId: string
+  relations: ItemRelations
+}
+
+const ITEM_CREATE_CONTEXT = 'item.create'
+const ITEM_UPDATE_CONTEXT = 'item.update'
 
 export async function listItems(
-  pagination: PaginationInput,
+  pagination: PaginationQueryParsed,
   locale: Locale,
 ): Promise<ServiceResult<PaginatedResponse<ItemWithSources>>> {
   const [rows, total] = await Promise.all([findAllItemsWithSources(pagination), countAllItems()])
@@ -43,58 +70,30 @@ export async function listItems(
 
 export async function createUserItem(
   userId: string,
-  input: CreateItemInput,
+  input: CreateUserItemInput,
   locale: Locale,
 ): Promise<ServiceResult<{ item: ItemWithSources }>> {
-  const { tags, categories } = input
+  const relations = await resolveItemRelations(input.tags, input.categories)
+  if ('errorCode' in relations) return serviceError(relations.errorCode)
 
-  let tagSlugs: string[] | null = null
-  if (tags !== undefined) {
-    tagSlugs = normalizeTagSlugs(tags)
-    if (tagSlugs === null) return serviceError(ErrorCode.TAG_INVALID_NAME)
+  const imageOutcome = await processOptionalImage(input.imageBuffer, userId)
+  if ('errorCode' in imageOutcome) return serviceError(imageOutcome.errorCode)
+  const newImageId = imageOutcome.image?.id ?? null
+
+  const values = {
+    name: input.name,
+    description: input.description ?? null,
+    imageId: newImageId,
+    createdByUserId: userId,
   }
-
-  let uniqueCategoryIds: string[] | null = null
-  if (categories !== undefined) {
-    uniqueCategoryIds = Array.from(new Set(categories))
-    if (uniqueCategoryIds.length > 0) {
-      const found = await findCategoriesByIds(uniqueCategoryIds)
-      if (found.length !== uniqueCategoryIds.length) {
-        return serviceError(ErrorCode.CATEGORY_NOT_FOUND)
-      }
-    }
-  }
-
-  const inserted = await db.transaction(async (tx) => {
-    const item = await insertItem(
-      {
-        name: input.name,
-        description: input.description ?? null,
-        imageUrl: input.imageUrl ?? null,
-        createdByUserId: userId,
-      },
-      tx,
-    )
-    if (!item) return undefined
-
-    if (tagSlugs !== null) {
-      const tagIds = await upsertTagsBySlugs(tagSlugs, userId, tx)
-      await replaceItemTags(item.id, tagIds, tx)
-    }
-    if (uniqueCategoryIds !== null) {
-      await replaceItemCategories(item.id, uniqueCategoryIds, tx)
-    }
-
-    return item
-  })
+  const inserted = await runWithImageRollback(newImageId, ITEM_CREATE_CONTEXT, () =>
+    db.transaction((tx) => insertItemWithRelations(values, relations, tx)),
+  )
   if (!inserted) return serviceError(ErrorCode.INTERNAL_ERROR)
 
   const row = await findItemByIdWithSources(inserted.id)
   if (!row) return serviceError(ErrorCode.INTERNAL_ERROR)
-  return {
-    data: { item: toItemWithSources(row, locale) },
-    httpStatus: HttpStatus.CREATED,
-  }
+  return { data: { item: toItemWithSources(row, locale) }, httpStatus: HttpStatus.CREATED }
 }
 
 export async function getItemById(
@@ -113,63 +112,63 @@ export async function getItemById(
 export async function updateUserItem(
   itemId: string,
   userId: string,
-  input: UpdateItemInput,
+  input: UpdateUserItemInput,
   locale: Locale,
 ): Promise<ServiceResult<{ item: ItemWithSources }>> {
-  const { name, description, imageUrl, tags, categories } = input
-  if (
-    name === undefined &&
-    description === undefined &&
-    imageUrl === undefined &&
-    tags === undefined &&
-    categories === undefined
-  ) {
-    return serviceError(ErrorCode.NO_FIELDS_TO_UPDATE)
-  }
+  if (input.imageBuffer && input.clearImage) return serviceError(ErrorCode.IMAGE_AND_CLEAR_CONFLICT)
+  if (!hasFieldToUpdate(input)) return serviceError(ErrorCode.NO_FIELDS_TO_UPDATE)
 
   const item = await findItemById(itemId)
   if (!item) return serviceError(ErrorCode.NOT_FOUND)
   if (item.createdByUserId !== userId) return serviceError(ErrorCode.FORBIDDEN)
 
-  let tagSlugs: string[] | null = null
-  if (tags !== undefined) {
-    tagSlugs = normalizeTagSlugs(tags)
-    if (tagSlugs === null) return serviceError(ErrorCode.TAG_INVALID_NAME)
-  }
+  const relations = await resolveItemRelations(input.tags, input.categories)
+  if ('errorCode' in relations) return serviceError(relations.errorCode)
 
-  let uniqueCategoryIds: string[] | null = null
-  if (categories !== undefined) {
-    uniqueCategoryIds = Array.from(new Set(categories))
-    if (uniqueCategoryIds.length > 0) {
-      const found = await findCategoriesByIds(uniqueCategoryIds)
-      if (found.length !== uniqueCategoryIds.length) {
-        return serviceError(ErrorCode.CATEGORY_NOT_FOUND)
-      }
-    }
-  }
+  const imageOutcome = await processOptionalImage(input.imageBuffer, userId)
+  if ('errorCode' in imageOutcome) return serviceError(imageOutcome.errorCode)
+  const newImageId = imageOutcome.image?.id ?? null
 
-  const scalarFields: Parameters<typeof updateItem>[1] = {}
-  if (name !== undefined) scalarFields.name = name
-  if (description !== undefined) scalarFields.description = description
-  if (imageUrl !== undefined) scalarFields.imageUrl = imageUrl
-
-  await db.transaction(async (tx) => {
-    if (Object.keys(scalarFields).length > 0) {
-      await updateItem(itemId, scalarFields, tx)
-    }
-    if (tagSlugs !== null) {
-      const tagIds = await upsertTagsBySlugs(tagSlugs, userId, tx)
-      await replaceItemTags(itemId, tagIds, tx)
-    }
-    if (uniqueCategoryIds !== null) {
-      await replaceItemCategories(itemId, uniqueCategoryIds, tx)
-    }
-  })
+  const write: ItemUpdateWrite = { item, patch: buildItemPatch(input, newImageId), userId, relations }
+  const updated = await runWithImageRollback(newImageId, ITEM_UPDATE_CONTEXT, () =>
+    db.transaction((tx) => applyItemUpdate(write, tx)),
+  )
+  if (!updated) return serviceError(ErrorCode.NOT_FOUND)
+  await cleanupReplacedImage(item.imageId, updated.imageId, ITEM_UPDATE_CONTEXT)
 
   const refreshed = await findItemByIdWithSources(itemId)
   if (!refreshed) return serviceError(ErrorCode.NOT_FOUND)
-  return {
-    data: { item: toItemWithSources(refreshed, locale) },
-    httpStatus: HttpStatus.OK,
-  }
+  return { data: { item: toItemWithSources(refreshed, locale) }, httpStatus: HttpStatus.OK }
+}
+
+async function insertItemWithRelations(
+  values: Parameters<typeof insertItem>[0] & { createdByUserId: string },
+  relations: ItemRelations,
+  tx: DbTransaction,
+): Promise<Item | undefined> {
+  const item = await insertItem(values, tx)
+  if (!item) return undefined
+  await writeItemRelations({ itemId: item.id, tagCreatorId: values.createdByUserId, relations }, tx)
+  return item
+}
+
+function hasFieldToUpdate(input: UpdateUserItemInput): boolean {
+  const { imageBuffer, clearImage, ...fields } = input
+  if (imageBuffer !== null || clearImage) return true
+  return Object.values(fields).some((value) => value !== undefined)
+}
+
+function buildItemPatch(input: UpdateUserItemInput, newImageId: string | null): ItemPatch {
+  const patch: ItemPatch = pickDefined({ name: input.name, description: input.description })
+  if (newImageId !== null) return { ...patch, imageId: newImageId }
+  if (input.clearImage) return { ...patch, imageId: null }
+  return patch
+}
+
+async function applyItemUpdate(write: ItemUpdateWrite, tx: DbTransaction): Promise<Item | undefined> {
+  const { item, patch, userId, relations } = write
+  const updated = Object.keys(patch).length > 0 ? await updateItem(item.id, patch, tx) : item
+  if (!updated) return undefined
+  await writeItemRelations({ itemId: item.id, tagCreatorId: userId, relations }, tx)
+  return updated
 }

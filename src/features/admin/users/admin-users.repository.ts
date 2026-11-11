@@ -1,17 +1,18 @@
 import { db } from '../../../db/client.js'
 import { users } from '../../../db/entities/users/users.schema.js'
 import { and, count, eq, type SQL } from 'drizzle-orm'
+import type { AnyColumn } from 'drizzle-orm'
+import type { ADMIN_USERS_SORT_FIELDS } from '@keimelion/sdk/schemas'
 import { z } from 'zod'
-import { USER_ROLE_VALUES } from '../../../shared/enums/user-role.js'
+import { getOffset } from '../../../shared/utils/pagination.js'
+import { USER_ROLE_VALUES } from '@keimelion/sdk/enums'
+import type { UserRole } from '@keimelion/sdk/enums'
+import type { PaginationQueryParsed, SortInput } from '@keimelion/sdk/schemas'
 import { defineEntity, buildSoftDeleteDefault } from '../../../shared/db/entity-descriptor.js'
 import type { User } from '../../../db/entities/users/users.schema.js'
 import type { UserRowWithAvatar } from '../../../shared/types/user.js'
 
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
-import { getOffset } from '../../../shared/schemas/pagination.js'
-import type { PaginationInput } from '../../../shared/schemas/pagination.js'
-import type { UserRole } from '../../../shared/enums/user-role.js'
-import type { SortInput } from '../../../shared/schemas/sort.js'
 import type { FilterInput } from '../../../shared/db/filter-parser.js'
 
 const roleSchema = z.enum(USER_ROLE_VALUES)
@@ -22,7 +23,7 @@ export const usersEntity = defineEntity({
     email:       users.email,
     username:    users.username,
     lastActiveAt: users.lastActiveAt,
-  },
+  } satisfies Record<(typeof ADMIN_USERS_SORT_FIELDS)[number], AnyColumn>,
   defaultSort: [{ field: 'createdAt', direction: 'desc' }],
   filterable: {
     id:        { column: users.id,        operators: ['eq', 'in'] },
@@ -51,7 +52,7 @@ interface AdminInsertUserFields {
   passwordResetTokenExpiresAt: Date
 }
 
-type AdminUpdateUserFields = Partial<Pick<typeof users.$inferInsert, 'avatarUrl' | 'isMarketingOptedIn' | 'role'>>
+type AdminUpdateUserFields = Partial<Pick<typeof users.$inferInsert, 'avatarImageId' | 'isMarketingOptedIn' | 'role'>>
 
 function buildUsersWhere(filters: ListUsersFilters): SQL | undefined {
   const generic = filters.genericFilters ?? []
@@ -68,7 +69,7 @@ export async function countUsers(filters: ListUsersFilters): Promise<number> {
 }
 
 export function findAllUsers(
-  input: PaginationInput,
+  input: PaginationQueryParsed,
   filters: ListUsersFilters,
 ): Promise<UserRowWithAvatar[]> {
   const offset = getOffset(input)

@@ -2,21 +2,21 @@ import { count, desc, eq } from 'drizzle-orm'
 import { db } from '../../client.js'
 import { items } from './items.schema.js'
 import { listItems } from '../list-items/list-items.schema.js'
-import { getOffset } from '../../../shared/schemas/pagination.js'
-import type { PaginationInput } from '../../../shared/schemas/pagination.js'
+import { getOffset } from '../../../shared/utils/pagination.js'
+import type { PaginationQueryParsed } from '@keimelion/sdk/schemas'
 import type { Item } from './items.schema.js'
-import type { ItemRowWithSources } from '../../../shared/types/item.js'
+import type { ItemRowWithImage, ItemRowWithSources } from '../../../shared/types/item.js'
 
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
 interface InsertItemInput {
   name: string
   description: string | null
-  imageUrl: string | null
+  imageId: string | null
   createdByUserId: string | null
 }
 
-type UpdateItemFields = Partial<Pick<typeof items.$inferInsert, 'name' | 'description' | 'imageUrl'>>
+type UpdateItemFields = Partial<Pick<typeof items.$inferInsert, 'name' | 'description' | 'imageId'>>
 
 const ITEM_WITH_SOURCES_WITH = {
   image: true,
@@ -33,6 +33,10 @@ export async function insertItem(input: InsertItemInput, tx?: DbTransaction): Pr
 
 export function findItemById(id: string): Promise<Item | undefined> {
   return db.query.items.findFirst({ where: eq(items.id, id) })
+}
+
+export function findItemByIdWithImage(id: string): Promise<ItemRowWithImage | undefined> {
+  return db.query.items.findFirst({ where: eq(items.id, id), with: { image: true } })
 }
 
 export function findItemByIdWithSources(id: string): Promise<ItemRowWithSources | undefined> {
@@ -67,7 +71,7 @@ export async function countListItemsReferencing(itemId: string, tx?: DbTransacti
   return row?.total ?? 0
 }
 
-export function findAllItemsWithSources(pagination: PaginationInput): Promise<ItemRowWithSources[]> {
+export function findAllItemsWithSources(pagination: PaginationQueryParsed): Promise<ItemRowWithSources[]> {
   const offset = getOffset(pagination)
   return db.query.items.findMany({
     orderBy: [desc(items.createdAt)],

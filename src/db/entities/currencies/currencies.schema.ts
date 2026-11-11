@@ -8,7 +8,7 @@ import { nonNegativeCheck, nonNegativeSmallInt } from '../../../shared/db/checks
  * (e.g. EUR.usd_rate = 0.92 means 1 USD = 0.92 EUR).
  *
  * Rows are seeded by the migration and must stay in sync with
- * `src/shared/enums/currency.ts` (`SupportedCurrencies`). A follow-up
+ * `SupportedCurrencies` in `@keimelion/sdk/enums`. A follow-up
  * ticket will refresh `usd_rate` + `usd_rate_as_of` daily from a provider.
  */
 export const currencies = pgTable(

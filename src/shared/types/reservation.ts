@@ -1,19 +1,15 @@
 import type { Reservation } from '../../db/entities/reservations/reservations.schema.js'
 import type { ListItem } from '../../db/entities/list-items/list-items.schema.js'
 import type { List } from '../../db/entities/lists/lists.schema.js'
-import type { ListCollaborator } from '../../db/entities/list-collaborators/list-collaborators.schema.js'
-import type { User } from '../../db/entities/users/users.schema.js'
+import { findOwnerUser } from './list.js'
+import type { ListUserWithUser } from './list.js'
 import { toItemDetail } from './item.js'
-import type { ItemDetail, ItemRowWithImage } from './item.js'
+import type { ItemRowWithImage } from './item.js'
 import { toUserDetail } from './user.js'
-import type { UserDetail } from './user.js'
-
-export interface ReservationListCollaboratorWithUser extends ListCollaborator {
-  user: User | null
-}
+import type { ReservationDetailParsed, ReservationListItemSummaryParsed, ReservationListSummaryParsed } from '@keimelion/sdk/schemas'
 
 export interface ReservationListRow extends List {
-  collaborators: ReservationListCollaboratorWithUser[]
+  listUsers: ListUserWithUser[]
 }
 
 export interface ReservationListItemRow extends ListItem {
@@ -25,31 +21,18 @@ export interface ReservationRowHydrated extends Reservation {
   listItem: ReservationListItemRow
 }
 
-export interface ReservationListItemSummary {
-  id: string
-  quantityDesired: number
-  item: ItemDetail
-}
+export type ReservationListItemSummary = ReservationListItemSummaryParsed
 
-export interface ReservationListSummary {
-  id: string
-  slug: string
-  title: string
-  owner: UserDetail | null
-}
+export type ReservationListSummary = ReservationListSummaryParsed
 
-export interface ReservationDetail {
-  id: string
-  quantityBooked: number
-  createdAt: Date
-  listItem: ReservationListItemSummary
-  list: ReservationListSummary
-}
+export type ReservationDetail = ReservationDetailParsed
 
 export function toReservationDetail(row: ReservationRowHydrated): ReservationDetail {
-  const ownerUser = row.listItem.list.collaborators[0]?.user ?? null
+  const ownerUser = findOwnerUser(row.listItem.list.listUsers)
   return {
     id: row.id,
+    reserverName: row.reserverName,
+    reserverEmail: row.reserverEmail,
     quantityBooked: row.quantityBooked,
     createdAt: row.createdAt,
     listItem: {

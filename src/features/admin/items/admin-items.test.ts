@@ -1,10 +1,24 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { db } from '../../../db/client.js'
-import { apiRequest } from '../../../shared/test/api-request.js'
+import { apiMultipartRequest, apiRequest } from '../../../shared/test/api-request.js'
 import { generateTestToken, makeAccessTokenEntry } from '../../../shared/test/auth.js'
 import { ADMIN_USER_FIXTURE as ADMIN_USER, makeAdminUser } from '../../../shared/test/fixtures/users.js'
 import { logger } from '../../../shared/utils/logger.js'
-import { MAX_CATEGORIES_PER_ITEM } from '../../../db/entities/item-categories/item-categories.schemas.js'
+import {
+  adminItemsCreateResponseSchema,
+  adminItemsCreateSourceResponseSchema,
+  adminItemsGetResponseSchema,
+  adminItemsListResponseSchema,
+  adminItemsUpdateResponseSchema,
+  adminItemsUpdateSourceResponseSchema,
+  MAX_CATEGORIES_PER_ITEM,
+  messageResponseSchema,
+} from '@keimelion/sdk/schemas'
+import { images } from '../../../db/entities/images/images.schema.js'
+
+const { mockProcessImage } = vi.hoisted(() => ({ mockProcessImage: vi.fn() }))
+
+vi.mock('../../uploads/image.pipeline.js', () => ({ processImage: mockProcessImage }))
 
 vi.mock('../../../shared/utils/logger.js', () => ({
   logger: {
@@ -25,7 +39,6 @@ const ITEM_ROW = {
   id: '00000000-0000-0000-0000-000000000010',
   name: 'Test Item',
   description: 'A test item',
-  imageUrl: null,
   imageId: null,
   createdByUserId: null,
   createdAt: new Date('2024-01-01'),
@@ -405,6 +418,7 @@ describe('POST /v1/admin/items', () => {
     const body = await response.json() as {
       item: { name: string; createdByUserId: null; sources: { itemId: string }[] }
     }
+    adminItemsCreateResponseSchema.parse(body)
     expect(response.status).toBe(201)
     expect(body.item.name).toBe('Test Item')
     expect(body.item.createdByUserId).toBeNull()
@@ -502,7 +516,7 @@ describe('POST /v1/admin/items', () => {
     expect(response.status).toBe(422)
   })
 
-  it('returns 422 when imageUrl uses HTTP', async () => {
+  it('returns 422 when imageUrl is sent (external image URLs are not accepted)', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
 
@@ -511,7 +525,7 @@ describe('POST /v1/admin/items', () => {
       token,
       body: {
         name: 'Test',
-        imageUrl: 'http://example.com/image.jpg',
+        imageUrl: 'https://example.com/image.jpg',
         sources: [{ currency: 'EUR' }],
       },
     })
@@ -774,6 +788,7 @@ describe('GET /v1/admin/items', () => {
       items: { name: string; sources: { itemId: string }[] }[]
       pagination: { total: number }
     }
+    adminItemsListResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.items).toHaveLength(1)
     expect(body.pagination.total).toBe(1)
@@ -978,6 +993,7 @@ describe('GET /v1/admin/items/:id', () => {
         reservationCount: number
       }
     }
+    adminItemsGetResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.item.name).toBe('Test Item')
     expect(body.item.sources).toHaveLength(1)
@@ -1049,30 +1065,10 @@ describe('PATCH /v1/admin/items/:id', () => {
     })
 
     const body = await response.json() as { item: { name: string; sources: unknown[] } }
+    adminItemsUpdateResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.item.name).toBe('Updated Name')
     expect(body.item.sources).toHaveLength(1)
-  })
-
-  it('logs with url fields redacted in changes diff', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
-    mockAdminAuth()
-    mockFindItemById({ ...ITEM_ROW, imageUrl: 'https://old.example.com/img.jpg' })
-    mockUpdateItem({ ...ITEM_ROW, imageUrl: 'https://new.example.com/img.jpg' })
-    mockFindItemById(itemWith([]))
-
-    await apiRequest(`/v1/admin/items/${ITEM_ROW.id}`, {
-      method: 'PATCH',
-      token,
-      body: { imageUrl: 'https://new.example.com/img.jpg' },
-    })
-
-    expect(vi.mocked(logger.info)).toHaveBeenCalledWith(
-      expect.objectContaining({
-        action: 'admin_update_item',
-        changes: { imageUrl: { from: '<url>', to: '<url>' } },
-      }),
-    )
   })
 
   it('returns 422 when body is empty (no fields)', async () => {
@@ -1103,14 +1099,14 @@ describe('PATCH /v1/admin/items/:id', () => {
     expect(response.status).toBe(404)
   })
 
-  it('returns 422 when imageUrl uses HTTP', async () => {
+  it('returns 422 when imageUrl is sent (external image URLs are not accepted)', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
 
     const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}`, {
       method: 'PATCH',
       token,
-      body: { imageUrl: 'http://example.com/img.jpg' },
+      body: { imageUrl: 'https://example.com/img.jpg' },
     })
 
     expect(response.status).toBe(422)
@@ -1360,6 +1356,7 @@ describe('DELETE /v1/admin/items/:id (hard delete)', () => {
     })
 
     const body = await response.json() as { message: string }
+    messageResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.message).toContain('deleted')
   })
@@ -1492,6 +1489,7 @@ describe('POST /v1/admin/items/:id/sources', () => {
     })
 
     const body = await response.json() as { source: { itemId: string; shop: unknown } }
+    adminItemsCreateSourceResponseSchema.parse(body)
     expect(response.status).toBe(201)
     expect(body.source.itemId).toBe(ITEM_ROW.id)
     expect(body.source.shop).toBeNull()
@@ -1728,6 +1726,7 @@ describe('PATCH /v1/admin/items/:id/sources/:sourceId', () => {
     )
 
     const body = await response.json() as { source: { currency: string; shop: unknown } }
+    adminItemsUpdateSourceResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.source.currency).toBe('USD')
     expect(body.source.shop).toBeNull()
@@ -1939,6 +1938,7 @@ describe('DELETE /v1/admin/items/:id/sources/:sourceId', () => {
     )
 
     const body = await response.json() as { message: string }
+    messageResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.message).toContain('deleted')
   })
@@ -2050,5 +2050,147 @@ describe('DELETE /v1/admin/items/:id/sources/:sourceId', () => {
     )
 
     expect(response.status).toBe(401)
+  })
+})
+
+describe('admin items — image upload', () => {
+  const NEW_IMAGE_ROW = {
+    id: '00000000-0000-0000-0000-00000000c001',
+    hash: 'c'.repeat(64),
+    fileKey: 'cc/cc/' + 'c'.repeat(64),
+    mime: 'image/png',
+    sizeBytes: 4,
+    width: 640,
+    height: 480,
+    uploadedBy: ADMIN_USER.id,
+    createdAt: new Date('2024-05-01'),
+    updatedAt: new Date('2024-05-01'),
+  }
+  const PREVIOUS_IMAGE_ID = '00000000-0000-0000-0000-00000000c000'
+  const IMAGE_BUFFER = Buffer.from([0x89, 0x50, 0x4e, 0x47])
+  const ITEM_PATH = `/v1/admin/items/${ITEM_ROW.id}`
+
+  interface ImageBody {
+    item: { imageId: string | null; image: { id: string; urls: { md: string } } | null }
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
+    mockProcessImage.mockResolvedValue({ image: NEW_IMAGE_ROW })
+  })
+
+  it('creates an item with an uploaded image and JSON-encoded sources (multipart)', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    const createdRow = { ...ITEM_ROW, imageId: NEW_IMAGE_ROW.id }
+    mockCreateItemTransaction(createdRow, [SOURCE_ROW])
+    mockFindItemById({ ...itemWith([SOURCE_ROW]), imageId: NEW_IMAGE_ROW.id, image: NEW_IMAGE_ROW })
+
+    const response = await apiMultipartRequest('/v1/admin/items', {
+      method: 'POST',
+      token,
+      fields: { name: 'Test Item', sources: JSON.stringify([{ currency: 'EUR' }]) },
+      image: { buffer: IMAGE_BUFFER },
+    })
+
+    const body = await response.json() as ImageBody
+    adminItemsCreateResponseSchema.parse(body)
+    expect(response.status).toBe(201)
+    expect(body.item.imageId).toBe(NEW_IMAGE_ROW.id)
+    expect(body.item.image?.urls.md).toContain('-800.webp')
+    expect(mockProcessImage).toHaveBeenCalledWith(expect.any(Buffer), ADMIN_USER.id)
+  })
+
+  it('returns 422 when multipart sources is not valid JSON', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    const response = await apiMultipartRequest('/v1/admin/items', {
+      method: 'POST',
+      token,
+      fields: { name: 'Test Item', sources: 'not-json' },
+      image: { buffer: IMAGE_BUFFER },
+    })
+
+    expect(response.status).toBe(422)
+    expect(mockProcessImage).not.toHaveBeenCalled()
+  })
+
+  it('deletes the new images row when the create transaction fails', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockCreateItemTransactionFailure()
+
+    const response = await apiMultipartRequest('/v1/admin/items', {
+      method: 'POST',
+      token,
+      fields: { name: 'Test Item', sources: JSON.stringify([{ currency: 'EUR' }]) },
+      image: { buffer: IMAGE_BUFFER },
+    })
+
+    expect(response.status).toBe(500)
+    expect(vi.mocked(db.delete)).toHaveBeenCalledWith(images)
+  })
+
+  it('replaces the image and deletes the previous images row', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    const updatedRow = { ...ITEM_ROW, imageId: NEW_IMAGE_ROW.id }
+    mockFindItemById({ ...ITEM_ROW, imageId: PREVIOUS_IMAGE_ID })
+    mockUpdateItem(updatedRow)
+    mockFindItemById({ ...itemWith([]), imageId: NEW_IMAGE_ROW.id, image: NEW_IMAGE_ROW })
+
+    const response = await apiMultipartRequest(ITEM_PATH, { method: 'PATCH', token, image: { buffer: IMAGE_BUFFER } })
+
+    const body = await response.json() as ImageBody
+    expect(response.status).toBe(200)
+    expect(body.item.imageId).toBe(NEW_IMAGE_ROW.id)
+    expect(vi.mocked(db.delete)).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(db.delete)).toHaveBeenCalledWith(images)
+  })
+
+  it('clears the image with clearImage=true and deletes the previous images row', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindItemById({ ...ITEM_ROW, imageId: PREVIOUS_IMAGE_ID })
+    mockUpdateItem(ITEM_ROW)
+    mockFindItemById(itemWith([]))
+
+    const response = await apiRequest(ITEM_PATH, { method: 'PATCH', token, body: { clearImage: true } })
+
+    const body = await response.json() as ImageBody
+    expect(response.status).toBe(200)
+    expect(body.item.imageId).toBeNull()
+    expect(vi.mocked(db.delete)).toHaveBeenCalledWith(images)
+    expect(mockProcessImage).not.toHaveBeenCalled()
+  })
+
+  it('returns 422 IMAGE_AND_CLEAR_CONFLICT when an image and clearImage=true are both sent', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    const response = await apiMultipartRequest(ITEM_PATH, {
+      method: 'PATCH',
+      token,
+      fields: { clearImage: 'true' },
+      image: { buffer: IMAGE_BUFFER },
+    })
+
+    const body = await response.json() as { code: string }
+    expect(response.status).toBe(422)
+    expect(body.code).toBe('IMAGE_AND_CLEAR_CONFLICT')
+    expect(mockProcessImage).not.toHaveBeenCalled()
+  })
+
+  it('deletes the item images row when the item is hard-deleted', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockHardDeleteTransaction(0, { ...ITEM_ROW, imageId: PREVIOUS_IMAGE_ID })
+
+    const response = await apiRequest(ITEM_PATH, { method: 'DELETE', token })
+
+    expect(response.status).toBe(200)
+    expect(vi.mocked(db.delete)).toHaveBeenCalledWith(images)
   })
 })

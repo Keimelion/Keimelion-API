@@ -1,12 +1,16 @@
-import { and, count, desc, eq, inArray } from 'drizzle-orm'
+import { and, count, desc, eq, inArray, or, sql } from 'drizzle-orm'
+import type { AnyColumn } from 'drizzle-orm'
+import type { RESERVATION_SORT_FIELDS } from '@keimelion/sdk/schemas'
 import { db } from '../../client.js'
 import { defineEntity } from '../../../shared/db/entity-descriptor.js'
-import { getOffset } from '../../../shared/schemas/pagination.js'
+import { getOffset } from '../../../shared/utils/pagination.js'
+import { ListUserRoles } from '@keimelion/sdk/enums'
+import type { PaginationQueryParsed, SortInput } from '@keimelion/sdk/schemas'
 import { listItems } from '../list-items/list-items.schema.js'
+import { listUsers } from '../list-users/list-users.schema.js'
 import { reservations } from './reservations.schema.js'
 import type { Reservation } from './reservations.schema.js'
-import type { PaginationInput } from '../../../shared/schemas/pagination.js'
-import type { SortInput } from '../../../shared/schemas/sort.js'
+import type { ReservationRowHydrated } from '../../../shared/types/reservation.js'
 
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 type DbOrTx = typeof db | DbTransaction
@@ -14,7 +18,7 @@ type DbOrTx = typeof db | DbTransaction
 export const RESERVATION_SORTABLE_FIELDS = {
   createdAt: reservations.createdAt,
   quantityBooked: reservations.quantityBooked,
-} as const
+} as const satisfies Record<(typeof RESERVATION_SORT_FIELDS)[number], AnyColumn>
 
 export const RESERVATION_DEFAULT_SORT = [{ field: 'createdAt' as const, direction: 'desc' as const }]
 
@@ -26,23 +30,60 @@ export const userReservationsEntity = defineEntity({
 
 export type UserReservationsSortField = keyof typeof userReservationsEntity.sortable
 
-interface CreateReservationInput {
-  listItemId: string
-  userId: string
-  quantityBooked: number
-}
+export const RESERVATION_LIST_ITEM_HYDRATION = {
+  listItem: {
+    with: {
+      item: { with: { image: true } },
+      list: {
+        with: {
+          listUsers: {
+            where: eq(listUsers.role, ListUserRoles.OWNER),
+            limit: 1,
+            with: { user: { with: { avatarImage: true } } },
+          },
+        },
+      },
+    },
+  },
+} as const
 
-export async function createReservation(
-  input: CreateReservationInput,
-  tx?: DbOrTx,
+type InsertNamedReservationFields = Pick<
+  typeof reservations.$inferInsert,
+  'listItemId' | 'quantityBooked' | 'reserverName' | 'reserverEmail' | 'anonymousTokenHash'
+>
+
+export async function insertNamedReservation(
+  input: InsertNamedReservationFields,
+  tx: DbOrTx,
 ): Promise<Reservation | undefined> {
-  const executor = tx ?? db
-  const [row] = await executor.insert(reservations).values(input).returning()
+  const [row] = await tx.insert(reservations).values(input).returning()
   return row
 }
 
-export function findReservationById(id: string): Promise<Reservation | undefined> {
-  return db.query.reservations.findFirst({ where: eq(reservations.id, id) })
+interface NamedReservationIdentity {
+  listItemId: string
+  reserverName: string
+  reserverEmail: string | null
+}
+
+export function findNamedReservationDuplicate(
+  identity: NamedReservationIdentity,
+  tx: DbOrTx,
+): Promise<Reservation | undefined> {
+  const sameName = sql`lower(${reservations.reserverName}) = lower(${identity.reserverName})`
+  const sameEmail = identity.reserverEmail === null
+    ? undefined
+    : eq(reservations.reserverEmail, identity.reserverEmail)
+  return tx.query.reservations.findFirst({
+    where: and(eq(reservations.listItemId, identity.listItemId), or(sameName, sameEmail)),
+  })
+}
+
+export function findReservationByIdWithListItem(id: string): Promise<ReservationRowHydrated | undefined> {
+  return db.query.reservations.findFirst({
+    where: eq(reservations.id, id),
+    with: RESERVATION_LIST_ITEM_HYDRATION,
+  })
 }
 
 export async function findReservationByIdForUpdate(
@@ -69,7 +110,7 @@ export function findReservationsByUserId(userId: string, tx: DbOrTx = db): Promi
 
 export function findReservationsForUser(
   userId: string,
-  pagination: PaginationInput,
+  pagination: PaginationQueryParsed,
   sort: SortInput<UserReservationsSortField> | undefined,
 ): Promise<Reservation[]> {
   const offset = getOffset(pagination)
@@ -152,7 +193,7 @@ export async function countReservationsByUserIds(userIds: string[]): Promise<Map
     .groupBy(reservations.userId)
 
   for (const row of rows) {
-    map.set(row.userId, row.total)
+    if (row.userId !== null) map.set(row.userId, row.total)
   }
   return map
 }

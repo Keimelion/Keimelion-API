@@ -95,7 +95,75 @@ npm run db:reset      # Drop schema, re-migrate, re-seed (dev only)
 npm run db:studio     # Open Drizzle Studio (GUI)
 
 npm test              # Run Vitest tests
+
+npm run mail:dev      # Preview every email (FR + EN, HTML + text) at http://localhost:3100, sends nothing
+npm run mail:test -- <template> <locale>  # Send one email with sample data to MAIL_TEST_TO (see Emails)
 ```
+
+---
+
+## Emails
+
+Every transactional email is built on one shared shell, `src/shared/mail/shell/`, which implements
+the KEI-164 design. An email only supplies its content; the shell does the layout, styles, dark mode,
+plain-text version and footer. Sending always goes through `sendMail` (`src/shared/mail/mail.sender.ts`).
+
+### Preview while developing
+
+```bash
+npm run dev        # serves the email images at http://localhost:3000/assets/mail/*
+npm run mail:dev   # http://localhost:3100: every email, FR + EN, HTML + text
+```
+
+`mail:dev` uses sample data, sends nothing, and reloads the page on every save. Without `npm run dev`
+running, the preview works but shows no images.
+
+### Send yourself a real test email
+
+```bash
+npm run mail:test -- waitlist-confirmation fr
+```
+
+The command sends through the real provider, so the local `.env` needs:
+
+- `EMAIL_API_KEY` and `EMAIL_FROM`
+- `MAIL_TEST_TO`, the address that receives the email
+- `LANDING_URL`, a non-local URL such as `https://keimelion.zalbani.dev`
+
+Mail clients can't load images from `localhost`. To see images before they are deployed, point
+`APP_URL` at a pushed commit for that one command:
+`APP_URL=https://raw.githubusercontent.com/Keimelion/Keimelion-API/<sha>/`.
+
+### Add a new email
+
+1. Create `src/features/<feature>/emails/<name>.email.ts` and return `renderEmail({...})` with the
+   content: locale, subject, preheader, `bannerTheme`, kicker, title, paragraphs, button, optional
+   info box and closing note, footer links. Keep the FR and EN copy in that file.
+   `src/features/waitlist/emails/waitlist-confirmation.email.ts` is the model to follow.
+2. Register it in `src/dev/mail/email-catalog.ts` with sample data, so `mail:dev` and `mail:test`
+   both cover it.
+3. Send it with `sendMail` from the service, and never make the HTTP response wait for the provider.
+
+The shell modules, in order: logo, illustrated banner, handwritten kicker, title, body, button,
+info box, fallback link, ribbon divider, closing note, signature, footer.
+
+The banner themes are `waitlist`, `reservation`, `account` and `launch`
+(`src/shared/mail/shell/email-shell.theme.ts`).
+
+### Email images
+
+The email images are PNG files in `assets/mail/`, kept apart from the user uploads. The API serves
+them at `APP_URL/assets/mail/*` in every environment.
+
+To change an image or add a banner theme:
+
+1. Edit `src/dev/mail/render-mail-assets.ts`. Colours, sizes and file names come from
+   `src/shared/mail/shell/email-shell.theme.ts`, shared with the email HTML.
+2. Run `npm run mail:assets`.
+3. Commit the PNG files it generates.
+
+Emails already sent keep loading these URLs, so a redesign should add new file names instead of
+overwriting the existing files.
 
 ---
 
@@ -108,6 +176,7 @@ The API bootstraps a small in-process scheduler (`src/cron/`) that runs lightwei
 | Expired JWT cleanup | `JWT_CLEANUP_INTERVAL_MS` | 1 h | Deletes expired access-token rows |
 | Expired refresh token cleanup | `REFRESH_TOKEN_CLEANUP_INTERVAL_MS` | 1 h | Deletes expired refresh-token rows |
 | Hard-delete inactive users | `USER_HARD_DELETE_INTERVAL_MS`, `USER_HARD_DELETE_GRACE_DAYS` | 1 h / 30 d | Purges soft-deleted and 24-month-inactive users |
+| Waitlist entries purge | `WAITLIST_PURGE_INTERVAL_MS`, `WAITLIST_CONFIRMATION_VALIDITY_DAYS` | 1 h / 7 d | Deletes unconfirmed signups once their link lapses, and entries 12 months after the launch email |
 | **FX rates refresh** | `FX_REFRESH_ENABLED`, `FX_REFRESH_INTERVAL_MS`, `FX_PROVIDER_URL` | 24 h | Refreshes `currencies.usd_rate` from an FX provider |
 
 ### FX rates refresh

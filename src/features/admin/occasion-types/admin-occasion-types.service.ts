@@ -1,11 +1,15 @@
 import { db } from '../../../db/client.js'
-import { HttpStatus } from '../../../shared/enums/http.js'
-import { ErrorCode } from '../../../shared/enums/error-code.js'
+import { buildPaginatedResponse } from '../../../shared/utils/pagination.js'
+import { ErrorCode, HttpStatus } from '@keimelion/sdk/enums'
+import type {
+  AdminOccasionTypesUpdateRequestParsed,
+  PaginatedResponse,
+  PaginationQueryParsed,
+} from '@keimelion/sdk/schemas'
 import { serviceError } from '../../../shared/utils/response.js'
 import { logger } from '../../../shared/utils/logger.js'
 import { pickDefined } from '../../../shared/utils/partial-update.js'
 import { runWrite } from '../../../shared/utils/admin-write.js'
-import { buildPaginatedResponse } from '../../../shared/schemas/pagination.js'
 import {
   findOccasionTypeById,
   findOccasionTypeByIdWithTranslations,
@@ -21,10 +25,7 @@ import { toAdminOccasionType } from './admin-occasion-types.mapper.js'
 import { AdminAction } from '../admin.enums.js'
 import type { AdminOccasionType } from './admin-occasion-types.mapper.js'
 import type { ServiceResult } from '../../../shared/types/service.js'
-import type { PaginatedResponse } from '../../../shared/types/api.js'
-import type { PaginationInput } from '../../../shared/schemas/pagination.js'
 import type { OccasionTypeWrite } from '../../../shared/types/occasion-type.js'
-import type { AdminUpdateOccasionTypeInput } from './endpoints/update.js'
 
 export async function createOccasionType(
   adminId: string,
@@ -60,7 +61,7 @@ export async function createOccasionType(
 }
 
 export async function listOccasionTypes(
-  input: PaginationInput,
+  input: PaginationQueryParsed,
 ): Promise<ServiceResult<PaginatedResponse<AdminOccasionType>>> {
   const [rows, total] = await Promise.all([
     findAllOccasionTypesWithTranslations(input),
@@ -76,7 +77,7 @@ export async function listOccasionTypes(
 export async function updateOccasionTypeById(
   adminId: string,
   id: string,
-  input: AdminUpdateOccasionTypeInput,
+  input: AdminOccasionTypesUpdateRequestParsed,
 ): Promise<ServiceResult<{ occasionType: AdminOccasionType }>> {
   const existingRow = await findOccasionTypeById(id)
 
