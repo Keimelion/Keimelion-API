@@ -97,13 +97,72 @@ npm run db:studio     # Open Drizzle Studio (GUI)
 npm test              # Run Vitest tests
 
 npm run mail:dev      # Preview every email (FR + EN, HTML + text) at http://localhost:3100, sends nothing
-npm run mail:test -- <template> <locale>  # Send one email with sample data to MAIL_TEST_TO (local .env)
+npm run mail:test -- <template> <locale>  # Send one email with sample data to MAIL_TEST_TO (see Emails)
 ```
 
-Emails are built on the shared shell in `src/shared/mail/shell/` (KEI-164 design modules) and listed in
-`src/dev/mail/email-catalog.ts`. Register every new email there so that both commands cover it.
-`mail:test` runs in production mode to send for real: it needs `EMAIL_API_KEY`, `EMAIL_FROM` and a
-non-local `LANDING_URL` in the local `.env`.
+---
+
+## Emails
+
+Every transactional email is built on one shared shell, `src/shared/mail/shell/`, which implements
+the KEI-164 design. An email only supplies its content; the shell does the layout, styles, dark mode,
+plain-text version and footer. Sending always goes through `sendMail` (`src/shared/mail/mail.sender.ts`).
+
+### Preview while developing
+
+```bash
+npm run dev        # serves the email images at http://localhost:3000/assets/mail/*
+npm run mail:dev   # http://localhost:3100: every email, FR + EN, HTML + text
+```
+
+`mail:dev` uses sample data, sends nothing, and reloads the page on every save. Without `npm run dev`
+running, the preview works but shows no images.
+
+### Send yourself a real test email
+
+```bash
+npm run mail:test -- waitlist-confirmation fr
+```
+
+The command sends through the real provider, so the local `.env` needs:
+
+- `EMAIL_API_KEY` and `EMAIL_FROM`
+- `MAIL_TEST_TO`, the address that receives the email
+- `LANDING_URL`, a non-local URL such as `https://keimelion.zalbani.dev`
+
+Mail clients can't load images from `localhost`. To see images before they are deployed, point
+`APP_URL` at a pushed commit for that one command:
+`APP_URL=https://raw.githubusercontent.com/Keimelion/Keimelion-API/<sha>/`.
+
+### Add a new email
+
+1. Create `src/features/<feature>/emails/<name>.email.ts` and return `renderEmail({...})` with the
+   content: locale, subject, preheader, `bannerTheme`, kicker, title, paragraphs, button, optional
+   info box and closing note, footer links. Keep the FR and EN copy in that file.
+   `src/features/waitlist/emails/waitlist-confirmation.email.ts` is the model to follow.
+2. Register it in `src/dev/mail/email-catalog.ts` with sample data, so `mail:dev` and `mail:test`
+   both cover it.
+3. Send it with `sendMail` from the service, and never make the HTTP response wait for the provider.
+
+The shell modules, in order: logo, illustrated banner, handwritten kicker, title, body, button,
+info box, fallback link, ribbon divider, closing note, signature, footer.
+
+The banner themes are `waitlist`, `reservation`, `account` and `launch`
+(`src/shared/mail/shell/email-shell.theme.ts`).
+
+### Email images
+
+The email images are PNG files in `assets/mail/`, kept apart from the user uploads. The API serves
+them at `APP_URL/assets/mail/*` in every environment.
+
+To change an image or add a banner theme:
+
+1. Edit `scripts/mail/render-mail-assets.mjs`.
+2. Run `node scripts/mail/render-mail-assets.mjs`.
+3. Commit the PNG files it generates.
+
+Emails already sent keep loading these URLs, so a redesign should add new file names instead of
+overwriting the existing files.
 
 ---
 
