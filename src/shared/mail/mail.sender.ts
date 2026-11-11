@@ -1,8 +1,10 @@
 import { env } from '../../config/env.js'
 import { MailProviderNames } from '../enums/mail-provider.js'
 import { NodeEnvs } from '../enums/node-env.js'
+import { readErrorName } from '../utils/error.js'
 import { logger } from '../utils/logger.js'
 import { createLogMailProvider } from './adapters/log.adapter.js'
+import { EMAIL_CONTACT_ADDRESS } from './mail.constants.js'
 import type {
   MailMessage,
   MailProvider,
@@ -77,6 +79,7 @@ function resolveMailTransport(): MailTransport | null {
 function toMailMessage(input: SendMailInput, from: string): MailMessage {
   return {
     from,
+    replyTo: EMAIL_CONTACT_ADDRESS,
     to: input.to,
     subject: input.subject,
     html: input.html,
@@ -113,9 +116,8 @@ function toThrownErrorFailure(error: unknown, signal: AbortSignal): SendMailResu
     return { isSuccess: false, reason: MailFailureReasons.TIMEOUT }
   }
 
-  const errorName = error instanceof Error ? error.name : typeof error
   logger.error(
-    { errorName, errorCode: readErrorCauseCode(error) },
+    { errorName: readErrorName(error), errorCode: readErrorCauseCode(error) },
     'Mail provider failed with an unexpected error',
   )
   return { isSuccess: false, reason: MailFailureReasons.UNEXPECTED_ERROR }

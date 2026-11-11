@@ -21,6 +21,8 @@ ENV NODE_ENV=production
 COPY --from=deps --chown=node:node /app/node_modules ./node_modules
 COPY --chown=node:node package.json drizzle.config.ts ./
 COPY --chown=node:node src/db/migrations ./src/db/migrations
+# Email images, served by the API at /assets/mail/*
+COPY --chown=node:node assets/mail ./assets/mail
 COPY --from=build --chown=node:node /app/dist ./dist
 RUN mkdir -p /app/uploads && chown node:node /app/uploads
 USER node

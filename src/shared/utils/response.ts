@@ -24,6 +24,7 @@ import {
   REPORT_TARGET_NOT_FOUND_MESSAGE,
   REPORT_NOT_FOUND_MESSAGE,
   WAITLIST_HONEYPOT_TRIGGERED_MESSAGE,
+  WAITLIST_CONFIRMATION_TOKEN_INVALID_MESSAGE,
 } from '@keimelion/sdk/schemas'
 import type { ServiceResult } from '../types/service.js'
 
@@ -71,6 +72,7 @@ export const errorMap: Record<ErrorCode, { status: ContentfulStatusCode; message
   REPORT_TARGET_NOT_FOUND: { status: HttpStatus.NOT_FOUND,             message: REPORT_TARGET_NOT_FOUND_MESSAGE },
   REPORT_NOT_FOUND:        { status: HttpStatus.NOT_FOUND,             message: REPORT_NOT_FOUND_MESSAGE },
   WAITLIST_HONEYPOT_TRIGGERED: { status: HttpStatus.BAD_REQUEST,       message: WAITLIST_HONEYPOT_TRIGGERED_MESSAGE },
+  WAITLIST_CONFIRMATION_TOKEN_INVALID: { status: HttpStatus.BAD_REQUEST, message: WAITLIST_CONFIRMATION_TOKEN_INVALID_MESSAGE },
   INTERNAL_ERROR:          { status: HttpStatus.INTERNAL_SERVER_ERROR, message: 'An unexpected error occurred' },
 }
 

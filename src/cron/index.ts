@@ -6,6 +6,7 @@ import { cleanupExpiredListInvites } from './jobs/cleanup-expired-list-invites.j
 import { cleanupOrphanImages } from './jobs/cleanup-orphan-images.js'
 import { fxRatesRefresh } from './jobs/fx-rates-refresh.js'
 import { hardDeleteInactiveUsers } from './jobs/hard-delete-inactive-users.js'
+import { purgeWaitlistEntries } from './jobs/purge-waitlist-entries.js'
 
 const jobs: CronJob[] = [
   cleanupExpiredAccessTokens,
@@ -13,6 +14,7 @@ const jobs: CronJob[] = [
   cleanupExpiredListInvites,
   hardDeleteInactiveUsers,
   cleanupOrphanImages,
+  purgeWaitlistEntries,
   ...(env.FX_REFRESH_ENABLED ? [fxRatesRefresh] : []),
 ]
 

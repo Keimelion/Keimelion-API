@@ -1,8 +1,9 @@
 import type { Context, MiddlewareHandler } from 'hono'
-import { DEFAULT_LOCALE, LOCALES } from '@keimelion/sdk/enums'
+import { DEFAULT_LOCALE } from '@keimelion/sdk/enums'
 import type { Locale } from '@keimelion/sdk/enums'
 import { HonoContextKey } from '../enums/context-key.js'
 import type { AppVariables } from '../types/app.js'
+import { parseLocale } from '../utils/locale.js'
 
 export const resolveLocaleMiddleware: MiddlewareHandler = async (context, next) => {
   const locale = parseAcceptLanguage(context.req.header('Accept-Language'))
@@ -52,6 +53,5 @@ function parseQuality(qualityPart: string | undefined): number {
 function findLocaleMatch(tag: string): Locale | null {
   const language = tag.split('-')[0]?.toLowerCase()
   if (!language) return null
-  const found = LOCALES.find((locale) => locale === language)
-  return found ?? null
+  return parseLocale(language)
 }

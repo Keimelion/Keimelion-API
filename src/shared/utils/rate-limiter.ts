@@ -35,6 +35,7 @@ export function createRateLimiter(limit: number, windowMs: number = ONE_MINUTE_M
 // PUBLIC — unauthenticated reads (shared wishlists by slug). Tighter than STANDARD because the
 // anonymous surface is a scraping target; still high enough for a human browsing one list.
 // WAITLIST_SIGNUP — anonymous landing form: a human signs up once, so anything beyond a retry is abuse.
+// WAITLIST_TOKEN — confirm / unsubscribe links: a human clicks once, the limit blunts token guessing.
 export const RATE_LIMITS = {
   STRICT: () => createRateLimiter(5, ONE_MINUTE_MS),
   STANDARD: () => createRateLimiter(20, ONE_MINUTE_MS),
@@ -42,6 +43,7 @@ export const RATE_LIMITS = {
   UPLOAD: () => createRateLimiter(10, ONE_MINUTE_MS),
   PUBLIC: () => createRateLimiter(10, ONE_MINUTE_MS),
   WAITLIST_SIGNUP: () => createRateLimiter(3, ONE_MINUTE_MS),
+  WAITLIST_TOKEN: () => createRateLimiter(10, ONE_MINUTE_MS),
 } as const
 
 // Picks the limiter according to the caller's auth state. Must be mounted AFTER

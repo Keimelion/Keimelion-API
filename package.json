@@ -19,12 +19,15 @@
     "db:seed": "tsx src/db/seed/index.ts",
     "db:reset": "tsx src/db/seed/reset.ts",
     "fx:refresh": "tsx src/cron/jobs/fx-rates-refresh.cli.ts",
+    "mail:dev": "tsx watch src/dev/mail/preview-server.ts",
+    "mail:test": "NODE_ENV=production tsx src/dev/mail/send-test-email.ts",
+    "mail:assets": "tsx src/dev/mail/render-mail-assets.ts",
     "prepare": "husky"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.6",
     "@hono/zod-validator": "^0.9.1",
-    "@keimelion/sdk": "0.2.0-dev.7",
+    "@keimelion/sdk": "0.2.0-dev.8",
     "archiver": "^8.0.0",
     "bcryptjs": "^3.0.3",
     "csv-stringify": "^6.8.3",
