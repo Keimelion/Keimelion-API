@@ -91,6 +91,16 @@ describe('renderEmail', () => {
     const { html } = renderEmail({ ...content, bannerTheme: EmailBannerThemes.LAUNCH })
 
     expect(html).toContain(`bgcolor="${EMAIL_BANNER_COLORS.launch}"`)
+    expect(html).toContain('src="http://localhost:3000/assets/mail/banner-launch.png"')
+  })
+
+  it('loads the logo mark and banner from the API email assets, as decorative images', () => {
+    const { html } = renderEmail(content)
+
+    expect(html).toContain('src="http://localhost:3000/assets/mail/banner-waitlist.png"')
+    expect(html.split('src="http://localhost:3000/assets/mail/mark.png"')).toHaveLength(4)
+    expect(html.match(/<img /g)).toHaveLength(4)
+    expect(html.match(/<img [^>]*alt=""/g)).toHaveLength(4)
   })
 
   it('renders a plain-text version with the same content', () => {

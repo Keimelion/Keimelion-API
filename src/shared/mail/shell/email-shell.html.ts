@@ -1,3 +1,4 @@
+import { bannerImageUrl, markImageUrl } from './email-shell.assets.js'
 import { EMAIL_SHELL_COPY } from './email-shell.copy.js'
 import type { EmailShellCopy } from './email-shell.copy.js'
 import type { EmailInfoBox, EmailLink, EmailShellContent } from './email-shell.js'
@@ -10,6 +11,8 @@ import {
 
 const CONTENT_WIDTH_PX = 600
 const BANNER_HEIGHT_PX = 136
+const LOGO_MARK_SIZE_PX = 30
+const SMALL_MARK_SIZE_PX = 22
 const MODULE_GAP_PX = 18
 const KICKER_GAP_PX = 12
 const HTML_ESCAPES: Record<string, string> = {
@@ -22,6 +25,8 @@ const HTML_ESCAPES: Record<string, string> = {
 
 // Layout rules (KEI-164 v2): tables, one column, inline styles; no flexbox, transform or SVG.
 // The <style> block only carries progressive enhancements (mobile sizes, dark mode).
+// Images are hosted PNGs with an empty alt: decorative, the email reads the same with images off
+// (the banner cell keeps its theme colour as a fallback).
 const HEAD_STYLES = `
 :root { color-scheme: light dark; supported-color-schemes: light dark; }
 body, table, td, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
@@ -29,7 +34,7 @@ table { border-collapse: collapse; }
 @media (max-width: 480px) {
   .k-outer { padding: 24px 12px !important; }
   .k-content { padding: 32px 24px !important; }
-  .k-banner { height: 82px !important; }
+  .k-banner, .k-banner img { height: 82px !important; }
   .k-title { font-size: 28px !important; }
 }
 @media (prefers-color-scheme: dark) {
@@ -84,9 +89,16 @@ function renderPreheader(preheader: string): string {
   return `<div style="display: none; max-height: 0; overflow: hidden; mso-hide: all">${escapeHtml(preheader)}</div>`
 }
 
+function renderMark(sizePx: number): string {
+  return `<img src="${escapeHtml(markImageUrl())}" width="${String(sizePx)}" height="${String(sizePx)}" alt="" style="display: block; width: ${String(sizePx)}px; height: ${String(sizePx)}px; border: 0; outline: none">`
+}
+
 function renderLogo(copy: EmailShellCopy): string {
   return `<tr><td align="center" style="padding: 0 8px 18px">
-<span class="k-brand" style="display: inline-block; height: 36px; line-height: 36px; font-family: ${EmailFonts.DISPLAY}; font-weight: 800; letter-spacing: -0.05em; font-size: 26px; color: ${EmailColors.BRAND}">${escapeHtml(copy.brandName)}</span>
+<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+<td valign="middle" style="padding: 0 8px 0 0">${renderMark(LOGO_MARK_SIZE_PX)}</td>
+<td valign="middle"><span class="k-brand" style="display: inline-block; height: 36px; line-height: 36px; font-family: ${EmailFonts.DISPLAY}; font-weight: 800; letter-spacing: -0.05em; font-size: 26px; color: ${EmailColors.BRAND}">${escapeHtml(copy.brandName)}</span></td>
+</tr></table>
 </td></tr>`
 }
 
@@ -94,7 +106,7 @@ function renderCard(content: EmailShellContent, copy: EmailShellCopy): string {
   const banner = EMAIL_BANNER_COLORS[content.bannerTheme]
   return `<tr><td class="k-card" bgcolor="${EmailColors.CARD}" style="background: ${EmailColors.CARD}; border-radius: 22px; overflow: hidden">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-<tr><td class="k-banner" height="${String(BANNER_HEIGHT_PX)}" bgcolor="${banner}" style="height: ${String(BANNER_HEIGHT_PX)}px; background: ${banner}; border-radius: 22px 22px 0 0; font-size: 0; line-height: 0">&nbsp;</td></tr>
+<tr><td class="k-banner" height="${String(BANNER_HEIGHT_PX)}" bgcolor="${banner}" style="height: ${String(BANNER_HEIGHT_PX)}px; background: ${banner}; border-radius: 22px 22px 0 0; font-size: 0; line-height: 0; overflow: hidden"><img src="${escapeHtml(bannerImageUrl(content.bannerTheme))}" width="${String(CONTENT_WIDTH_PX)}" height="${String(BANNER_HEIGHT_PX)}" alt="" style="display: block; width: 100%; max-width: ${String(CONTENT_WIDTH_PX)}px; height: ${String(BANNER_HEIGHT_PX)}px; border: 0; outline: none; border-radius: 22px 22px 0 0"></td></tr>
 <tr><td class="k-content" style="padding: 40px 48px">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
 ${renderContentModules(content, copy)}
@@ -161,7 +173,7 @@ function renderRibbonDivider(): string {
   const dashedRule = `<td class="k-rule" width="50%" style="border-top: 2px dashed ${EmailColors.RULE}; font-size: 0; line-height: 0">&nbsp;</td>`
   return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
 ${dashedRule}
-<td style="padding: 0 10px; font-size: 0; line-height: 0"><div style="width: 10px; height: 10px; border-radius: 999px; background: ${EmailColors.BRAND}">&nbsp;</div></td>
+<td style="padding: 0 10px; font-size: 0; line-height: 0">${renderMark(SMALL_MARK_SIZE_PX)}</td>
 ${dashedRule}
 </tr></table>`
 }
@@ -177,7 +189,10 @@ function renderSignature(copy: EmailShellCopy): string {
 
 function renderFooter(content: EmailShellContent, copy: EmailShellCopy): string {
   const lines = [
-    `<span class="k-brand" style="font-family: ${EmailFonts.HANDWRITTEN}; font-size: 20px; line-height: 24px; font-style: italic; color: ${EmailColors.BRAND}">${escapeHtml(copy.tagline)}</span>`,
+    `<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center"><tr>
+<td valign="middle" style="padding: 0 6px 0 0">${renderMark(SMALL_MARK_SIZE_PX)}</td>
+<td valign="middle"><span class="k-brand" style="font-family: ${EmailFonts.HANDWRITTEN}; font-size: 20px; line-height: 24px; font-style: italic; color: ${EmailColors.BRAND}">${escapeHtml(copy.tagline)}</span></td>
+</tr></table>`,
     escapeHtml(copy.publisher),
     escapeHtml(copy.contact),
     content.footerLinks.map((link) => renderFooterLink(link)).join(' · '),
