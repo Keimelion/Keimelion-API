@@ -1,3 +1,16 @@
+## [0.2.0](https://github.com/Keimelion/Keimelion-API/compare/v0.1.0...v0.2.0) (2026-11-11)
+
+### Features
+
+* /v1/items multipart image upload on create + update (KEI-154) ([#90](https://github.com/Keimelion/Keimelion-API/issues/90)) ([6a326d6](https://github.com/Keimelion/Keimelion-API/commit/6a326d67a720aabe8b6c068a49ea78f2ad416561))
+* /v1/public/waitlist add double opt-in confirmation email and unsubscribe (KEI-166) ([#109](https://github.com/Keimelion/Keimelion-API/issues/109)) ([d372102](https://github.com/Keimelion/Keimelion-API/commit/d37210226fd9809dcd3bb4b4690d1a7e312ee3cd))
+* /v1/public/waitlist add waitlist signup endpoint (KEI-138) ([#103](https://github.com/Keimelion/Keimelion-API/issues/103)) ([50450b4](https://github.com/Keimelion/Keimelion-API/commit/50450b452c9ba48ea3b423850f7bcf2039cfaa7b))
+* /v1/reports user content reporting + admin moderation (KEI-161) ([#93](https://github.com/Keimelion/Keimelion-API/issues/93)) ([a52c4b5](https://github.com/Keimelion/Keimelion-API/commit/a52c4b504069ff6420e9b68ca61111b9fc870ebb)), closes [#3](https://github.com/Keimelion/Keimelion-API/issues/3)
+* /v1/reservations anonymous reservation + owner moderation (KEI-141) ([#91](https://github.com/Keimelion/Keimelion-API/issues/91)) ([e1dbc1c](https://github.com/Keimelion/Keimelion-API/commit/e1dbc1cdc9c1edb03d80f86020139a2101109334))
+* list-collaborators ship 2-user collaboration flow (KEI-143) ([#89](https://github.com/Keimelion/Keimelion-API/issues/89)) ([ac19ff8](https://github.com/Keimelion/Keimelion-API/commit/ac19ff871f31c334f5c8790442b6fef0056b5afc))
+* src/shared/mail add transactional email sender with provider adapters (KEI-165) ([#105](https://github.com/Keimelion/Keimelion-API/issues/105)) ([76d7949](https://github.com/Keimelion/Keimelion-API/commit/76d7949ae3f1e9a12b273486c916e5e9e53063db))
+* src/shared/mail allow the log provider in production and validate mail env at boot (KEI-165) ([#107](https://github.com/Keimelion/Keimelion-API/issues/107)) ([a2185d8](https://github.com/Keimelion/Keimelion-API/commit/a2185d889c37114ff69e3eb77febc088dfe071be)), closes [#105](https://github.com/Keimelion/Keimelion-API/issues/105)
+
 ## [0.1.0](https://github.com/Keimelion/Keimelion-API/compare/v0.0.1...v0.1.0) (2026-11-02)
 
 ### ⚠ BREAKING CHANGES
