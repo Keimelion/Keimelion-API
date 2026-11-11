@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   ci:
-    uses: Keimelion/Keimelion-Infra/.github/workflows/node-ci.yml@v0.1.7
+    uses: Keimelion/Keimelion-Infra/.github/workflows/node-ci.yml@v0.2.0
 
   release:
     needs: ci
@@ -20,5 +20,5 @@ jobs:
       contents: write
       issues: write
       pull-requests: write
-    uses: Keimelion/Keimelion-Infra/.github/workflows/release.yml@v0.1.7
+    uses: Keimelion/Keimelion-Infra/.github/workflows/release.yml@v0.2.0
     secrets: inherit
