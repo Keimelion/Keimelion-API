@@ -95,7 +95,15 @@ npm run db:reset      # Drop schema, re-migrate, re-seed (dev only)
 npm run db:studio     # Open Drizzle Studio (GUI)
 
 npm test              # Run Vitest tests
+
+npm run mail:dev      # Preview every email (FR + EN, HTML + text) at http://localhost:3100, sends nothing
+npm run mail:test -- <template> <locale>  # Send one email with sample data to MAIL_TEST_TO (local .env)
 ```
+
+Emails are built on the shared shell in `src/shared/mail/shell/` (KEI-164 design modules) and listed in
+`src/dev/mail/email-catalog.ts`. Register every new email there so that both commands cover it.
+`mail:test` runs in production mode to send for real: it needs `EMAIL_API_KEY`, `EMAIL_FROM` and a
+non-local `LANDING_URL` in the local `.env`.
 
 ---
 
@@ -108,6 +116,7 @@ The API bootstraps a small in-process scheduler (`src/cron/`) that runs lightwei
 | Expired JWT cleanup | `JWT_CLEANUP_INTERVAL_MS` | 1 h | Deletes expired access-token rows |
 | Expired refresh token cleanup | `REFRESH_TOKEN_CLEANUP_INTERVAL_MS` | 1 h | Deletes expired refresh-token rows |
 | Hard-delete inactive users | `USER_HARD_DELETE_INTERVAL_MS`, `USER_HARD_DELETE_GRACE_DAYS` | 1 h / 30 d | Purges soft-deleted and 24-month-inactive users |
+| Waitlist entries purge | `WAITLIST_PURGE_INTERVAL_MS`, `WAITLIST_CONFIRMATION_VALIDITY_DAYS` | 1 h / 7 d | Deletes unconfirmed signups once their link lapses, and entries 12 months after the launch email |
 | **FX rates refresh** | `FX_REFRESH_ENABLED`, `FX_REFRESH_INTERVAL_MS`, `FX_PROVIDER_URL` | 24 h | Refreshes `currencies.usd_rate` from an FX provider |
 
 ### FX rates refresh

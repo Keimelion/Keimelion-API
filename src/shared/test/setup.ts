@@ -15,9 +15,11 @@ vi.mock('../../config/env.js', () => ({
     EMAIL_VERIFY_TOKEN_TTL_HOURS: 24,
     BCRYPT_ROUNDS: 4,
     APP_URL: 'http://localhost:3000',
+    LANDING_URL: 'https://keimelion.test',
     EMAIL_API_KEY: undefined,
     EMAIL_FROM: undefined,
     EMAIL_PROVIDER: DEFAULT_MAIL_PROVIDER,
+    MAIL_TEST_TO: undefined,
     JWT_CLEANUP_INTERVAL_MS: 3_600_000,
     REFRESH_TOKEN_CLEANUP_INTERVAL_MS: 3_600_000,
     LIST_INVITE_CLEANUP_INTERVAL_MS: 3_600_000,
@@ -34,6 +36,8 @@ vi.mock('../../config/env.js', () => ({
     UPLOADS_PUBLIC_BASE_URL: 'http://localhost:3000/uploads',
     IMAGE_ORPHAN_CLEANUP_INTERVAL_MS: 86_400_000,
     IMAGE_ORPHAN_GRACE_HOURS: 24,
+    WAITLIST_CONFIRMATION_VALIDITY_DAYS: 7,
+    WAITLIST_PURGE_INTERVAL_MS: 3_600_000,
   },
 }))
 

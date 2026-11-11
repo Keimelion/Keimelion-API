@@ -19,6 +19,8 @@
     "db:seed": "tsx src/db/seed/index.ts",
     "db:reset": "tsx src/db/seed/reset.ts",
     "fx:refresh": "tsx src/cron/jobs/fx-rates-refresh.cli.ts",
+    "mail:dev": "tsx watch src/dev/mail/preview-server.ts",
+    "mail:test": "NODE_ENV=production tsx src/dev/mail/send-test-email.ts",
     "prepare": "husky"
   },
   "dependencies": {
