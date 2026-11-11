@@ -74,7 +74,6 @@ describe('createResendMailProvider', () => {
     await expect(provider.send(message, signal)).resolves.toEqual({
       isSuccess: false,
       status: 422,
-      messageId: null,
     })
   })
 
@@ -84,7 +83,6 @@ describe('createResendMailProvider', () => {
     await expect(provider.send(message, signal)).resolves.toEqual({
       isSuccess: false,
       status: 502,
-      messageId: null,
     })
   })
 

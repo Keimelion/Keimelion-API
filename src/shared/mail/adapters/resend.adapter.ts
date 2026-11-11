@@ -39,9 +39,8 @@ function toResendRequest(message: MailMessage): Record<string, unknown> {
 }
 
 async function toMailProviderResult(response: Response): Promise<MailProviderResult> {
-  const messageId = await readMessageId(response)
-  if (response.ok) return { isSuccess: true, messageId }
-  return { isSuccess: false, status: response.status, messageId }
+  if (!response.ok) return { isSuccess: false, status: response.status }
+  return { isSuccess: true, messageId: await readMessageId(response) }
 }
 
 async function readMessageId(response: Response): Promise<string | null> {

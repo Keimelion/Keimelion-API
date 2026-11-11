@@ -14,8 +14,7 @@ export interface MailProviderSuccess {
 
 export interface MailProviderFailure {
   isSuccess: false
-  status: number | null
-  messageId: string | null
+  status: number
 }
 
 export type MailProviderResult = MailProviderSuccess | MailProviderFailure

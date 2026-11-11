@@ -1,14 +1,28 @@
 import { config } from 'dotenv'
 import { z } from 'zod'
-import { NODE_ENV_VALUES, NodeEnvs } from '../shared/enums/node-env.js'
 import {
   DEFAULT_MAIL_PROVIDER,
   MAIL_PROVIDER_NAMES,
-} from '../shared/mail/mail-provider.registry.js'
+  MailProviderNames,
+} from '../shared/enums/mail-provider.js'
+import type { MailProviderName } from '../shared/enums/mail-provider.js'
+import { NODE_ENV_VALUES, NodeEnvs } from '../shared/enums/node-env.js'
+import type { NodeEnv } from '../shared/enums/node-env.js'
 
 config()
 
-const envSchema = z.object({
+interface MailDeliverySettings {
+  NODE_ENV: NodeEnv
+  EMAIL_PROVIDER: MailProviderName
+}
+
+function sendsRealEmails(settings: MailDeliverySettings): boolean {
+  return (
+    settings.NODE_ENV === NodeEnvs.PRODUCTION && settings.EMAIL_PROVIDER !== MailProviderNames.LOG
+  )
+}
+
+const baseEnvSchema = z.object({
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
   PORT: z.coerce.number().int().positive().default(3000),
   NODE_ENV: z.enum(NODE_ENV_VALUES).default(NodeEnvs.DEVELOPMENT),
@@ -45,6 +59,16 @@ const envSchema = z.object({
   IMAGE_ORPHAN_CLEANUP_INTERVAL_MS: z.coerce.number().int().min(60_000).default(86_400_000),
   IMAGE_ORPHAN_GRACE_HOURS: z.coerce.number().int().min(1).default(24),
 })
+
+const envSchema = baseEnvSchema
+  .refine((settings) => !sendsRealEmails(settings) || Boolean(settings.EMAIL_API_KEY), {
+    path: ['EMAIL_API_KEY'],
+    message: 'EMAIL_API_KEY is required in production unless EMAIL_PROVIDER is log',
+  })
+  .refine((settings) => !sendsRealEmails(settings) || Boolean(settings.EMAIL_FROM), {
+    path: ['EMAIL_FROM'],
+    message: 'EMAIL_FROM is required in production unless EMAIL_PROVIDER is log',
+  })
 
 const parsed = envSchema.safeParse(process.env)
 

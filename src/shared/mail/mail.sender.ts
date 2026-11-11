@@ -1,8 +1,14 @@
 import { env } from '../../config/env.js'
+import { MailProviderNames } from '../enums/mail-provider.js'
 import { NodeEnvs } from '../enums/node-env.js'
 import { logger } from '../utils/logger.js'
 import { createLogMailProvider } from './adapters/log.adapter.js'
-import type { MailMessage, MailProvider, MailProviderResult } from './mail-provider.js'
+import type {
+  MailMessage,
+  MailProvider,
+  MailProviderResult,
+  MailProviderSuccess,
+} from './mail-provider.js'
 import { MAIL_PROVIDER_FACTORIES } from './mail-provider.registry.js'
 
 export const MAIL_REQUEST_TIMEOUT_MS = 10_000
@@ -26,8 +32,7 @@ export interface SendMailInput {
   headers?: Record<string, string>
 }
 
-export type SendMailResult =
-  { isSuccess: true; messageId: string | null } | { isSuccess: false; reason: MailFailureReason }
+export type SendMailResult = MailProviderSuccess | { isSuccess: false; reason: MailFailureReason }
 
 interface MailTransport {
   provider: MailProvider
@@ -60,7 +65,7 @@ async function deliverMail(input: SendMailInput, signal: AbortSignal): Promise<S
 }
 
 function resolveMailTransport(): MailTransport | null {
-  if (env.NODE_ENV !== NodeEnvs.PRODUCTION) {
+  if (env.NODE_ENV !== NodeEnvs.PRODUCTION || env.EMAIL_PROVIDER === MailProviderNames.LOG) {
     return { provider: createLogMailProvider(), from: env.EMAIL_FROM ?? NON_PRODUCTION_FROM }
   }
   if (!env.EMAIL_API_KEY || !env.EMAIL_FROM) return null
@@ -95,13 +100,10 @@ function rejectOnAbort(signal: AbortSignal): Promise<never> {
 function toSendMailResult(result: MailProviderResult): SendMailResult {
   if (result.isSuccess) {
     logger.info({ messageId: result.messageId }, 'Email accepted by the mail provider')
-    return { isSuccess: true, messageId: result.messageId }
+    return result
   }
 
-  logger.error(
-    { status: result.status, messageId: result.messageId },
-    'Email rejected by the mail provider',
-  )
+  logger.error({ status: result.status }, 'Email rejected by the mail provider')
   return { isSuccess: false, reason: MailFailureReasons.PROVIDER_ERROR }
 }
 
@@ -112,6 +114,16 @@ function toThrownErrorFailure(error: unknown, signal: AbortSignal): SendMailResu
   }
 
   const errorName = error instanceof Error ? error.name : typeof error
-  logger.error({ errorName }, 'Mail provider failed with an unexpected error')
+  logger.error(
+    { errorName, errorCode: readErrorCauseCode(error) },
+    'Mail provider failed with an unexpected error',
+  )
   return { isSuccess: false, reason: MailFailureReasons.UNEXPECTED_ERROR }
+}
+
+// fetch hides network failures behind `TypeError: fetch failed`, the system code is on the cause.
+function readErrorCauseCode(error: unknown): string | null {
+  if (!(error instanceof Error) || !(error.cause instanceof Error)) return null
+  if (!('code' in error.cause) || typeof error.cause.code !== 'string') return null
+  return error.cause.code
 }

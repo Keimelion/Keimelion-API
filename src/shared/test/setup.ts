@@ -1,6 +1,6 @@
 import { beforeEach, vi } from 'vitest'
+import { DEFAULT_MAIL_PROVIDER } from '../enums/mail-provider.js'
 import { NodeEnvs } from '../enums/node-env.js'
-import { DEFAULT_MAIL_PROVIDER } from '../mail/mail-provider.registry.js'
 
 vi.mock('../../config/env.js', () => ({
   env: {
