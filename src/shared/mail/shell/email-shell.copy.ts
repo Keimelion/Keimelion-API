@@ -1,6 +1,5 @@
 import type { Locale } from '@keimelion/sdk/enums'
-
-export const EMAIL_CONTACT_ADDRESS = 'contact@keimelion.app'
+import { EMAIL_CONTACT_ADDRESS } from '../mail.constants.js'
 
 export interface EmailShellCopy {
   brandName: string

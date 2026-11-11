@@ -30,6 +30,7 @@ export function createResendMailProvider(config: MailProviderConfig): MailProvid
 function toResendRequest(message: MailMessage): Record<string, unknown> {
   return {
     from: message.from,
+    reply_to: message.replyTo,
     to: message.to,
     subject: message.subject,
     html: message.html,

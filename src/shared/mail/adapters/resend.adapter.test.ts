@@ -6,6 +6,7 @@ const API_KEY = 'test-provider-key'
 
 const message: MailMessage = {
   from: 'noreply@keimelion.app',
+  replyTo: 'contact@keimelion.app',
   to: 'recipient@example.com',
   subject: 'Subject',
   html: '<p>Body</p>',
@@ -45,7 +46,15 @@ describe('createResendMailProvider', () => {
       Authorization: `Bearer ${API_KEY}`,
       'Content-Type': 'application/json',
     })
-    expect(JSON.parse(init?.body as string)).toEqual(message)
+    expect(JSON.parse(init?.body as string)).toEqual({
+      from: message.from,
+      reply_to: message.replyTo,
+      to: message.to,
+      subject: message.subject,
+      html: message.html,
+      text: message.text,
+      headers: message.headers,
+    })
   })
 
   it('returns a neutral success with the message id', async () => {

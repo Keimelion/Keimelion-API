@@ -78,7 +78,7 @@ describe('sendMail', () => {
 
       expect(MAIL_PROVIDER_FACTORIES.resend).toHaveBeenCalledWith({ apiKey: API_KEY })
       expect(send).toHaveBeenCalledWith(
-        { ...input, from: FROM, headers: {} },
+        { ...input, from: FROM, replyTo: 'contact@keimelion.app', headers: {} },
         expect.any(AbortSignal),
       )
     })
