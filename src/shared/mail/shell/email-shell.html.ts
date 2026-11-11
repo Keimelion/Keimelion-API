@@ -182,10 +182,11 @@ function renderFallbackLink(url: string, label: string): string {
 }
 
 function renderRibbonDivider(): string {
-  const dashedRule = `<td class="k-rule" width="50%" style="border-top: 2px dashed ${EmailColors.RULE}; font-size: 0; line-height: 0">&nbsp;</td>`
+  // The dashed rule is a zero-height line in a middle-aligned cell, so it crosses the bow's centre
+  const dashedRule = `<td width="50%" valign="middle" style="font-size: 0; line-height: 0"><div class="k-rule" style="height: 0; border-top: 2px dashed ${EmailColors.RULE}; font-size: 0; line-height: 0"></div></td>`
   return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
 ${dashedRule}
-<td style="padding: 0 10px; font-size: 0; line-height: 0">${renderMark(SMALL_MARK_SIZE_PX)}</td>
+<td valign="middle" style="padding: 0 10px; font-size: 0; line-height: 0">${renderMark(SMALL_MARK_SIZE_PX)}</td>
 ${dashedRule}
 </tr></table>`
 }
