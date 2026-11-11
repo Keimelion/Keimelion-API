@@ -146,12 +146,16 @@ function renderParagraph(paragraph: string): string {
   return `<p class="k-text" style="margin: 0; font-size: 16px; line-height: 25px; color: ${EmailColors.INK}">${escapeHtml(paragraph)}</p>`
 }
 
-// Bulletproof button: the relief comes from border-bottom because Gmail strips box-shadow.
-// 14px + 20px + 14px + 4px border = 52px touch target. Outlook for Windows renders square corners.
+// Bulletproof button. The relief is a deep pill showing 4px below the brand pill: Gmail strips
+// box-shadow, and a border-bottom on a rounded cell renders as a flat bar under the button.
+// 14px + 20px + 14px + 4px relief = 52px touch target. Outlook for Windows renders square corners.
 function renderButton(action: EmailLink): string {
   return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin: 6px 0 2px"><tr>
-<td bgcolor="${EmailColors.BRAND}" style="border-radius: 999px; background: ${EmailColors.BRAND}; border-bottom: 4px solid ${EmailColors.BRAND_DEEP}">
+<td bgcolor="${EmailColors.BRAND_DEEP}" style="border-radius: 999px; background: ${EmailColors.BRAND_DEEP}; padding: 0 0 4px">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+<td bgcolor="${EmailColors.BRAND}" style="border-radius: 999px; background: ${EmailColors.BRAND}">
 <a href="${escapeHtml(action.url)}" target="_blank" style="display: inline-block; padding: 14px 30px; font-family: ${EmailFonts.SANS}; font-weight: 700; font-size: 16px; line-height: 20px; color: ${EmailColors.ON_BRAND}; text-decoration: none; border-radius: 999px">${escapeHtml(action.label)}</a>
+</td></tr></table>
 </td></tr></table>`
 }
 

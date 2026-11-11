@@ -57,7 +57,8 @@ describe('renderEmail', () => {
 
     expect(html).not.toMatch(/<svg|display:\s*flex|transform:|box-shadow|<script|@import|<link/)
     expect(html).toContain('role="presentation"')
-    expect(html).toContain('border-bottom: 4px solid #6E0F2C')
+    expect(html).not.toContain('border-bottom')
+    expect(html).toContain('background: #6E0F2C; padding: 0 0 4px')
     expect(html).toContain('prefers-color-scheme: dark')
   })
 
