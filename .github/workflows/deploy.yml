@@ -23,6 +23,6 @@ permissions:
 jobs:
   deploy:
     if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.event == 'push' && github.event.workflow_run.conclusion == 'success')
-    uses: Keimelion/Keimelion-Infra/.github/workflows/deploy.yml@v0.2.0
+    uses: Keimelion/Keimelion-Infra/.github/workflows/deploy.yml@v0.4.2
     with:
       environment: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || (github.event.workflow_run.head_branch == 'main' && 'production' || 'preprod') }}
