@@ -21,6 +21,7 @@ import {
 } from '../../../db/entities/items/items.repository.js'
 import { insertItemSource } from '../../../db/entities/item-sources/item-sources.repository.js'
 import { resolveItemRelations, writeItemRelations } from '../../../shared/db/item-relations.js'
+import { resolveSourceShops } from '../../../shared/db/source-shops.js'
 import { findAllItemsWithSources, countItems } from './admin-items.repository.js'
 import { toItemWithSources } from '../../../shared/types/item.js'
 import { toAdminItem } from './admin-items.mapper.js'
@@ -46,6 +47,8 @@ export interface UpdateItemInput extends Omit<AdminItemsUpdateRequestParsed, 'cl
   clearImage: boolean
 }
 
+type CreateSourceInput = AdminItemsCreateRequestParsed['sources'][number]
+type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 type ItemPatch = Partial<Pick<typeof items.$inferInsert, 'name' | 'description' | 'imageId'>>
 
 const ADMIN_ITEM_CREATE_CONTEXT = 'admin.item.create'
@@ -59,6 +62,9 @@ export async function createItem(
 ): Promise<ServiceResult<{ item: ItemWithSources }>> {
   const relations = await resolveItemRelations(input.tags, input.categories)
   if ('errorCode' in relations) return serviceError(relations.errorCode)
+
+  const sourcesWithShops = await resolveSourcesShopIds(input.sources)
+  if (hasDuplicateShopId(sourcesWithShops)) return serviceError(ErrorCode.DUPLICATE_SHOP_FOR_ITEM)
 
   const imageOutcome = await processOptionalImage(input.imageBuffer, adminId)
   if ('errorCode' in imageOutcome) return serviceError(imageOutcome.errorCode)
@@ -77,20 +83,7 @@ export async function createItem(
       )
       if (!item) return undefined
 
-      for (const source of input.sources) {
-        const inserted = await insertItemSource(
-          {
-            itemId: item.id,
-            shopId: source.shopId,
-            sourceUrl: source.sourceUrl,
-            price: source.price,
-            currency: source.currency,
-          },
-          tx,
-        )
-        if (!inserted) throw new Error('item_source_insert_failed')
-      }
-
+      await insertSourcesWithShops(item.id, sourcesWithShops, tx)
       await writeItemRelations({ itemId: item.id, tagCreatorId: null, relations }, tx)
       return item
     }),
@@ -210,4 +203,39 @@ export async function deleteItemById(
 
   logger.warn({ adminId, action: AdminAction.DELETE_ITEM, itemId: id })
   return { data: { message: 'Item deleted successfully' }, httpStatus: HttpStatus.OK }
+}
+
+async function resolveSourcesShopIds(sources: CreateSourceInput[]): Promise<CreateSourceInput[]> {
+  const resolvedShops = await resolveSourceShops(
+    sources.map((source) => (source.shopId === null ? source.sourceUrl : null)),
+  )
+  return sources.map((source, index) => ({
+    ...source,
+    shopId: source.shopId ?? resolvedShops[index]?.id ?? null,
+  }))
+}
+
+function hasDuplicateShopId(sources: CreateSourceInput[]): boolean {
+  const shopIds = sources.flatMap((source) => (source.shopId === null ? [] : [source.shopId]))
+  return new Set(shopIds).size !== shopIds.length
+}
+
+async function insertSourcesWithShops(
+  itemId: string,
+  sources: CreateSourceInput[],
+  tx: DbTransaction,
+): Promise<void> {
+  for (const source of sources) {
+    const inserted = await insertItemSource(
+      {
+        itemId,
+        shopId: source.shopId,
+        sourceUrl: source.sourceUrl,
+        price: source.price,
+        currency: source.currency,
+      },
+      tx,
+    )
+    if (!inserted) throw new Error('item_source_insert_failed')
+  }
 }
