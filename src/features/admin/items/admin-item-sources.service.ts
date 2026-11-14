@@ -15,6 +15,7 @@ import {
   existsItemSourceForShop,
 } from '../../../db/entities/item-sources/item-sources.repository.js'
 import { findShopById } from '../../../db/entities/shops/shops.repository.js'
+import { resolveSourceShop } from '../../../shared/db/source-shops.js'
 import { toItemSourceDetail } from '../../../shared/types/item.js'
 import { AdminAction } from '../admin.enums.js'
 import type { Shop } from '../../../db/entities/shops/shops.schema.js'
@@ -25,6 +26,9 @@ import type {
   AdminItemsUpdateSourceRequestParsed,
 } from '@keimelion/sdk/schemas'
 
+type ShopSelection = { shop: Shop | null } | { errorCode: ErrorCode }
+type ShopIdSelection = { shopId: string | null | undefined } | { errorCode: ErrorCode }
+
 export async function createItemSource(
   adminId: string,
   itemId: string,
@@ -33,20 +37,18 @@ export async function createItemSource(
   const item = await findItemById(itemId)
   if (!item) return serviceError(ErrorCode.NOT_FOUND)
 
-  let shop: Shop | null = null
-  if (input.shopId !== null) {
-    const found = await findShopById(input.shopId)
-    if (!found?.isActive) return serviceError(ErrorCode.NOT_FOUND)
-    shop = found
+  const selection = await selectCreateSourceShop(input)
+  if ('errorCode' in selection) return serviceError(selection.errorCode)
+  const { shop } = selection
 
-    const alreadyUsed = await existsItemSourceForShop(itemId, input.shopId)
-    if (alreadyUsed) return serviceError(ErrorCode.DUPLICATE_SHOP_FOR_ITEM)
+  if (shop !== null && (await existsItemSourceForShop(itemId, shop.id))) {
+    return serviceError(ErrorCode.DUPLICATE_SHOP_FOR_ITEM)
   }
 
   const outcome = await runWrite(() =>
     insertItemSource({
       itemId,
-      shopId: input.shopId,
+      shopId: shop?.id ?? null,
       sourceUrl: input.sourceUrl,
       price: input.price,
       currency: input.currency,
@@ -71,18 +73,17 @@ export async function updateItemSourceById(
   const existingSource = await findItemSourceById(sourceId)
   if (existingSource?.itemId !== itemId) return serviceError(ErrorCode.NOT_FOUND)
 
-  if (input.shopId !== null && input.shopId !== undefined) {
-    const shop = await findShopById(input.shopId)
-    if (!shop?.isActive) return serviceError(ErrorCode.NOT_FOUND)
+  const selection = await selectUpdateSourceShopId(input)
+  if ('errorCode' in selection) return serviceError(selection.errorCode)
+  const { shopId } = selection
 
-    if (input.shopId !== existingSource.shopId) {
-      const alreadyUsed = await existsItemSourceForShop(itemId, input.shopId, sourceId)
-      if (alreadyUsed) return serviceError(ErrorCode.DUPLICATE_SHOP_FOR_ITEM)
-    }
+  if (shopId !== null && shopId !== undefined && shopId !== existingSource.shopId) {
+    const alreadyUsed = await existsItemSourceForShop(itemId, shopId, sourceId)
+    if (alreadyUsed) return serviceError(ErrorCode.DUPLICATE_SHOP_FOR_ITEM)
   }
 
   const fields = pickDefined({
-    shopId: input.shopId,
+    shopId,
     sourceUrl: input.sourceUrl,
     price: input.price,
     currency: input.currency,
@@ -123,4 +124,25 @@ export async function deleteItemSourceById(
 
   logger.warn({ adminId, action: AdminAction.DELETE_ITEM_SOURCE, itemId, sourceId })
   return { data: { message: 'Item source deleted successfully' }, httpStatus: HttpStatus.OK }
+}
+
+async function selectCreateSourceShop(input: AdminItemsCreateSourceRequestParsed): Promise<ShopSelection> {
+  if (input.shopId === null) return { shop: await resolveSourceShop(input.sourceUrl) }
+
+  const shop = await findShopById(input.shopId)
+  if (!shop?.isActive) return { errorCode: ErrorCode.NOT_FOUND }
+  return { shop }
+}
+
+async function selectUpdateSourceShopId(input: AdminItemsUpdateSourceRequestParsed): Promise<ShopIdSelection> {
+  if (input.shopId === null) return { shopId: null }
+  if (input.shopId !== undefined) {
+    const shop = await findShopById(input.shopId)
+    if (!shop?.isActive) return { errorCode: ErrorCode.NOT_FOUND }
+    return { shopId: shop.id }
+  }
+  if (input.sourceUrl === undefined) return { shopId: undefined }
+
+  const resolvedShop = await resolveSourceShop(input.sourceUrl)
+  return { shopId: resolvedShop?.id ?? null }
 }

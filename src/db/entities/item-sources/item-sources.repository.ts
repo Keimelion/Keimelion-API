@@ -8,7 +8,7 @@ type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
 interface InsertItemSourceInput {
   itemId: string
-  shopId?: string | null | undefined
+  shopId: string | null
   sourceUrl: string | null
   price: string | null
   currency: string
