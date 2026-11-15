@@ -22,7 +22,6 @@ interface WaitlistConfirmationCopy {
   preheader: string
   kicker: string
   title: string
-  greeting: string
   body: string
   cta: string
   validity: (days: number) => string
@@ -48,7 +47,6 @@ const WAITLIST_CONFIRMATION_COPY: Record<Locale, WaitlistConfirmationCopy> = {
     preheader: "Un clic pour rejoindre la liste d'attente, et on vous prévient au lancement.",
     kicker: 'presque emballé !',
     title: "Il ne reste qu'un clic.",
-    greeting: 'Bonjour,',
     body: "Vous avez demandé à être prévenu du lancement de Keimêlion : confirmez votre adresse pour rejoindre la liste d'attente.",
     cta: 'Confirmer mon inscription',
     validity: (days) => `Ce lien est valable ${formatQuantity(days, 'jour', 'jours')}.`,
@@ -62,7 +60,6 @@ const WAITLIST_CONFIRMATION_COPY: Record<Locale, WaitlistConfirmationCopy> = {
     preheader: "One click to join the waitlist, and we'll let you know at launch.",
     kicker: 'almost wrapped!',
     title: 'Just one click left.',
-    greeting: 'Hello,',
     body: 'You asked to be notified when Keimêlion launches: confirm your address to join the waitlist.',
     cta: 'Confirm my signup',
     validity: (days) => `This link is valid for ${formatQuantity(days, 'day', 'days')}.`,
@@ -86,7 +83,7 @@ export function buildWaitlistConfirmationEmail(
     bannerTheme: EmailBannerThemes.WAITLIST,
     kicker: copy.kicker,
     title: copy.title,
-    paragraphs: [copy.greeting, copy.body],
+    paragraphs: [copy.body],
     action: { label: copy.cta, url: buildTokenUrl(paths.confirm, input.confirmationToken) },
     infoBox: { highlight: copy.validity(validityDays), text: copy.next },
     closingNote: copy.ignore(validityDays),

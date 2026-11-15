@@ -9,6 +9,7 @@ export function renderEmailText(content: EmailShellContent): string {
   const copy = EMAIL_SHELL_COPY[content.locale]
   const blocks = [
     `${capitalize(content.kicker)}\n${content.title}`,
+    copy.greeting,
     ...content.paragraphs.map(renderParagraphText),
     `${content.action.label}${copy.labelSeparator}\n${content.action.url}`,
     ...renderInfoBoxBlocks(content.infoBox),

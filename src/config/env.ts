@@ -30,6 +30,24 @@ function isLocalUrl(url: string): boolean {
   return LOCAL_HOSTNAMES.includes(new URL(url).hostname)
 }
 
+type PublicUrlKey = 'LANDING_URL' | 'WEB_APP_URL' | 'BACKOFFICE_URL'
+
+interface PublicUrlSettings extends MailDeliverySettings, Record<PublicUrlKey, string> {}
+
+// Links in real emails must not point to a local URL
+function publicUrlRule(
+  key: PublicUrlKey,
+  label: string,
+): [(settings: PublicUrlSettings) => boolean, { path: [PublicUrlKey]; message: string }] {
+  return [
+    (settings) => !sendsRealEmails(settings) || !isLocalUrl(settings[key]),
+    {
+      path: [key],
+      message: `${key} must be the ${label} in production unless EMAIL_PROVIDER is log`,
+    },
+  ]
+}
+
 const baseEnvSchema = z.object({
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
   PORT: z.coerce.number().int().positive().default(3000),
@@ -88,20 +106,9 @@ const envSchema = baseEnvSchema
     path: ['EMAIL_FROM'],
     message: 'EMAIL_FROM is required in production unless EMAIL_PROVIDER is log',
   })
-  .refine((settings) => !sendsRealEmails(settings) || !isLocalUrl(settings.LANDING_URL), {
-    path: ['LANDING_URL'],
-    message:
-      'LANDING_URL must be the public landing URL in production unless EMAIL_PROVIDER is log',
-  })
-  .refine((settings) => !sendsRealEmails(settings) || !isLocalUrl(settings.WEB_APP_URL), {
-    path: ['WEB_APP_URL'],
-    message: 'WEB_APP_URL must be the public web app URL in production unless EMAIL_PROVIDER is log',
-  })
-  .refine((settings) => !sendsRealEmails(settings) || !isLocalUrl(settings.BACKOFFICE_URL), {
-    path: ['BACKOFFICE_URL'],
-    message:
-      'BACKOFFICE_URL must be the public Backoffice URL in production unless EMAIL_PROVIDER is log',
-  })
+  .refine(...publicUrlRule('LANDING_URL', 'public landing URL'))
+  .refine(...publicUrlRule('WEB_APP_URL', 'public web app URL'))
+  .refine(...publicUrlRule('BACKOFFICE_URL', 'public Backoffice URL'))
 
 const parsed = envSchema.safeParse(process.env)
 

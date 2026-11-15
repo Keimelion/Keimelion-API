@@ -22,7 +22,7 @@ export type EmailTextRun = string | EmailStrongText
 // Plain text, or runs of text where some words are set in bold
 export type EmailParagraph = string | EmailTextRun[]
 
-// One email = the KEI-164 v2 modules in a fixed order: logo, banner, kicker, title, body, button,
+// One email = the KEI-164 v2 modules in a fixed order: logo, banner, kicker, title, greeting, body, button,
 // info box, fallback link, ribbon divider, closing note, signature, footer. The footer opens with
 // the reason the recipient gets the email, when there is one.
 export interface EmailShellContent {

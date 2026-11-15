@@ -5,6 +5,7 @@ import { NodeEnvs } from '../../shared/enums/node-env.js'
 import { env } from '../../config/env.js'
 import { hashSha256Hex } from '../../shared/utils/hash.js'
 import { logger } from '../../shared/utils/logger.js'
+import { ONE_DAY_MS } from '../../shared/utils/time.js'
 import { sendMailInBackground } from '../../shared/mail/mail.background.js'
 import { EMAIL_DEFAULT_LOCALE } from '../../shared/mail/mail.locale.js'
 import { runWrite } from '../../shared/utils/admin-write.js'
@@ -31,7 +32,6 @@ import type {
 } from '@keimelion/sdk/schemas'
 
 const COLLAB_INVITE_TTL_DAYS = 7
-const ONE_DAY_MS = 24 * 60 * 60 * 1000
 const LIST_INVITATION_EMAIL_FAILED_EVENT = 'list_invitation_email_failed'
 
 export const COLLAB_INVITE_TTL_MS = COLLAB_INVITE_TTL_DAYS * ONE_DAY_MS

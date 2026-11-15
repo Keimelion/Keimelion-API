@@ -16,6 +16,7 @@ import { env } from '../../config/env.js'
 import { hashPassword } from '../../shared/utils/hash.js'
 import type { User } from '../../db/entities/users/users.schema.js'
 import type { UserRowWithAvatar } from '../../shared/types/user.js'
+import { ONE_HOUR_MS } from '../../shared/utils/time.js'
 import type { RegisterRequestParsed } from '@keimelion/sdk/schemas'
 import type { ReservationProfileRow } from '../reservations/reservations.types.js'
 
@@ -40,7 +41,7 @@ export async function insertUser(
   avatarImageId: string | null = null,
 ): Promise<User | undefined> {
   const passwordHash = await hashPassword(input.password)
-  const emailVerifyTokenExpiresAt = new Date(Date.now() + env.EMAIL_VERIFY_TOKEN_TTL_HOURS * 60 * 60 * 1000)
+  const emailVerifyTokenExpiresAt = new Date(Date.now() + env.EMAIL_VERIFY_TOKEN_TTL_HOURS * ONE_HOUR_MS)
 
   const [user] = await db
     .insert(users)

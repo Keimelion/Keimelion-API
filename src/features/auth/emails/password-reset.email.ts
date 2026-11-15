@@ -23,7 +23,6 @@ interface PasswordResetCopy {
   preheader: (validity: string) => string
   kicker: string
   title: string
-  greeting: string
   body: string
   cta: string
   validity: (hours: number) => string
@@ -39,7 +38,6 @@ const PASSWORD_RESET_COPY: Record<Locale, PasswordResetCopy> = {
     preheader: (validity) => `Choisissez un nouveau mot de passe. Le lien est valable ${validity}.`,
     kicker: 'pas de panique',
     title: 'Choisissez un nouveau mot de passe.',
-    greeting: 'Bonjour,',
     body: 'Vous avez demandé à réinitialiser le mot de passe de votre compte Keimêlion. Cliquez sur le bouton ci-dessous pour en choisir un nouveau.',
     cta: 'Choisir un nouveau mot de passe',
     validity: (hours) => formatQuantity(hours, 'heure', 'heures'),
@@ -56,7 +54,6 @@ const PASSWORD_RESET_COPY: Record<Locale, PasswordResetCopy> = {
     preheader: (validity) => `Choose a new password. The link is valid for ${validity}.`,
     kicker: 'no worries',
     title: 'Choose a new password.',
-    greeting: 'Hello,',
     body: 'You asked to reset the password for your Keimêlion account. Click the button below to choose a new one.',
     cta: 'Choose a new password',
     validity: (hours) => formatQuantity(hours, 'hour', 'hours'),
@@ -80,7 +77,7 @@ export function buildPasswordResetEmail(input: PasswordResetEmailInput): Rendere
     bannerTheme: EmailBannerThemes.ACCOUNT,
     kicker: copy.kicker,
     title: copy.title,
-    paragraphs: [copy.greeting, copy.body],
+    paragraphs: [copy.body],
     action: { label: copy.cta, url: buildResetPasswordUrl(input.role, input.resetToken) },
     infoBox: { highlight: copy.validityHighlight(validity), text: copy.singleUse },
     closingNote: copy.ignore,

@@ -20,7 +20,6 @@ interface EmailVerificationCopy {
   preheader: string
   kicker: string
   title: string
-  greeting: string
   body: string
   cta: string
   validity: (hours: number) => string
@@ -35,7 +34,6 @@ const EMAIL_VERIFICATION_COPY: Record<Locale, EmailVerificationCopy> = {
     preheader: 'Un clic pour activer votre compte Keimêlion.',
     kicker: 'bienvenue !',
     title: 'Confirmez votre adresse.',
-    greeting: 'Bonjour,',
     body: "Merci d'avoir créé votre compte Keimêlion. Confirmez votre adresse e-mail pour commencer votre première liste.",
     cta: 'Confirmer mon adresse',
     validity: (hours) => `Ce lien est valable ${formatQuantity(hours, 'heure', 'heures')}.`,
@@ -49,7 +47,6 @@ const EMAIL_VERIFICATION_COPY: Record<Locale, EmailVerificationCopy> = {
     preheader: 'One click to activate your Keimêlion account.',
     kicker: 'welcome!',
     title: 'Confirm your address.',
-    greeting: 'Hello,',
     body: 'Thanks for creating your Keimêlion account. Confirm your email address to start your first list.',
     cta: 'Confirm my address',
     validity: (hours) => `This link is valid for ${formatQuantity(hours, 'hour', 'hours')}.`,
@@ -70,7 +67,7 @@ export function buildEmailVerificationEmail(input: EmailVerificationEmailInput):
     bannerTheme: EmailBannerThemes.ACCOUNT,
     kicker: copy.kicker,
     title: copy.title,
-    paragraphs: [copy.greeting, copy.body],
+    paragraphs: [copy.body],
     action: {
       label: copy.cta,
       url: buildWebAppTokenUrl(WebAppPaths.VERIFY_EMAIL, input.verifyToken),

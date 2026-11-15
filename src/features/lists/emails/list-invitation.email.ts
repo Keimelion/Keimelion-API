@@ -23,7 +23,6 @@ interface ListInvitationCopy {
   preheader: string
   kicker: string
   title: (inviter: string) => string
-  greeting: string
   body: (inviter: EmailTextRun[], listName: string) => EmailTextRun[]
   cta: string
   noAccount: string
@@ -38,7 +37,6 @@ const LIST_INVITATION_COPY: Record<Locale, ListInvitationCopy> = {
     preheader: "Rejoignez la liste pour l'organiser ensemble sur Keimêlion.",
     kicker: "à plusieurs, c'est mieux !",
     title: (inviter) => `${inviter} vous invite à collaborer.`,
-    greeting: 'Bonjour,',
     body: (inviter, listName) => [
       ...inviter,
       ' vous invite à gérer ensemble la liste « ',
@@ -59,7 +57,6 @@ const LIST_INVITATION_COPY: Record<Locale, ListInvitationCopy> = {
     preheader: 'Join the list and plan it together on Keimêlion.',
     kicker: 'better together!',
     title: (inviter) => `${inviter} invited you to collaborate.`,
-    greeting: 'Hello,',
     body: (inviter, listName) => [
       ...inviter,
       ' invited you to manage the list “',
@@ -87,7 +84,7 @@ export function buildListInvitationEmail(input: ListInvitationEmailInput): Rende
     bannerTheme: EmailBannerThemes.INVITATION,
     kicker: copy.kicker,
     title: copy.title(inviter),
-    paragraphs: [copy.greeting, copy.body(inviterIdentity(input), input.listName)],
+    paragraphs: [copy.body(inviterIdentity(input), input.listName)],
     action: {
       label: copy.cta,
       url: buildWebAppTokenUrl(WebAppPaths.ACCEPT_LIST_INVITE, input.inviteToken),

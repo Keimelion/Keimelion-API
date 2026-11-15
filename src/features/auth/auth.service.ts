@@ -8,6 +8,7 @@ import { serviceError } from '../../shared/utils/response.js'
 import { readErrorName } from '../../shared/utils/error.js'
 import { hashPassword, verifyPassword, hashSha256Hex } from '../../shared/utils/hash.js'
 import { logger } from '../../shared/utils/logger.js'
+import { ONE_HOUR_MS } from '../../shared/utils/time.js'
 import { buildEmailVerificationEmail } from './emails/email-verification.email.js'
 import { buildPasswordResetEmail } from './emails/password-reset.email.js'
 import { signJwt } from './jwt.service.js'
@@ -51,7 +52,6 @@ import type {
 import type { ServiceResult } from '../../shared/types/service.js'
 
 const PASSWORD_RESET_TOKEN_TTL_HOURS = 1
-const ONE_HOUR_MS = 60 * 60 * 1000
 const REFRESH_TOKEN_BYTE_LENGTH = 32
 const PASSWORD_RESET_GENERIC_MESSAGE = 'If this email is registered, a reset link has been sent'
 const VERIFICATION_EMAIL_FAILED_EVENT = 'auth_verification_email_failed'
@@ -204,13 +204,16 @@ export async function requestPasswordReset(
   }
 
   const rawToken = randomBytes(REFRESH_TOKEN_BYTE_LENGTH).toString('hex')
-  void issuePasswordReset(user, rawToken, emailLocale)
+  const passwordReset = issuePasswordReset(user, rawToken, emailLocale)
 
+  if (env.NODE_ENV === NodeEnvs.PRODUCTION) {
+    return { data: { message: PASSWORD_RESET_GENERIC_MESSAGE }, httpStatus: HttpStatus.OK }
+  }
+
+  // Outside production the token is returned: it must be stored before the client can use it
+  await passwordReset
   return {
-    data: {
-      message: PASSWORD_RESET_GENERIC_MESSAGE,
-      ...(env.NODE_ENV !== NodeEnvs.PRODUCTION ? { passwordResetToken: rawToken } : {}),
-    },
+    data: { message: PASSWORD_RESET_GENERIC_MESSAGE, passwordResetToken: rawToken },
     httpStatus: HttpStatus.OK,
   }
 }
@@ -255,7 +258,8 @@ function sendVerificationEmail(email: string, verifyToken: string, locale: Local
   }))
 }
 
-// Runs after the response is sent: an existing account answers as fast as an unknown address.
+// Never rejects. In production it runs after the response is sent: an existing account answers as
+// fast as an unknown address.
 async function issuePasswordReset(user: User, rawToken: string, locale: Locale): Promise<void> {
   try {
     await setPasswordResetToken(user.id, {

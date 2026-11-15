@@ -1,3 +1,4 @@
+import { UserRoles } from '@keimelion/sdk/enums'
 import type { Locale, StaffRole } from '@keimelion/sdk/enums'
 import { EMAIL_CONTACT_ADDRESS } from '../../../../shared/mail/mail.constants.js'
 import { formatQuantity } from '../../../../shared/mail/mail.format.js'
@@ -22,7 +23,6 @@ interface StaffInvitationCopy {
   preheader: (role: StaffRole) => string
   kicker: string
   title: string
-  greeting: string
   body: (role: StaffRole, email: string) => EmailTextRun[]
   cta: string
   validity: (hours: number) => string
@@ -32,18 +32,18 @@ interface StaffInvitationCopy {
 }
 
 const FR_ROLE_LABELS: Record<StaffRole, string> = {
-  moderator: 'modérateur',
-  admin: 'administrateur',
+  [UserRoles.MODERATOR]: 'modérateur',
+  [UserRoles.ADMIN]: 'administrateur',
 }
 
 const EN_ROLE_LABELS: Record<StaffRole, string> = {
-  moderator: 'moderator',
-  admin: 'administrator',
+  [UserRoles.MODERATOR]: 'moderator',
+  [UserRoles.ADMIN]: 'administrator',
 }
 
 const EN_ROLE_ARTICLES: Record<StaffRole, string> = {
-  moderator: 'a',
-  admin: 'an',
+  [UserRoles.MODERATOR]: 'a',
+  [UserRoles.ADMIN]: 'an',
 }
 
 const STAFF_INVITATION_COPY: Record<Locale, StaffInvitationCopy> = {
@@ -53,7 +53,6 @@ const STAFF_INVITATION_COPY: Record<Locale, StaffInvitationCopy> = {
       `Définissez votre mot de passe pour activer votre compte ${FR_ROLE_LABELS[role]}.`,
     kicker: "bienvenue dans l'équipe",
     title: 'Votre accès au Backoffice est prêt.',
-    greeting: 'Bonjour,',
     body: (role, email) => [
       'Un administrateur de Keimêlion vous a créé un compte ',
       { strong: FR_ROLE_LABELS[role] },
@@ -74,7 +73,6 @@ const STAFF_INVITATION_COPY: Record<Locale, StaffInvitationCopy> = {
     preheader: (role) => `Set your password to activate your ${EN_ROLE_LABELS[role]} account.`,
     kicker: 'welcome to the team',
     title: 'Your Backoffice access is ready.',
-    greeting: 'Hello,',
     body: (role, email) => [
       `A Keimêlion administrator created ${EN_ROLE_ARTICLES[role]} `,
       { strong: EN_ROLE_LABELS[role] },
@@ -100,7 +98,7 @@ export function buildStaffInvitationEmail(input: StaffInvitationEmailInput): Ren
     bannerTheme: EmailBannerThemes.STAFF,
     kicker: copy.kicker,
     title: copy.title,
-    paragraphs: [copy.greeting, copy.body(input.role, input.email)],
+    paragraphs: [copy.body(input.role, input.email)],
     action: { label: copy.cta, url: buildBackofficeSetPasswordUrl(input.setPasswordToken) },
     infoBox: { highlight: copy.validity(input.validityHours), text: copy.singleUse },
     closingNote: copy.ignore,

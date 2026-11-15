@@ -133,7 +133,9 @@ function renderContentModules(content: EmailShellContent, copy: EmailShellCopy):
   return [
     renderModule(renderKicker(content.kicker), KICKER_GAP_PX),
     renderModule(renderTitle(content.title)),
-    ...content.paragraphs.map((paragraph) => renderModule(renderParagraph(paragraph))),
+    ...[copy.greeting, ...content.paragraphs].map((paragraph) =>
+      renderModule(renderParagraph(paragraph)),
+    ),
     renderModule(renderButton(content.action), BUTTON_GAP_PX),
     ...(content.infoBox === null
       ? []

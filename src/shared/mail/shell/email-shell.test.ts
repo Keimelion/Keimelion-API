@@ -12,7 +12,7 @@ const content: EmailShellContent = {
   bannerTheme: EmailBannerThemes.WAITLIST,
   kicker: 'presque emballé !',
   title: "Il ne reste qu'un clic.",
-  paragraphs: ['Bonjour,', 'Premier paragraphe.'],
+  paragraphs: ['Premier paragraphe.'],
   action: { label: 'Confirmer', url: ACTION_URL },
   infoBox: { highlight: 'Valable 7 jours.', text: 'Ensuite, un seul e-mail.' },
   closingNote: 'Ignorez cet e-mail.',

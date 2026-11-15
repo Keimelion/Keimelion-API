@@ -15,6 +15,7 @@ import { sendMailInBackground } from '../../../shared/mail/mail.background.js'
 import { EMAIL_DEFAULT_LOCALE } from '../../../shared/mail/mail.locale.js'
 import { serviceError } from '../../../shared/utils/response.js'
 import { logger } from '../../../shared/utils/logger.js'
+import { ONE_HOUR_MS } from '../../../shared/utils/time.js'
 import { hashPassword, hashSha256Hex } from '../../../shared/utils/hash.js'
 import { pickDefined } from '../../../shared/utils/partial-update.js'
 import { runWrite } from '../../../shared/utils/admin-write.js'
@@ -35,7 +36,6 @@ import type { ServiceResult } from '../../../shared/types/service.js'
 import type { ListUsersInput } from './endpoints/list-users.js'
 
 const STAFF_INVITATION_VALIDITY_HOURS = 24
-const ONE_HOUR_MS = 60 * 60 * 1000
 const PASSWORD_RESET_TOKEN_BYTE_LENGTH = 32
 const STAFF_INVITATION_EMAIL_FAILED_EVENT = 'admin_staff_invitation_email_failed'
 

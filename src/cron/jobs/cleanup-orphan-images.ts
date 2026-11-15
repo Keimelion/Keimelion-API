@@ -7,9 +7,9 @@ import {
 } from '../../db/entities/images/images.repository.js'
 import { deleteStoredImageFiles, listStoredImageHashes } from '../../features/uploads/image.storage.js'
 import { logger } from '../../shared/utils/logger.js'
+import { ONE_HOUR_MS } from '../../shared/utils/time.js'
 import { createCronJob } from '../create-cron-job.js'
 
-const ONE_HOUR_MS = 60 * 60 * 1000
 const HASH_LOOKUP_BATCH_SIZE = 500
 
 // 1. Deletes images rows that no item nor user references anymore (replaced, cleared, parent
