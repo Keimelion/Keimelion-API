@@ -6,7 +6,8 @@ export const AMAZON_SHOP_SLUG = 'amazon'
 
 const ASIN_PATH_REGEX =
   /\/(?:dp|gp\/product|gp\/aw\/d|exec\/obidos\/asin|o\/asin)\/([a-z0-9]{10})(?:[/?]|$)/i
-const ALTERNATE_HOST_PREFIX_REGEX = /^(?:www|m|smile)\./
+// Storefront hosts (amazon.fr, m.amazon.co.uk, smile.amazon.com…) capture the bare storefront domain.
+const STOREFRONT_HOST_REGEX = /^(?:(?:www|m|smile)\.)?(amazon\.(?:com?\.)?[a-z]{2,3})$/i
 const CANONICAL_HOST_PREFIX = 'www.'
 const AFFILIATE_PARAM_DENYLIST = /^(?:tag|ascsubtag|linkcode|linkid)$/i
 const ASSOCIATE_TAG_PARAM = 'tag'
@@ -16,10 +17,15 @@ interface AmazonStrategyConfig {
   associateTag: string | undefined
 }
 
+// Without an associate tag the strategy builds no links at all, so Amazon stays out of
+// AFFILIATE_SHOP_SLUGS and the generation job does not scan its sources for nothing.
 export function createAmazonUrlStrategy(config: AmazonStrategyConfig): ShopUrlStrategy {
+  const { associateTag } = config
+  if (!associateTag) return { normalize: normalizeAmazonUrl }
+
   return {
     normalize: normalizeAmazonUrl,
-    buildAffiliateUrl: (sourceUrl) => Promise.resolve(buildAmazonAffiliateUrl(sourceUrl, config)),
+    buildAffiliateUrl: (sourceUrl) => Promise.resolve(buildAmazonAffiliateUrl(sourceUrl, associateTag)),
   }
 }
 
@@ -31,19 +37,22 @@ function normalizeAmazonUrl(url: URL): URL {
   const asin = ASIN_PATH_REGEX.exec(url.pathname)?.[1]
   if (asin === undefined) return removeTrackingAndAffiliateParams(url)
 
-  const host = CANONICAL_HOST_PREFIX + url.hostname.replace(ALTERNATE_HOST_PREFIX_REGEX, '')
-  return new URL(`https://${host}/dp/${asin.toUpperCase()}`)
+  return new URL(`https://${canonicalizeHost(url.hostname)}/dp/${asin.toUpperCase()}`)
+}
+
+// Storefront variants collapse to www.<storefront>; any other subdomain is kept as is.
+function canonicalizeHost(hostname: string): string {
+  const storefront = STOREFRONT_HOST_REGEX.exec(hostname)?.[1]
+  return storefront === undefined ? hostname : CANONICAL_HOST_PREFIX + storefront.toLowerCase()
 }
 
 function removeTrackingAndAffiliateParams(url: URL): URL {
   return removeQueryParams(normalizeUrlWithDefaults(url), AFFILIATE_PARAM_DENYLIST)
 }
 
-function buildAmazonAffiliateUrl(sourceUrl: string, config: AmazonStrategyConfig): string | null {
-  if (!config.associateTag) return null
-
+function buildAmazonAffiliateUrl(sourceUrl: string, associateTag: string): string {
   const affiliateUrl = normalizeAmazonUrl(new URL(sourceUrl))
-  const tagSegment = `${ASSOCIATE_TAG_PARAM}=${encodeURIComponent(config.associateTag)}`
+  const tagSegment = `${ASSOCIATE_TAG_PARAM}=${encodeURIComponent(associateTag)}`
   affiliateUrl.search = [affiliateUrl.search.slice(1), tagSegment]
     .filter((segment) => segment.length > 0)
     .join(QUERY_SEPARATOR)

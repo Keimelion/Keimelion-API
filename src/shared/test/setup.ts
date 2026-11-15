@@ -39,7 +39,7 @@ vi.mock('../../config/env.js', () => ({
     WAITLIST_CONFIRMATION_VALIDITY_DAYS: 7,
     WAITLIST_PURGE_INTERVAL_MS: 3_600_000,
     AFFILIATE_URL_GENERATION_INTERVAL_MS: 900_000,
-    AMAZON_ASSOCIATE_TAG: undefined,
+    AMAZON_ASSOCIATE_TAG: 'keimelion-21',
   },
 }))
 

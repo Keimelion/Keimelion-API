@@ -50,7 +50,7 @@ describe('cleanup-expired-access-tokens cron job', () => {
     cleanupExpiredAccessTokens.start()
     await vi.advanceTimersByTimeAsync(INTERVAL_MS)
 
-    expect(vi.mocked(logger.info)).toHaveBeenCalledWith({ deletedCount: 5 }, 'Expired JWT cleanup completed')
+    expect(vi.mocked(logger.info)).toHaveBeenCalledWith({ processedCount: 5 }, 'Expired JWT cleanup completed')
   })
 
   it('logs zero deleted rows when no tokens are expired', async () => {
@@ -59,7 +59,7 @@ describe('cleanup-expired-access-tokens cron job', () => {
     cleanupExpiredAccessTokens.start()
     await vi.advanceTimersByTimeAsync(INTERVAL_MS)
 
-    expect(vi.mocked(logger.info)).toHaveBeenCalledWith({ deletedCount: 0 }, 'Expired JWT cleanup completed')
+    expect(vi.mocked(logger.info)).toHaveBeenCalledWith({ processedCount: 0 }, 'Expired JWT cleanup completed')
   })
 
   it('logs the error and continues when deleteExpiredAccessTokens throws', async () => {
@@ -76,7 +76,7 @@ describe('cleanup-expired-access-tokens cron job', () => {
     await vi.advanceTimersByTimeAsync(INTERVAL_MS)
 
     expect(vi.mocked(deleteExpiredAccessTokens)).toHaveBeenCalledTimes(2)
-    expect(vi.mocked(logger.info)).toHaveBeenCalledWith({ deletedCount: 2 }, 'Expired JWT cleanup completed')
+    expect(vi.mocked(logger.info)).toHaveBeenCalledWith({ processedCount: 2 }, 'Expired JWT cleanup completed')
   })
 
   it('overlap guard prevents concurrent runs', async () => {

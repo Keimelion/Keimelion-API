@@ -110,7 +110,7 @@ export async function updateShopById(
     return { data: { shop: toShopDetail(existingRow) }, httpStatus: HttpStatus.OK }
   }
 
-  const outcome = await runWrite(() => updateShopAndAffiliateUrls(id, fieldPatch))
+  const outcome = await runWrite(() => updateShopAndAffiliateUrls(existingRow, fieldPatch))
   if ('errorCode' in outcome) return serviceError(outcome.errorCode)
 
   logger.info({ ...logBase, changes: buildChanges(existingRow, fieldPatch) })
@@ -142,10 +142,19 @@ export async function deleteShopById(
 }
 
 // The shop row is updated first so its lock keeps the affiliate URL job from writing a link in between.
-function updateShopAndAffiliateUrls(id: string, fieldPatch: ShopFieldPatch): Promise<Shop | undefined> {
+// Links are cleared when the shop stops being affiliated, or when its slug (which selects the URL
+// strategy) changes: links built by the previous strategy must not survive.
+function updateShopAndAffiliateUrls(existingRow: Shop, fieldPatch: ShopFieldPatch): Promise<Shop | undefined> {
   return db.transaction(async (tx) => {
-    const updatedRow = await updateShop(id, fieldPatch, tx)
-    if (updatedRow && fieldPatch.isAffiliated === false) await clearAffiliateUrlsByShopId(id, tx)
+    const updatedRow = await updateShop(existingRow.id, fieldPatch, tx)
+    if (updatedRow && invalidatesAffiliateUrls(existingRow, fieldPatch)) {
+      await clearAffiliateUrlsByShopId(existingRow.id, tx)
+    }
     return updatedRow
   })
+}
+
+function invalidatesAffiliateUrls(existingRow: Shop, fieldPatch: ShopFieldPatch): boolean {
+  if (fieldPatch.isAffiliated === false) return true
+  return fieldPatch.slug !== undefined && fieldPatch.slug !== existingRow.slug
 }

@@ -50,7 +50,7 @@ describe('cleanup-expired-refresh-tokens cron job', () => {
     cleanupExpiredRefreshTokens.start()
     await vi.advanceTimersByTimeAsync(INTERVAL_MS)
 
-    expect(vi.mocked(logger.info)).toHaveBeenCalledWith({ deletedCount: 5 }, 'Expired refresh token cleanup completed')
+    expect(vi.mocked(logger.info)).toHaveBeenCalledWith({ processedCount: 5 }, 'Expired refresh token cleanup completed')
   })
 
   it('logs zero deleted rows when no tokens are expired', async () => {
@@ -59,7 +59,7 @@ describe('cleanup-expired-refresh-tokens cron job', () => {
     cleanupExpiredRefreshTokens.start()
     await vi.advanceTimersByTimeAsync(INTERVAL_MS)
 
-    expect(vi.mocked(logger.info)).toHaveBeenCalledWith({ deletedCount: 0 }, 'Expired refresh token cleanup completed')
+    expect(vi.mocked(logger.info)).toHaveBeenCalledWith({ processedCount: 0 }, 'Expired refresh token cleanup completed')
   })
 
   it('logs the error and continues when deleteExpiredRefreshTokens throws', async () => {
@@ -76,7 +76,7 @@ describe('cleanup-expired-refresh-tokens cron job', () => {
     await vi.advanceTimersByTimeAsync(INTERVAL_MS)
 
     expect(vi.mocked(deleteExpiredRefreshTokens)).toHaveBeenCalledTimes(2)
-    expect(vi.mocked(logger.info)).toHaveBeenCalledWith({ deletedCount: 2 }, 'Expired refresh token cleanup completed')
+    expect(vi.mocked(logger.info)).toHaveBeenCalledWith({ processedCount: 2 }, 'Expired refresh token cleanup completed')
   })
 
   it('overlap guard prevents concurrent runs', async () => {

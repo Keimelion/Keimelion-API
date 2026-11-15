@@ -69,6 +69,8 @@ describe('Amazon URL strategy', () => {
       'https://smile.amazon.com/dp/B08N5WRWNW?tag=someone-20',
       'https://www.amazon.com/dp/B08N5WRWNW',
     ],
+    ['https://www.amazon.com.br/dp/B08N5WRWNW', 'https://www.amazon.com.br/dp/B08N5WRWNW'],
+    ['https://music.amazon.fr/dp/B08N5WRWNW?ref=x', 'https://music.amazon.fr/dp/B08N5WRWNW'],
   ])('reduces product page %s to its canonical /dp/<ASIN> URL', (url, expected) => {
     expect(normalizeSourceUrl(url, AMAZON_SHOP_SLUG)).toBe(expected)
   })
@@ -87,13 +89,15 @@ describe('Amazon URL strategy', () => {
     expect(normalizeSourceUrl(url, AMAZON_SHOP_SLUG)).toBe('https://www.amazon.fr/s?k=lampe')
   })
 
-  it('builds no affiliate URL when the associate tag is not configured', async () => {
-    const strategy = createAmazonUrlStrategy({ associateTag: undefined })
+  it.each([undefined, ''])(
+    'exposes no affiliate URL builder when the associate tag is %j, so the job skips Amazon',
+    (associateTag) => {
+      const strategy = createAmazonUrlStrategy({ associateTag })
 
-    await expect(
-      strategy.buildAffiliateUrl?.('https://www.amazon.fr/dp/B08N5WRWNW'),
-    ).resolves.toBeNull()
-  })
+      expect(strategy.buildAffiliateUrl).toBeUndefined()
+      expect(strategy.normalize).toBeDefined()
+    },
+  )
 
   it('appends the configured associate tag to the normalized URL', async () => {
     const strategy = createAmazonUrlStrategy({ associateTag: ASSOCIATE_TAG })
@@ -162,8 +166,10 @@ describe('generateAffiliateUrl', () => {
     ).resolves.toBeNull()
   })
 
-  it('generates no affiliate URL when the strategy config is missing', async () => {
-    await expect(generateAffiliateUrl(SOURCE_URL, AMAZON_SHOP_SLUG)).resolves.toBeNull()
+  it('builds the Amazon link with the configured associate tag', async () => {
+    await expect(generateAffiliateUrl(SOURCE_URL, AMAZON_SHOP_SLUG)).resolves.toBe(
+      `${SOURCE_URL}?tag=${ASSOCIATE_TAG}`,
+    )
   })
 
   it('returns the URL built by the shop strategy', async () => {

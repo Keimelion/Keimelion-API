@@ -905,6 +905,43 @@ describe('PATCH /v1/admin/shops/:id', () => {
     expect(vi.mocked(db.update)).toHaveBeenCalledWith(shops)
   })
 
+  it('clears the affiliate URLs in the same transaction when the slug changes', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    mockFindShopById({ ...SHOP_ROW, isAffiliated: true })
+    mockUpdateShop({ ...SHOP_ROW, isAffiliated: true, slug: 'amazon-renamed' })
+    const set = mockClearAffiliateUrls()
+
+    const response = await apiRequest(`/v1/admin/shops/${SHOP_ROW.id}`, {
+      method: 'PATCH',
+      token,
+      body: { slug: 'amazon-renamed' },
+    })
+
+    expect(response.status).toBe(200)
+    expect(vi.mocked(db.transaction)).toHaveBeenCalledOnce()
+    expect(vi.mocked(db.update).mock.calls.map(([table]) => table)).toEqual([shops, itemSources])
+    expect(set).toHaveBeenCalledWith({ affiliateUrl: null })
+  })
+
+  it('keeps the affiliate URLs when the patch repeats the current slug', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    mockFindShopById(SHOP_ROW)
+    mockUpdateShop({ ...SHOP_ROW, name: 'Renamed' })
+
+    const response = await apiRequest(`/v1/admin/shops/${SHOP_ROW.id}`, {
+      method: 'PATCH',
+      token,
+      body: { slug: SHOP_ROW.slug, name: 'Renamed' },
+    })
+
+    expect(response.status).toBe(200)
+    expect(vi.mocked(db.update)).not.toHaveBeenCalledWith(itemSources)
+  })
+
   it('does not touch the affiliate URLs when the patch leaves isAffiliated out', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()

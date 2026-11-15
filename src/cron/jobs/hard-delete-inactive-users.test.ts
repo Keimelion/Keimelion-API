@@ -92,7 +92,7 @@ describe('hard-delete-inactive-users cron job', () => {
     await vi.advanceTimersByTimeAsync(INTERVAL_MS)
     expect(vi.mocked(db.transaction)).toHaveBeenCalledOnce()
     expect(vi.mocked(logger.info)).toHaveBeenCalledWith(
-      { deletedCount: 1 },
+      { processedCount: 1 },
       'Hard-delete inactive users completed',
     )
   })
@@ -106,7 +106,7 @@ describe('hard-delete-inactive-users cron job', () => {
     await vi.advanceTimersByTimeAsync(INTERVAL_MS)
     expect(vi.mocked(db.transaction)).toHaveBeenCalledOnce()
     expect(vi.mocked(logger.info)).toHaveBeenCalledWith(
-      { deletedCount: 1 },
+      { processedCount: 1 },
       'Hard-delete inactive users completed',
     )
   })
@@ -117,7 +117,7 @@ describe('hard-delete-inactive-users cron job', () => {
     await vi.advanceTimersByTimeAsync(INTERVAL_MS)
     expect(vi.mocked(db.transaction)).not.toHaveBeenCalled()
     expect(vi.mocked(logger.info)).toHaveBeenCalledWith(
-      { deletedCount: 0 },
+      { processedCount: 0 },
       'Hard-delete inactive users completed',
     )
   })
@@ -190,7 +190,7 @@ describe('hard-delete-inactive-users cron job', () => {
       'Failed to hard-delete user',
     )
     expect(vi.mocked(logger.info)).toHaveBeenCalledWith(
-      { deletedCount: 1 },
+      { processedCount: 1 },
       'Hard-delete inactive users completed',
     )
   })

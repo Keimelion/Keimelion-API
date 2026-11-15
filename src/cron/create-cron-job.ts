@@ -20,8 +20,8 @@ export function createCronJob({ name, intervalMs, run }: CronJobOptions): CronJo
 
     isRunning = true
     try {
-      const deletedCount = await run()
-      logger.info({ deletedCount }, `${name} completed`)
+      const processedCount = await run()
+      logger.info({ processedCount }, `${name} completed`)
     } catch (error) {
       logger.error({ error }, `${name} failed`)
     } finally {

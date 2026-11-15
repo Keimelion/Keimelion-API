@@ -170,7 +170,7 @@ describe('affiliate-url-generation cron job', () => {
 
     expect(findPendingAffiliateSources).toHaveBeenCalledOnce()
     expect(logger.info).toHaveBeenCalledWith(
-      { deletedCount: 0 },
+      { processedCount: 0 },
       'Affiliate URL generation completed',
     )
   })
