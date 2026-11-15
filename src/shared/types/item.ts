@@ -31,6 +31,10 @@ export interface ItemSourceWithShop extends ItemSource {
   shop: Shop | null
 }
 
+export interface ItemSourceWithShopAndItem extends ItemSourceWithShop {
+  item: ItemRowWithImage
+}
+
 export interface CategoryRowWithTranslationsForItem extends Category {
   translations: CategoryTranslation[]
 }
@@ -69,6 +73,7 @@ export function toItemDetail(item: ItemRowWithImage): ItemDetail {
     id: item.id,
     name: item.name,
     description: item.description ?? null,
+    gtin: item.gtin ?? null,
     imageId: item.imageId ?? null,
     image: image ? toImageDetail(image) : null,
     createdByUserId: item.createdByUserId ?? null,

@@ -9,14 +9,15 @@ import type { Item } from './items.schema.js'
 import type { ItemRowWithImage, ItemRowWithSources } from '../../../shared/types/item.js'
 
 
-interface InsertItemInput {
+export interface InsertItemInput {
   name: string
   description: string | null
+  gtin: string | null
   imageId: string | null
   createdByUserId: string | null
 }
 
-type UpdateItemFields = Partial<Pick<typeof items.$inferInsert, 'name' | 'description' | 'imageId'>>
+type UpdateItemFields = Partial<Pick<typeof items.$inferInsert, 'name' | 'description' | 'gtin' | 'imageId'>>
 
 const ITEM_WITH_SOURCES_WITH = {
   image: true,
@@ -37,6 +38,10 @@ export function findItemById(id: string): Promise<Item | undefined> {
 
 export function findItemByIdWithImage(id: string): Promise<ItemRowWithImage | undefined> {
   return db.query.items.findFirst({ where: eq(items.id, id), with: { image: true } })
+}
+
+export function findItemByGtinWithImage(gtin: string): Promise<ItemRowWithImage | undefined> {
+  return db.query.items.findFirst({ where: eq(items.gtin, gtin), with: { image: true } })
 }
 
 export function findItemByIdWithSources(id: string): Promise<ItemRowWithSources | undefined> {

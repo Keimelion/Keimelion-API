@@ -1,11 +1,10 @@
 import type { DbTransaction } from '../../client.js'
 import { and, asc, count, eq, gt, inArray, isNotNull, isNull } from 'drizzle-orm'
 import { db } from '../../client.js'
-import { itemSources } from './item-sources.schema.js'
+import { itemSources, sourceUrlHash } from './item-sources.schema.js'
 import { shops } from '../shops/shops.schema.js'
 import type { ItemSource } from './item-sources.schema.js'
-import type { ItemSourceWithShop } from '../../../shared/types/item.js'
-
+import type { ItemSourceWithShop, ItemSourceWithShopAndItem } from '../../../shared/types/item.js'
 
 export interface InsertItemSourceInput {
   itemId: string
@@ -37,6 +36,22 @@ export async function insertItemSource(input: InsertItemSourceInput, tx?: DbTran
   const client = tx ?? db
   const [source] = await client.insert(itemSources).values(input).returning()
   return source
+}
+
+// Inserts nothing when the URL is held by another source or the item already has a source on the shop.
+export async function insertItemSourceIfAbsent(
+  input: InsertItemSourceInput,
+  tx: DbTransaction,
+): Promise<ItemSource | undefined> {
+  const [source] = await tx.insert(itemSources).values(input).onConflictDoNothing().returning()
+  return source
+}
+
+export function findItemSourceBySourceUrl(sourceUrl: string): Promise<ItemSourceWithShopAndItem | undefined> {
+  return db.query.itemSources.findFirst({
+    where: and(eq(sourceUrlHash(itemSources.sourceUrl), sourceUrlHash(sourceUrl)), eq(itemSources.sourceUrl, sourceUrl)),
+    with: { shop: true, item: { with: { image: true } } },
+  })
 }
 
 export function findItemSourceById(id: string): Promise<ItemSource | undefined> {

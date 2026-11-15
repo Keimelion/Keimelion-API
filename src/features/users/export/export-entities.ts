@@ -180,6 +180,7 @@ const itemsEntityDescriptor: ExportEntityDescriptor = {
     'id',
     'name',
     'description',
+    'gtin',
     'imageId',
     'createdAt',
     'updatedAt',

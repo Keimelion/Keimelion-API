@@ -1300,6 +1300,18 @@ describe('GET /v1/users/me/export', () => {
       expect(findDescriptor('list-items.csv')?.columns).toEqual(LIST_ITEM_EXPORT_KEYS)
     })
 
+    it('registers items.csv with the exact allow-list, including the submitted gtin', () => {
+      expect(findDescriptor('items.csv')?.columns).toEqual([
+        'id',
+        'name',
+        'description',
+        'gtin',
+        'imageId',
+        'createdAt',
+        'updatedAt',
+      ])
+    })
+
     it('maps customName into list-items.csv rows without any extra column', async () => {
       vi.mocked(db.query.listItems.findMany).mockResolvedValueOnce([LIST_ITEM_ROW] as never)
 

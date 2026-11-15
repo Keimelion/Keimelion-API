@@ -1,5 +1,5 @@
 import type { DbTransaction } from '../../client.js'
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { db } from '../../client.js'
 import { ListUserRoles } from '@keimelion/sdk/enums'
 import type { ItemStatus } from '@keimelion/sdk/enums'
@@ -25,10 +25,17 @@ interface UpdateReservationStateInput {
   itemStatus: ItemStatus
 }
 
-export async function insertListItem(input: InsertListItemInput, tx?: DbTransaction): Promise<ListItem | undefined> {
-  const client = tx ?? db
-  const [listItem] = await client.insert(listItems).values(input).returning()
+export async function insertListItemIfAbsent(input: InsertListItemInput, tx: DbTransaction): Promise<ListItem | undefined> {
+  const [listItem] = await tx
+    .insert(listItems)
+    .values(input)
+    .onConflictDoNothing({ target: [listItems.listId, listItems.itemId] })
+    .returning()
   return listItem
+}
+
+export function findListItemByListAndItem(listId: string, itemId: string, tx: DbTransaction): Promise<ListItem | undefined> {
+  return tx.query.listItems.findFirst({ where: and(eq(listItems.listId, listId), eq(listItems.itemId, itemId)) })
 }
 
 export function findListItemById(id: string): Promise<ListItem | undefined> {

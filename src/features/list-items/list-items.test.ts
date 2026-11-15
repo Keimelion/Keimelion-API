@@ -3,7 +3,6 @@ import { db } from '../../db/client.js'
 import { apiRequest } from '../../shared/test/api-request.js'
 import { generateTestToken, makeAccessTokenEntry } from '../../shared/test/auth.js'
 import {
-  listItemsCreateResponseSchema,
   listItemsUpdateResponseSchema,
   MAX_CUSTOM_NAME_LENGTH,
   messageResponseSchema,
@@ -68,31 +67,9 @@ const TOO_LONG_CUSTOM_NAME = 'a'.repeat(MAX_CUSTOM_NAME_LENGTH + 1)
 
 const ACCESS_TOKEN_ENTRY = makeAccessTokenEntry(AUTH_USER.id)
 
-const MOCK_ITEM = {
-  id: ITEM_ID,
-  name: 'Test Item',
-  description: null,
-  imageId: null,
-  createdByUserId: AUTH_USER.id,
-  createdAt: new Date('2024-01-01'),
-  updatedAt: new Date('2024-01-01'),
-}
-
 function mockAuthChain(): void {
   vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
   vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(AUTH_USER)
-}
-
-function mockOwnerListChain(): void {
-  vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(
-    { ...MOCK_LIST, listUsers: [{ userId: AUTH_USER.id, role: 'owner' as const, user: AUTH_USER }] } as never,
-  )
-}
-
-function mockInsertReturning(row: object): ReturnType<typeof vi.fn> {
-  const values = vi.fn().mockReturnValueOnce({ returning: vi.fn().mockResolvedValueOnce([row]) })
-  vi.mocked(db.insert).mockReturnValueOnce({ values } as never)
-  return values
 }
 
 function mockUpdateReturning(row: object): ReturnType<typeof vi.fn> {
@@ -115,40 +92,9 @@ describe('POST /v1/list-items', () => {
     vi.clearAllMocks()
   })
 
-  it('returns 201 with created list item for JSON body', async () => {
+  it('returns 404 because items are added through POST /v1/lists/:id/items', async () => {
     const token = await generateTestToken(AUTH_USER.id)
     mockAuthChain()
-    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(
-      { ...MOCK_LIST, listUsers: [{ userId: AUTH_USER.id, role: "owner" as const, user: AUTH_USER }] } as never,
-    )
-    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(MOCK_ITEM)
-    vi.mocked(db.insert).mockReturnValueOnce({
-      values: vi.fn().mockReturnValueOnce({
-        returning: vi.fn().mockResolvedValueOnce([MOCK_LIST_ITEM]),
-      }),
-    } as never)
-
-    const response = await apiRequest('/v1/list-items', {
-      method: 'POST',
-      token,
-      body: { listId: LIST_ID, itemId: ITEM_ID, quantityDesired: 2 },
-    })
-
-    const body = await response.json() as { listItem: Record<string, unknown> }
-    listItemsCreateResponseSchema.parse(body)
-    expect(response.status).toBe(201)
-    expect(body.listItem.listId).toBe(LIST_ID)
-    expect(body.listItem).not.toHaveProperty('image')
-    expect(body.listItem).not.toHaveProperty('imageId')
-  })
-
-  it('returns 404 when the referenced item does not exist', async () => {
-    const token = await generateTestToken(AUTH_USER.id)
-    mockAuthChain()
-    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(
-      { ...MOCK_LIST, listUsers: [{ userId: AUTH_USER.id, role: "owner" as const, user: AUTH_USER }] } as never,
-    )
-    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(undefined)
 
     const response = await apiRequest('/v1/list-items', {
       method: 'POST',
@@ -157,105 +103,7 @@ describe('POST /v1/list-items', () => {
     })
 
     expect(response.status).toBe(404)
-  })
-
-  it('returns 403 when the user is not a contributor of the list', async () => {
-    const token = await generateTestToken(AUTH_USER.id)
-    mockAuthChain()
-    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(
-      { ...MOCK_LIST, listUsers: [], listTags: [] } as never,
-    )
-
-    const response = await apiRequest('/v1/list-items', {
-      method: 'POST',
-      token,
-      body: { listId: LIST_ID, itemId: ITEM_ID },
-    })
-
-    expect(response.status).toBe(403)
-  })
-
-  it('returns 401 when not authenticated', async () => {
-    const response = await apiRequest('/v1/list-items', {
-      method: 'POST',
-      body: { listId: LIST_ID, itemId: ITEM_ID },
-    })
-
-    expect(response.status).toBe(401)
-  })
-
-  it('returns 201 and persists a trimmed customName', async () => {
-    const token = await generateTestToken(AUTH_USER.id)
-    mockAuthChain()
-    mockOwnerListChain()
-    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(MOCK_ITEM)
-    const values = mockInsertReturning({ ...MOCK_LIST_ITEM, customName: CUSTOM_NAME })
-
-    const response = await apiRequest('/v1/list-items', {
-      method: 'POST',
-      token,
-      body: { listId: LIST_ID, itemId: ITEM_ID, customName: `  ${CUSTOM_NAME}  ` },
-    })
-
-    const body = listItemsCreateResponseSchema.parse(await response.json())
-    expect(response.status).toBe(201)
-    expect(body.listItem.customName).toBe(CUSTOM_NAME)
-    expect(values).toHaveBeenCalledWith(expect.objectContaining({ customName: CUSTOM_NAME }))
-  })
-
-  it('defaults customName to null when omitted', async () => {
-    const token = await generateTestToken(AUTH_USER.id)
-    mockAuthChain()
-    mockOwnerListChain()
-    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(MOCK_ITEM)
-    const values = mockInsertReturning(MOCK_LIST_ITEM)
-
-    const response = await apiRequest('/v1/list-items', {
-      method: 'POST',
-      token,
-      body: { listId: LIST_ID, itemId: ITEM_ID },
-    })
-
-    const body = listItemsCreateResponseSchema.parse(await response.json())
-    expect(response.status).toBe(201)
-    expect(body.listItem.customName).toBeNull()
-    expect(values).toHaveBeenCalledWith(expect.objectContaining({ customName: null }))
-  })
-
-  it('returns 422 when customName exceeds the maximum length', async () => {
-    const token = await generateTestToken(AUTH_USER.id)
-    mockAuthChain()
-    mockOwnerListChain()
-
-    const response = await apiRequest('/v1/list-items', {
-      method: 'POST',
-      token,
-      body: { listId: LIST_ID, itemId: ITEM_ID, customName: TOO_LONG_CUSTOM_NAME },
-    })
-
-    const body = await response.json() as { metadata: { issues: { path: string; message: string }[] } }
-    expect(response.status).toBe(422)
-    expect(body.metadata.issues[0]?.path).toBe('customName')
-    expect(body.metadata.issues[0]?.message).toBe(
-      `customName must be at most ${String(MAX_CUSTOM_NAME_LENGTH)} characters`,
-    )
     expect(vi.mocked(db.insert)).not.toHaveBeenCalled()
-  })
-
-  it('returns 422 when listId is not a UUID', async () => {
-    const token = await generateTestToken(AUTH_USER.id)
-    mockAuthChain()
-    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(
-      { ...MOCK_LIST, listUsers: [{ userId: AUTH_USER.id, role: "owner" as const, user: AUTH_USER }] } as never,
-    )
-
-    const response = await apiRequest('/v1/list-items', {
-      method: 'POST',
-      token,
-      body: { listId: 'not-a-uuid', itemId: ITEM_ID },
-    })
-
-    expect(response.status).toBe(422)
   })
 })
 

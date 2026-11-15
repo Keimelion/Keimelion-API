@@ -15,6 +15,11 @@ import {
   messageResponseSchema,
 } from '@keimelion/sdk/schemas'
 import { images } from '../../../db/entities/images/images.schema.js'
+import { ITEMS_GTIN_UNIQUE_INDEX } from '../../../db/entities/items/items.schema.js'
+import {
+  ITEM_SOURCES_ITEM_SHOP_UNIQUE_INDEX,
+  ITEM_SOURCES_SOURCE_URL_UNIQUE_INDEX,
+} from '../../../db/entities/item-sources/item-sources.schema.js'
 import { amazonUrlStrategy } from '../../affiliate/strategies/amazon.strategy.js'
 
 const { mockProcessImage } = vi.hoisted(() => ({ mockProcessImage: vi.fn() }))
@@ -40,6 +45,7 @@ const ITEM_ROW = {
   id: '00000000-0000-0000-0000-000000000010',
   name: 'Test Item',
   description: 'A test item',
+  gtin: null,
   imageId: null,
   createdByUserId: null,
   createdAt: new Date('2024-01-01'),
@@ -161,23 +167,26 @@ function mockFindItemSourceByIdWithShop(row: unknown, shop: unknown): void {
 const UNIQUE_VIOLATION = '23505'
 const FOREIGN_KEY_VIOLATION = '23503'
 
-function pgError(code: string): Error {
-  return Object.assign(new Error('postgres error'), { code })
+function pgError(code: string, constraintName?: string): Error {
+  return Object.assign(new Error('postgres error'), { code, constraint_name: constraintName })
 }
 
-function mockInsertItemSourceRejected(code: string): void {
+const SHOP_ALREADY_ON_ITEM = pgError(UNIQUE_VIOLATION, ITEM_SOURCES_ITEM_SHOP_UNIQUE_INDEX)
+const SOURCE_URL_HELD = pgError(UNIQUE_VIOLATION, ITEM_SOURCES_SOURCE_URL_UNIQUE_INDEX)
+
+function mockInsertItemSourceRejected(error: Error): void {
   vi.mocked(db.insert).mockReturnValueOnce({
     values: vi.fn().mockReturnValueOnce({
-      returning: vi.fn().mockRejectedValueOnce(pgError(code)),
+      returning: vi.fn().mockRejectedValueOnce(error),
     }),
   } as never)
 }
 
-function mockUpdateItemSourceRejected(code: string): void {
+function mockUpdateItemSourceRejected(error: Error): void {
   vi.mocked(db.update).mockReturnValueOnce({
     set: vi.fn().mockReturnValueOnce({
       where: vi.fn().mockReturnValueOnce({
-        returning: vi.fn().mockRejectedValueOnce(pgError(code)),
+        returning: vi.fn().mockRejectedValueOnce(error),
       }),
     }),
   } as never)
@@ -1506,7 +1515,7 @@ describe('POST /v1/admin/items/:id/sources', () => {
   it('returns 404 when parent item does not exist', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
-    mockInsertItemSourceRejected(FOREIGN_KEY_VIOLATION)
+    mockInsertItemSourceRejected(pgError(FOREIGN_KEY_VIOLATION))
 
     const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}/sources`, {
       method: 'POST',
@@ -1520,7 +1529,7 @@ describe('POST /v1/admin/items/:id/sources', () => {
   it('returns 404 when shopId does not exist', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
-    mockInsertItemSourceRejected(FOREIGN_KEY_VIOLATION)
+    mockInsertItemSourceRejected(pgError(FOREIGN_KEY_VIOLATION))
 
     const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}/sources`, {
       method: 'POST',
@@ -1638,7 +1647,7 @@ describe('POST /v1/admin/items/:id/sources', () => {
   it('returns 409 DUPLICATE_SHOP_FOR_ITEM when the DB unique index rejects the insert', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
-    mockInsertItemSourceRejected(UNIQUE_VIOLATION)
+    mockInsertItemSourceRejected(SHOP_ALREADY_ON_ITEM)
 
     const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}/sources`, {
       method: 'POST',
@@ -1803,7 +1812,7 @@ describe('PATCH /v1/admin/items/:id/sources/:sourceId', () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
     mockFindItemSourceById(SOURCE_ROW)
-    mockUpdateItemSourceRejected(UNIQUE_VIOLATION)
+    mockUpdateItemSourceRejected(SHOP_ALREADY_ON_ITEM)
 
     const response = await apiRequest(
       `/v1/admin/items/${ITEM_ROW.id}/sources/${SOURCE_ROW.id}`,
@@ -1824,7 +1833,7 @@ describe('PATCH /v1/admin/items/:id/sources/:sourceId', () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
     mockFindItemSourceById(SOURCE_ROW)
-    mockUpdateItemSourceRejected(FOREIGN_KEY_VIOLATION)
+    mockUpdateItemSourceRejected(pgError(FOREIGN_KEY_VIOLATION))
 
     const response = await apiRequest(
       `/v1/admin/items/${ITEM_ROW.id}/sources/${SOURCE_ROW.id}`,
@@ -2157,8 +2166,8 @@ describe('shop resolution from sourceUrl', () => {
     return values
   }
 
-  function mockCreateItemTransactionRejected(code: string): void {
-    vi.mocked(db.transaction).mockRejectedValueOnce(pgError(code))
+  function mockCreateItemTransactionRejected(error: Error): void {
+    vi.mocked(db.transaction).mockRejectedValueOnce(error)
   }
 
   beforeEach(() => {
@@ -2282,7 +2291,7 @@ describe('shop resolution from sourceUrl', () => {
       const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
       mockAdminAuth()
       mockFindShopsByDomains([AMAZON_FR_SHOP])
-      mockInsertItemSourceRejected(UNIQUE_VIOLATION)
+      mockInsertItemSourceRejected(SHOP_ALREADY_ON_ITEM)
 
       const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}/sources`, {
         method: 'POST',
@@ -2404,7 +2413,7 @@ describe('shop resolution from sourceUrl', () => {
       mockAdminAuth()
       mockFindItemSourceById(SOURCE_ROW)
       mockFindShopsByDomains([AMAZON_FR_SHOP])
-      mockUpdateItemSourceRejected(UNIQUE_VIOLATION)
+      mockUpdateItemSourceRejected(SHOP_ALREADY_ON_ITEM)
 
       const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}/sources/${SOURCE_ROW.id}`, {
         method: 'PATCH',
@@ -2449,7 +2458,7 @@ describe('shop resolution from sourceUrl', () => {
       const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
       mockAdminAuth()
       mockFindShopsByDomains([AMAZON_FR_SHOP])
-      mockCreateItemTransactionRejected(UNIQUE_VIOLATION)
+      mockCreateItemTransactionRejected(SHOP_ALREADY_ON_ITEM)
 
       const response = await apiRequest('/v1/admin/items', {
         method: 'POST',
@@ -2468,7 +2477,7 @@ describe('shop resolution from sourceUrl', () => {
     it('returns 404 when an explicit shopId does not exist', async () => {
       const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
       mockAdminAuth()
-      mockCreateItemTransactionRejected(FOREIGN_KEY_VIOLATION)
+      mockCreateItemTransactionRejected(pgError(FOREIGN_KEY_VIOLATION))
 
       const response = await apiRequest('/v1/admin/items', {
         method: 'POST',
@@ -2680,5 +2689,187 @@ describe('source URL normalization', () => {
     expect(values).toHaveBeenCalledWith(
       expect.objectContaining({ shopId: null, sourceUrl: CLEAN_URL, originalUrl: TRACKED_URL, affiliateUrl: null }),
     )
+  })
+})
+
+describe('admin items — gtin and source URL uniqueness', () => {
+  const EAN_13 = '4006381333931'
+  const PADDED_GTIN = '04006381333931'
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
+  })
+
+  it('stores the gtin left-padded to 14 digits on POST /v1/admin/items', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    const values = vi.fn()
+    for (const row of [{ ...ITEM_ROW, gtin: PADDED_GTIN }, SOURCE_ROW]) {
+      values.mockReturnValueOnce({ returning: vi.fn().mockResolvedValueOnce([row]) })
+    }
+    vi.mocked(db.transaction).mockImplementationOnce((callback) =>
+      callback({ insert: vi.fn().mockReturnValue({ values }) } as never),
+    )
+    mockFindItemById({ ...itemWith([SOURCE_ROW]), gtin: PADDED_GTIN })
+
+    const response = await apiRequest('/v1/admin/items', {
+      method: 'POST',
+      token,
+      body: { name: 'Test Item', gtin: EAN_13, sources: [{}] },
+    })
+
+    const body = adminItemsCreateResponseSchema.parse(await response.json())
+    expect(response.status).toBe(201)
+    expect(body.item.gtin).toBe(PADDED_GTIN)
+    expect(values).toHaveBeenCalledWith(expect.objectContaining({ gtin: PADDED_GTIN }))
+  })
+
+  it('returns 422 when the gtin check digit is invalid', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    const response = await apiRequest('/v1/admin/items', {
+      method: 'POST',
+      token,
+      body: { name: 'Test Item', gtin: '4006381333932', sources: [{}] },
+    })
+
+    const body = await response.json() as { metadata: { issues: { path: string }[] } }
+    expect(response.status).toBe(422)
+    expect(body.metadata.issues[0]?.path).toBe('gtin')
+    expect(vi.mocked(db.transaction)).not.toHaveBeenCalled()
+  })
+
+  it('returns 409 CONFLICT when the gtin is held by another item', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    vi.mocked(db.transaction).mockRejectedValueOnce(pgError(UNIQUE_VIOLATION, ITEMS_GTIN_UNIQUE_INDEX))
+
+    const response = await apiRequest('/v1/admin/items', {
+      method: 'POST',
+      token,
+      body: { name: 'Test Item', gtin: EAN_13, sources: [{}] },
+    })
+
+    const body = await response.json() as { code: string }
+    expect(response.status).toBe(409)
+    expect(body.code).toBe('CONFLICT')
+  })
+
+  it('returns 409 CONFLICT when a source URL is held by another item on POST /v1/admin/items', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    vi.mocked(db.transaction).mockRejectedValueOnce(SOURCE_URL_HELD)
+
+    const response = await apiRequest('/v1/admin/items', {
+      method: 'POST',
+      token,
+      body: { name: 'Test Item', sources: [{ sourceUrl: 'https://shop.example/p/1' }] },
+    })
+
+    const body = await response.json() as { code: string }
+    expect(response.status).toBe(409)
+    expect(body.code).toBe('CONFLICT')
+  })
+
+  it('corrects the gtin on PATCH /v1/admin/items/:id', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindItemById(ITEM_ROW)
+    const set = vi.fn().mockReturnValueOnce({
+      where: vi.fn().mockReturnValueOnce({
+        returning: vi.fn().mockResolvedValueOnce([{ ...ITEM_ROW, gtin: PADDED_GTIN }]),
+      }),
+    })
+    vi.mocked(db.update).mockReturnValueOnce({ set } as never)
+    mockFindItemById({ ...itemWith([]), gtin: PADDED_GTIN })
+
+    const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}`, {
+      method: 'PATCH',
+      token,
+      body: { gtin: EAN_13 },
+    })
+
+    const body = adminItemsUpdateResponseSchema.parse(await response.json())
+    expect(response.status).toBe(200)
+    expect(body.item.gtin).toBe(PADDED_GTIN)
+    expect(set).toHaveBeenCalledWith({ gtin: PADDED_GTIN })
+  })
+
+  it('clears the gtin with null on PATCH /v1/admin/items/:id', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindItemById({ ...ITEM_ROW, gtin: PADDED_GTIN })
+    const set = vi.fn().mockReturnValueOnce({
+      where: vi.fn().mockReturnValueOnce({ returning: vi.fn().mockResolvedValueOnce([ITEM_ROW]) }),
+    })
+    vi.mocked(db.update).mockReturnValueOnce({ set } as never)
+    mockFindItemById(itemWith([]))
+
+    const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}`, {
+      method: 'PATCH',
+      token,
+      body: { gtin: null },
+    })
+
+    expect(response.status).toBe(200)
+    expect(set).toHaveBeenCalledWith({ gtin: null })
+  })
+
+  it('returns 409 CONFLICT when the corrected gtin is held by another item', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindItemById(ITEM_ROW)
+    vi.mocked(db.update).mockReturnValueOnce({
+      set: vi.fn().mockReturnValueOnce({
+        where: vi.fn().mockReturnValueOnce({
+          returning: vi.fn().mockRejectedValueOnce(pgError(UNIQUE_VIOLATION, ITEMS_GTIN_UNIQUE_INDEX)),
+        }),
+      }),
+    } as never)
+
+    const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}`, {
+      method: 'PATCH',
+      token,
+      body: { gtin: EAN_13 },
+    })
+
+    const body = await response.json() as { code: string }
+    expect(response.status).toBe(409)
+    expect(body.code).toBe('CONFLICT')
+  })
+
+  it('returns 409 CONFLICT when a new source URL is held by another item', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockInsertItemSourceRejected(SOURCE_URL_HELD)
+
+    const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}/sources`, {
+      method: 'POST',
+      token,
+      body: { sourceUrl: 'https://shop.example/p/1' },
+    })
+
+    const body = await response.json() as { code: string }
+    expect(response.status).toBe(409)
+    expect(body.code).toBe('CONFLICT')
+  })
+
+  it('returns 409 CONFLICT when an updated source URL is held by another item', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindItemSourceById(SOURCE_ROW)
+    mockUpdateItemSourceRejected(SOURCE_URL_HELD)
+
+    const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}/sources/${SOURCE_ROW.id}`, {
+      method: 'PATCH',
+      token,
+      body: { sourceUrl: 'https://shop.example/p/1' },
+    })
+
+    const body = await response.json() as { code: string }
+    expect(response.status).toBe(409)
+    expect(body.code).toBe('CONFLICT')
   })
 })

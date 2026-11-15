@@ -232,6 +232,13 @@
       "when": 1794759019351,
       "tag": "0032_list-items-custom-name",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1794760999433,
+      "tag": "0033_items-gtin-source-url-unique",
+      "breakpoints": true
     }
   ]
 }

@@ -12,6 +12,14 @@ export function isPgForeignKeyViolation(error: unknown): boolean {
   return hasPgErrorCode(error, PG_FOREIGN_KEY_VIOLATION)
 }
 
+export function findPgConstraintName(error: unknown, depth = 0): string | null {
+  if (depth > MAX_CAUSE_DEPTH) return null
+  if (typeof error !== 'object' || error === null) return null
+  if ('constraint_name' in error && typeof error.constraint_name === 'string') return error.constraint_name
+  if ('cause' in error) return findPgConstraintName(error.cause, depth + 1)
+  return null
+}
+
 function hasPgErrorCode(error: unknown, code: string, depth = 0): boolean {
   if (depth > MAX_CAUSE_DEPTH) return false
   if (typeof error !== 'object' || error === null) return false
