@@ -831,7 +831,12 @@ describe('POST /v1/lists/:id/items', () => {
       body: { itemId: ITEM_ID, customName: 'a'.repeat(MAX_CUSTOM_NAME_LENGTH + 1) },
     })
 
+    const body = await response.json() as { metadata: { issues: { path: string; message: string }[] } }
     expect(response.status).toBe(422)
+    expect(body.metadata.issues[0]?.path).toBe('customName')
+    expect(body.metadata.issues[0]?.message).toBe(
+      `customName must be at most ${String(MAX_CUSTOM_NAME_LENGTH)} characters`,
+    )
     expect(vi.mocked(db.insert)).not.toHaveBeenCalled()
   })
 

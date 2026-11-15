@@ -359,7 +359,12 @@ describe('PATCH /v1/list-items/:id', () => {
       body: { customName: TOO_LONG_CUSTOM_NAME },
     })
 
+    const body = await response.json() as { metadata: { issues: { path: string; message: string }[] } }
     expect(response.status).toBe(422)
+    expect(body.metadata.issues[0]?.path).toBe('customName')
+    expect(body.metadata.issues[0]?.message).toBe(
+      `customName must be at most ${String(MAX_CUSTOM_NAME_LENGTH)} characters`,
+    )
     expect(vi.mocked(db.update)).not.toHaveBeenCalled()
   })
 
