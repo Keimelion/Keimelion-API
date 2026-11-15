@@ -1,3 +1,4 @@
+import { db } from '../../../db/client.js'
 import { buildPaginatedResponse } from '../../../shared/utils/pagination.js'
 import { ErrorCode, HttpStatus } from '@keimelion/sdk/enums'
 import type { AdminShopsGetResponseParsed, PaginatedResponse, PaginationQueryParsed } from '@keimelion/sdk/schemas'
@@ -8,9 +9,11 @@ import { runWrite, buildChanges } from '../../../shared/utils/admin-write.js'
 import {
   findShopById,
   insertShop,
+  lockShop,
   updateShop,
   deleteShop,
 } from '../../../db/entities/shops/shops.repository.js'
+import { clearAffiliateUrlsByShopId } from '../../../db/entities/item-sources/item-sources.repository.js'
 import {
   findAllShops,
   countShops,
@@ -21,6 +24,7 @@ import { toShopDetail } from '../../../shared/types/shop.js'
 import { toAdminShopItemSource } from './admin-shops.mapper.js'
 import { AdminAction } from '../admin.enums.js'
 import type { ShopDetail, ShopWrite } from '../../../shared/types/shop.js'
+import type { Shop } from '../../../db/entities/shops/shops.schema.js'
 import type { ServiceResult } from '../../../shared/types/service.js'
 import type { PartialWrite } from '../../../shared/types/api.js'
 import type { ListShopsInput } from './endpoints/list.js'
@@ -106,7 +110,7 @@ export async function updateShopById(
     return { data: { shop: toShopDetail(existingRow) }, httpStatus: HttpStatus.OK }
   }
 
-  const outcome = await runWrite(() => updateShop(id, fieldPatch))
+  const outcome = await runWrite(() => updateShopAndAffiliateUrls(existingRow, fieldPatch))
   if ('errorCode' in outcome) return serviceError(outcome.errorCode)
 
   logger.info({ ...logBase, changes: buildChanges(existingRow, fieldPatch) })
@@ -117,17 +121,40 @@ export async function deleteShopById(
   adminId: string,
   id: string,
 ): Promise<ServiceResult<null>> {
-  const existingRow = await findShopById(id)
-  if (!existingRow) return serviceError(ErrorCode.NOT_FOUND)
+  // Locked before the clear so the affiliate URL job cannot write a link before the row is deleted.
+  const deletedRow = await db.transaction(async (tx) => {
+    const lockedRow = await lockShop(id, tx)
+    if (!lockedRow) return undefined
 
-  await deleteShop(id)
+    await clearAffiliateUrlsByShopId(id, tx)
+    return deleteShop(id, tx)
+  })
+  if (!deletedRow) return serviceError(ErrorCode.NOT_FOUND)
 
   logger.warn({
     adminId,
     action: AdminAction.DELETE_SHOP,
     shopId: id,
-    slug: existingRow.slug,
+    slug: deletedRow.slug,
   })
 
   return { data: null, httpStatus: HttpStatus.NO_CONTENT }
+}
+
+// The shop row is updated first so its lock keeps the affiliate URL job from writing a link in between.
+// Links are cleared when the shop stops being affiliated, or when its slug (which selects the URL
+// strategy) changes: links built by the previous strategy must not survive.
+function updateShopAndAffiliateUrls(existingRow: Shop, fieldPatch: ShopFieldPatch): Promise<Shop | undefined> {
+  return db.transaction(async (tx) => {
+    const updatedRow = await updateShop(existingRow.id, fieldPatch, tx)
+    if (updatedRow && invalidatesAffiliateUrls(existingRow, fieldPatch)) {
+      await clearAffiliateUrlsByShopId(existingRow.id, tx)
+    }
+    return updatedRow
+  })
+}
+
+function invalidatesAffiliateUrls(existingRow: Shop, fieldPatch: ShopFieldPatch): boolean {
+  if (fieldPatch.isAffiliated === false) return true
+  return fieldPatch.slug !== undefined && fieldPatch.slug !== existingRow.slug
 }

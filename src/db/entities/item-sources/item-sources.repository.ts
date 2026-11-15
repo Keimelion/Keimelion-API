@@ -1,20 +1,37 @@
 import type { DbTransaction } from '../../client.js'
-import { count, eq } from 'drizzle-orm'
+import { and, asc, count, eq, gt, inArray, isNotNull, isNull } from 'drizzle-orm'
 import { db } from '../../client.js'
 import { itemSources } from './item-sources.schema.js'
+import { shops } from '../shops/shops.schema.js'
 import type { ItemSource } from './item-sources.schema.js'
 import type { ItemSourceWithShop } from '../../../shared/types/item.js'
 
 
-interface InsertItemSourceInput {
+export interface InsertItemSourceInput {
   itemId: string
   shopId: string | null
   sourceUrl: string | null
+  originalUrl: string | null
   price: string | null
   currency: string
 }
 
-type UpdateItemSourceFields = Partial<Pick<typeof itemSources.$inferInsert, 'shopId' | 'sourceUrl' | 'price' | 'currency'>>
+type UpdateItemSourceFields = Partial<
+  Pick<typeof itemSources.$inferInsert, 'shopId' | 'sourceUrl' | 'originalUrl' | 'affiliateUrl' | 'price' | 'currency'>
+>
+
+export interface PendingAffiliateSource {
+  id: string
+  shopId: string
+  shopSlug: string
+  sourceUrl: string
+}
+
+interface PendingAffiliateSourcesQuery {
+  shopSlugs: readonly string[]
+  afterId: string | null
+  limit: number
+}
 
 export async function insertItemSource(input: InsertItemSourceInput, tx?: DbTransaction): Promise<ItemSource | undefined> {
   const client = tx ?? db
@@ -56,4 +73,51 @@ export async function countItemSourcesByItemId(itemId: string, tx?: DbTransactio
     .from(itemSources)
     .where(eq(itemSources.itemId, itemId))
   return row?.total ?? 0
+}
+
+export async function findPendingAffiliateSources(query: PendingAffiliateSourcesQuery): Promise<PendingAffiliateSource[]> {
+  const rows = await db
+    .select({ id: itemSources.id, shopId: shops.id, shopSlug: shops.slug, sourceUrl: itemSources.sourceUrl })
+    .from(itemSources)
+    .innerJoin(shops, eq(itemSources.shopId, shops.id))
+    .where(
+      and(
+        isNull(itemSources.affiliateUrl),
+        isNotNull(itemSources.sourceUrl),
+        eq(shops.isAffiliated, true),
+        inArray(shops.slug, [...query.shopSlugs]),
+        query.afterId === null ? undefined : gt(itemSources.id, query.afterId),
+      ),
+    )
+    .orderBy(asc(itemSources.id))
+    .limit(query.limit)
+  return rows.flatMap((row) => (row.sourceUrl === null ? [] : [{ ...row, sourceUrl: row.sourceUrl }]))
+}
+
+// Writes only if the source still has the URL and shop the link was built from, and no link yet.
+export async function storeAffiliateUrl(
+  source: PendingAffiliateSource,
+  affiliateUrl: string,
+  tx: DbTransaction,
+): Promise<boolean> {
+  const rows = await tx
+    .update(itemSources)
+    .set({ affiliateUrl })
+    .where(
+      and(
+        eq(itemSources.id, source.id),
+        eq(itemSources.shopId, source.shopId),
+        eq(itemSources.sourceUrl, source.sourceUrl),
+        isNull(itemSources.affiliateUrl),
+      ),
+    )
+    .returning({ id: itemSources.id })
+  return rows.length > 0
+}
+
+export async function clearAffiliateUrlsByShopId(shopId: string, tx: DbTransaction): Promise<void> {
+  await tx
+    .update(itemSources)
+    .set({ affiliateUrl: null })
+    .where(and(eq(itemSources.shopId, shopId), isNotNull(itemSources.affiliateUrl)))
 }

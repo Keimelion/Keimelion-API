@@ -61,7 +61,7 @@ describe('cleanup-orphan-images cron job', () => {
 
     const createdBefore = vi.mocked(deleteUnreferencedImages).mock.calls[0]?.[0]
     expect(createdBefore?.getTime()).toBe(Date.now() - env.IMAGE_ORPHAN_GRACE_HOURS * ONE_HOUR_MS)
-    expect(vi.mocked(logger.info)).toHaveBeenCalledWith({ deletedCount: 2 }, 'Orphan image cleanup completed')
+    expect(vi.mocked(logger.info)).toHaveBeenCalledWith({ processedCount: 2 }, 'Orphan image cleanup completed')
   })
 
   it('deletes files of hashes no images row references, under the per-hash lock', async () => {

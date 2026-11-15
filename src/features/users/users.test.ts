@@ -4,6 +4,7 @@ import { env } from '../../config/env.js'
 import { apiMultipartRequest, apiRequest } from '../../shared/test/api-request.js'
 import { generateTestToken, makeAccessTokenEntry } from '../../shared/test/auth.js'
 import { EXPORT_ENTITY_REGISTRY } from './export/export-entities.js'
+import type { ExportEntityDescriptor } from './export/export-entities.js'
 import { PgDialect } from 'drizzle-orm/pg-core'
 import type { SQL } from 'drizzle-orm'
 import {
@@ -642,6 +643,57 @@ describe('GET /v1/users/me/export', () => {
     )
     expect(itemSourcesDescriptor).toBeDefined()
     expect(itemSourcesDescriptor?.columns).toContain('shopId')
+  })
+
+  describe('item sources URLs (KEI-168)', () => {
+    const ITEM_SOURCE_ROW = {
+      id: '00000000-0000-0000-0000-000000000030',
+      itemId: '00000000-0000-0000-0000-000000000020',
+      shopId: null,
+      sourceUrl: 'https://shop.example/p?id=1',
+      originalUrl: 'https://shop.example/p?id=1&utm_source=news',
+      affiliateUrl: 'https://shop.example/p?id=1&aff=keimelion',
+      price: '10.00',
+      currency: 'EUR',
+      createdAt: new Date('2024-01-01'),
+      updatedAt: new Date('2024-01-01'),
+    }
+
+    function findItemSourcesDescriptor(): ExportEntityDescriptor | undefined {
+      return EXPORT_ENTITY_REGISTRY.find((descriptor) => descriptor.filename === 'item-sources.csv')
+    }
+
+    it('includes originalUrl but not affiliateUrl in the item-sources.csv allow-list', () => {
+      const descriptor = findItemSourcesDescriptor()
+
+      expect(descriptor?.columns).toContain('originalUrl')
+      expect(descriptor?.columns).not.toContain('affiliateUrl')
+    })
+
+    it('maps originalUrl and never affiliateUrl into the item-sources.csv rows', async () => {
+      vi.mocked(db.query.itemSources.findMany).mockResolvedValueOnce([ITEM_SOURCE_ROW] as never)
+
+      const rows = await findItemSourcesDescriptor()?.fetchRows(SAFE_USER.id)
+
+      expect(rows).toHaveLength(1)
+      expect(rows?.[0]).toMatchObject({ sourceUrl: ITEM_SOURCE_ROW.sourceUrl, originalUrl: ITEM_SOURCE_ROW.originalUrl })
+      expect(rows?.[0]).not.toHaveProperty('affiliateUrl')
+    })
+
+    it('includes originalUrl but not affiliateUrl in the JSON export itemSources', async () => {
+      const token = await generateTestToken(SAFE_USER.id)
+      vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+      vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+      vi.mocked(db.query.itemSources.findMany).mockResolvedValueOnce([ITEM_SOURCE_ROW] as never)
+
+      const response = await apiRequest('/v1/users/me/export?format=json', { token })
+
+      expect(response.status).toBe(200)
+      const body = await response.json() as { itemSources: Record<string, unknown>[] }
+      expect(body.itemSources).toHaveLength(1)
+      expect(body.itemSources[0]).toMatchObject({ id: ITEM_SOURCE_ROW.id, originalUrl: ITEM_SOURCE_ROW.originalUrl })
+      expect(body.itemSources[0]).not.toHaveProperty('affiliateUrl')
+    })
   })
 
   it('registers lists.csv with the exact allow-list required by RGPD', () => {

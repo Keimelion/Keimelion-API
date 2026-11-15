@@ -22,6 +22,8 @@ function sendsRealEmails(settings: MailDeliverySettings): boolean {
   )
 }
 
+const AMAZON_ASSOCIATE_TAG_REGEX = /^[\w-]*$/
+
 const LOCAL_HOSTNAMES = ['localhost', '127.0.0.1', '[::1]']
 
 function isLocalUrl(url: string): boolean {
@@ -68,6 +70,11 @@ const baseEnvSchema = z.object({
   IMAGE_ORPHAN_GRACE_HOURS: z.coerce.number().int().min(1).default(24),
   WAITLIST_CONFIRMATION_VALIDITY_DAYS: z.coerce.number().int().min(1).default(7),
   WAITLIST_PURGE_INTERVAL_MS: z.coerce.number().int().min(60_000).default(3_600_000),
+  AFFILIATE_URL_GENERATION_INTERVAL_MS: z.coerce.number().int().min(60_000).default(900_000),
+  AMAZON_ASSOCIATE_TAG: z
+    .string()
+    .regex(AMAZON_ASSOCIATE_TAG_REGEX, 'AMAZON_ASSOCIATE_TAG must only contain letters, digits, _ or -')
+    .optional(),
 })
 
 const envSchema = baseEnvSchema

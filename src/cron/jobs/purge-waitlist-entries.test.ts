@@ -55,7 +55,7 @@ describe('purge-waitlist-entries cron job', () => {
       new Date('2026-03-31T11:00:00.000Z'),
     )
     expect(logger.info).toHaveBeenCalledWith(
-      { deletedCount: 5 },
+      { processedCount: 5 },
       'Waitlist entries purge completed',
     )
   })

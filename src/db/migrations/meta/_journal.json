@@ -218,6 +218,13 @@
       "when": 1794738627973,
       "tag": "0030_remove-shops-is-active",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1794740622635,
+      "tag": "0031_item-sources-affiliate-urls",
+      "breakpoints": true
     }
   ]
 }

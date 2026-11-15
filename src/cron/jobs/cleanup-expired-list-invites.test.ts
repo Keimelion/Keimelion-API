@@ -42,7 +42,7 @@ describe('cleanup-expired-list-invites cron job', () => {
     await vi.advanceTimersByTimeAsync(INTERVAL_MS)
 
     expect(vi.mocked(deleteExpiredPendingListInvites)).toHaveBeenCalledExactlyOnceWith()
-    expect(vi.mocked(logger.info)).toHaveBeenCalledWith({ deletedCount: 3 }, 'Expired list invite cleanup completed')
+    expect(vi.mocked(logger.info)).toHaveBeenCalledWith({ processedCount: 3 }, 'Expired list invite cleanup completed')
   })
 
   it('logs the error and keeps running when the purge throws', async () => {

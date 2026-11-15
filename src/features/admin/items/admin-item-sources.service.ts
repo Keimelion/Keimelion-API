@@ -12,16 +12,23 @@ import {
   deleteItemSource,
   countItemSourcesByItemId,
 } from '../../../db/entities/item-sources/item-sources.repository.js'
-import { resolveSourceShopId } from '../../../shared/db/source-shops.js'
+import { resolveSourceShop } from '../../../shared/db/source-shops.js'
+import { buildSourceUrlFields } from '../../affiliate/affiliate.service.js'
 import { toItemSourceDetail } from '../../../shared/types/item.js'
 import { AdminAction } from '../admin.enums.js'
 import type { ItemSource } from '../../../db/entities/item-sources/item-sources.schema.js'
 import type { ItemSourceDetail } from '../../../shared/types/item.js'
+import type { Shop } from '../../../db/entities/shops/shops.schema.js'
+import type { SourceUrlFields } from '../../affiliate/affiliate.service.js'
 import type { ServiceResult } from '../../../shared/types/service.js'
 import type {
   AdminItemsCreateSourceRequestParsed,
   AdminItemsUpdateSourceRequestParsed,
 } from '@keimelion/sdk/schemas'
+
+interface SourceShopAndUrlPatch extends Partial<SourceUrlFields> {
+  shopId?: string | null | undefined
+}
 
 // A missing item or shop surfaces as a FK violation, a second source on the same shop as a unique violation.
 const SOURCE_WRITE_ERRORS = {
@@ -34,14 +41,14 @@ export async function createItemSource(
   itemId: string,
   input: AdminItemsCreateSourceRequestParsed,
 ): Promise<ServiceResult<{ source: ItemSourceDetail }>> {
-  const shopId = input.shopId ?? (await resolveSourceShopId(input.sourceUrl))
+  const shop = await resolveSourceShop(input)
 
   const outcome = await runWrite(
     () =>
       insertItemSource({
         itemId,
-        shopId,
-        sourceUrl: input.sourceUrl,
+        shopId: input.shopId ?? shop?.id ?? null,
+        ...buildSourceUrlFields(input.sourceUrl, shop?.slug ?? null),
         price: input.price,
         currency: input.currency,
       }),
@@ -66,8 +73,7 @@ export async function updateItemSourceById(
   if (existingSource?.itemId !== itemId) return serviceError(ErrorCode.NOT_FOUND)
 
   const fields = pickDefined({
-    shopId: await selectUpdatedShopId(existingSource, input),
-    sourceUrl: input.sourceUrl,
+    ...(await buildShopAndUrlPatch(existingSource, input)),
     price: input.price,
     currency: input.currency,
   })
@@ -106,12 +112,32 @@ export async function deleteItemSourceById(
   return { data: { message: 'Item source deleted successfully' }, httpStatus: HttpStatus.OK }
 }
 
-// An explicit shopId always wins. A new URL only fills in a missing shop, so a shop already set is never overwritten.
-async function selectUpdatedShopId(
+// An explicit shopId always wins. A new URL only fills in a missing shop, so a shop already set is never
+// overwritten. Any URL or shop change normalizes the submitted URL again with the resulting shop's strategy.
+async function buildShopAndUrlPatch(
   existingSource: ItemSource,
   input: AdminItemsUpdateSourceRequestParsed,
-): Promise<string | null | undefined> {
+): Promise<SourceShopAndUrlPatch> {
+  if (input.shopId === undefined && input.sourceUrl === undefined) return {}
+
+  const submittedUrl = input.sourceUrl === undefined ? existingSource.originalUrl ?? existingSource.sourceUrl : input.sourceUrl
+  const shop =
+    input.shopId === null
+      ? null
+      : await resolveSourceShop({ shopId: input.shopId ?? existingSource.shopId, sourceUrl: submittedUrl })
+
+  return {
+    shopId: selectShopIdPatch(existingSource, input, shop),
+    ...buildSourceUrlFields(submittedUrl, shop?.slug ?? null),
+  }
+}
+
+function selectShopIdPatch(
+  existingSource: ItemSource,
+  input: AdminItemsUpdateSourceRequestParsed,
+  resolvedShop: Shop | null,
+): string | null | undefined {
   if (input.shopId !== undefined) return input.shopId
-  if (existingSource.shopId !== null || !input.sourceUrl) return undefined
-  return resolveSourceShopId(input.sourceUrl)
+  if (existingSource.shopId !== null) return undefined
+  return resolvedShop?.id
 }
