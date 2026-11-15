@@ -33,6 +33,7 @@ export function mountCreateListItem(router: FeatureRouter): void {
           itemId: parsed.data.itemId,
           quantityDesired: parsed.data.quantityDesired ?? null,
           creatorNote: parsed.data.creatorNote ?? null,
+          customName: parsed.data.customName ?? null,
         }),
       )
     },

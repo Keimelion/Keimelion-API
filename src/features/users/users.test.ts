@@ -1252,6 +1252,104 @@ describe('GET /v1/users/me/export', () => {
     expect(imagesDescriptor?.columns).not.toContain('urls')
   })
 
+  describe('list item customName', () => {
+    const CUSTOM_NAME = 'Grandma birthday gift'
+    const LIST_ITEM_ROW = {
+      id: '00000000-0000-0000-0000-00000000e001',
+      listId: '00000000-0000-0000-0000-00000000e101',
+      itemId: '00000000-0000-0000-0000-00000000e201',
+      quantityDesired: 1,
+      quantityReservedTotal: 0,
+      itemStatus: 'available' as const,
+      sortOrder: null,
+      creatorNote: null,
+      customName: CUSTOM_NAME,
+      createdAt: new Date('2024-01-01'),
+      updatedAt: new Date('2024-01-01'),
+    }
+    const LIST_ITEM_EXPORT_KEYS = [
+      'id',
+      'listId',
+      'itemId',
+      'quantityDesired',
+      'quantityReservedTotal',
+      'itemStatus',
+      'sortOrder',
+      'creatorNote',
+      'customName',
+      'createdAt',
+      'updatedAt',
+    ]
+
+    function findDescriptor(filename: string): ExportEntityDescriptor | undefined {
+      return EXPORT_ENTITY_REGISTRY.find((descriptor) => descriptor.filename === filename)
+    }
+
+    function buildReservationExportRow(customName: string | null): object {
+      return {
+        id: '00000000-0000-0000-0000-00000000e301',
+        listItemId: LIST_ITEM_ROW.id,
+        userId: SAFE_USER.id,
+        quantityBooked: 1,
+        createdAt: new Date('2024-05-01'),
+        listItem: { ...LIST_ITEM_ROW, customName, list: { title: 'Wedding list' }, item: { name: 'Fancy vase' } },
+      }
+    }
+
+    it('registers list-items.csv with the exact allow-list, including customName', () => {
+      expect(findDescriptor('list-items.csv')?.columns).toEqual(LIST_ITEM_EXPORT_KEYS)
+    })
+
+    it('maps customName into list-items.csv rows without any extra column', async () => {
+      vi.mocked(db.query.listItems.findMany).mockResolvedValueOnce([LIST_ITEM_ROW] as never)
+
+      const rows = await findDescriptor('list-items.csv')?.fetchRows(SAFE_USER.id)
+
+      expect(rows).toHaveLength(1)
+      expect(rows?.[0]).toMatchObject({ id: LIST_ITEM_ROW.id, customName: CUSTOM_NAME })
+      expect(Object.keys(rows?.[0] ?? {}).sort()).toEqual([...LIST_ITEM_EXPORT_KEYS].sort())
+    })
+
+    it('includes customName in the JSON export listItems', async () => {
+      const token = await generateTestToken(SAFE_USER.id)
+      vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+      vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+      vi.mocked(db.query.listItems.findMany).mockResolvedValueOnce([LIST_ITEM_ROW, { ...LIST_ITEM_ROW, customName: null }] as never)
+
+      const response = await apiRequest('/v1/users/me/export?format=json', { token })
+
+      expect(response.status).toBe(200)
+      const body = await response.json() as { listItems: Record<string, unknown>[] }
+      expect(body.listItems.map((listItem) => listItem.customName)).toEqual([CUSTOM_NAME, null])
+      expect(Object.keys(body.listItems[0] ?? {}).sort()).toEqual([...LIST_ITEM_EXPORT_KEYS].sort())
+    })
+
+    it.each([
+      [CUSTOM_NAME, CUSTOM_NAME],
+      [null, 'Fancy vase'],
+    ])('resolves the reservation itemName from customName %j in the JSON export', async (customName, expectedItemName) => {
+      const token = await generateTestToken(SAFE_USER.id)
+      vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+      vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+      vi.mocked(db.query.reservations.findMany).mockResolvedValueOnce([buildReservationExportRow(customName)] as never)
+
+      const response = await apiRequest('/v1/users/me/export?format=json', { token })
+
+      expect(response.status).toBe(200)
+      const body = await response.json() as { reservations: { itemName: string }[] }
+      expect(body.reservations[0]?.itemName).toBe(expectedItemName)
+    })
+
+    it('resolves the reservation itemName from customName in my_reservations.csv rows', async () => {
+      vi.mocked(db.query.reservations.findMany).mockResolvedValueOnce([buildReservationExportRow(CUSTOM_NAME)] as never)
+
+      const rows = await findDescriptor('my_reservations.csv')?.fetchRows(SAFE_USER.id)
+
+      expect(rows).toHaveLength(1)
+      expect(rows?.[0]).toMatchObject({ itemName: CUSTOM_NAME })
+    })
+  })
+
   it('registers my_reservations.csv with the exact allow-list required by RGPD', () => {
     const reservationsDescriptor = EXPORT_ENTITY_REGISTRY.find(
       (descriptor) => descriptor.filename === 'my_reservations.csv',
@@ -1456,6 +1554,7 @@ const RESERVATION_PROFILE_ROW = {
     itemStatus: 'available',
     sortOrder: null,
     creatorNote: null,
+    customName: null,
     createdAt: new Date('2024-04-01'),
     updatedAt: new Date('2024-04-01'),
     item: {
@@ -1572,6 +1671,23 @@ describe('GET /v1/users/me/reservations', () => {
     expect(body.items[0]?.list.slug).toBe('birthday')
     expect(body.items[0]?.list.title).toBe('Birthday')
     expect(body.items[0]?.list.ownerDisplayName).toBe('owner-user')
+  })
+
+  it('returns the list item customName as the reservation listItem name when set', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    const customNamedRow = {
+      ...RESERVATION_PROFILE_ROW,
+      listItem: { ...RESERVATION_PROFILE_ROW.listItem, customName: 'The blue vase' },
+    }
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    vi.mocked(db.query.reservations.findMany).mockResolvedValueOnce([customNamedRow] as never)
+    mockMyReservationsCountChain(1)
+
+    const response = await apiRequest('/v1/users/me/reservations', { token })
+
+    const body = usersListReservationsResponseSchema.parse(await response.json())
+    expect(response.status).toBe(200)
+    expect(body.items[0]?.listItem.name).toBe('The blue vase')
   })
 
   it('returns 200 with multiple reservations spanning several lists', async () => {

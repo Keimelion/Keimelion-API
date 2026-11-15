@@ -16,6 +16,7 @@ import { users } from '../../../db/entities/users/users.schema.js'
 import { CONTRIBUTOR_ROLE_VALUES, ListUserRoles } from '@keimelion/sdk/enums'
 import type { Feedback } from '../../../db/entities/feedback/feedback.schema.js'
 import type { Image } from '../../../db/entities/images/images.schema.js'
+import { resolveListItemName } from '../../../shared/types/item.js'
 import type { ItemRowWithImage } from '../../../shared/types/item.js'
 import type { ItemSource } from '../../../db/entities/item-sources/item-sources.schema.js'
 import type { ListUser } from '../../../db/entities/list-users/list-users.schema.js'
@@ -144,7 +145,7 @@ export async function findReservationsForExport(userId: string): Promise<Reserva
     reservationId: row.id,
     listItemId: row.listItemId,
     listTitle: row.listItem.list.title,
-    itemName: row.listItem.item.name,
+    itemName: resolveListItemName(row.listItem),
     quantityBooked: row.quantityBooked,
     createdAt: row.createdAt,
   }))

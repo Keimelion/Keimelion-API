@@ -123,6 +123,7 @@ const MOCK_LIST_ITEM: ListItem = {
   itemStatus: ItemStatuses.AVAILABLE,
   sortOrder: null,
   creatorNote: null,
+  customName: null,
   createdAt: new Date('2024-01-01'),
   updatedAt: new Date('2024-01-01'),
 }

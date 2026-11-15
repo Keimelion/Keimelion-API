@@ -34,6 +34,7 @@ export function mountUpdateListItem(router: FeatureRouter): void {
         await updateListItemById(id, {
           quantityDesired: input.quantityDesired,
           creatorNote: input.creatorNote,
+          customName: input.customName,
           sortOrder: input.sortOrder,
         }),
       )

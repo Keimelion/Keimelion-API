@@ -19,6 +19,7 @@ export interface CreateListItemInput {
   itemId: string
   quantityDesired: number | null
   creatorNote: string | null
+  customName: string | null
 }
 
 export type UpdateListItemInput = PartialWrite<ListItemWrite>
@@ -34,6 +35,7 @@ export async function createListItem(
     itemId: input.itemId,
     quantityDesired: input.quantityDesired ?? DEFAULT_QUANTITY_DESIRED,
     creatorNote: input.creatorNote,
+    customName: input.customName,
     itemStatus: ItemStatuses.AVAILABLE,
   })
   if (!inserted) return serviceError(ErrorCode.INTERNAL_ERROR)

@@ -10,7 +10,6 @@ import {
   itemsCreateResponseSchema,
   itemsGetResponseSchema,
   itemsListResponseSchema,
-  itemsUpdateResponseSchema,
 } from '@keimelion/sdk/schemas'
 
 const { mockProcessImage } = vi.hoisted(() => ({ mockProcessImage: vi.fn() }))
@@ -274,8 +273,6 @@ const OWNER_USER = {
   updatedAt: new Date('2024-01-01'),
 }
 
-const OTHER_USER_ID = '00000000-0000-0000-0000-000000000041'
-
 const OWNED_ITEM_ROW = {
   ...ITEM_ROW,
   id: '00000000-0000-0000-0000-000000000050',
@@ -327,29 +324,6 @@ const TAG_READING_ROW = {
   id: '00000000-0000-0000-0000-000000000071',
   name: 'reading',
   slug: 'reading',
-}
-
-function mockUpdateItemTagsTransaction(tagsReturned: (typeof TAG_GAMING_ROW)[]): void {
-  vi.mocked(db.transaction).mockImplementationOnce((callback) => {
-    const tagsFindMany = vi.fn().mockResolvedValueOnce(tagsReturned)
-    const tx = {
-      delete: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
-      insert: vi.fn().mockReturnValue({
-        values: vi.fn().mockReturnValue({
-          onConflictDoNothing: vi.fn().mockResolvedValue([]),
-        }),
-      }),
-      update: vi.fn().mockReturnValue({
-        set: vi.fn().mockReturnValue({
-          where: vi.fn().mockReturnValue({
-            returning: vi.fn().mockResolvedValue([OWNED_ITEM_ROW]),
-          }),
-        }),
-      }),
-      query: { tags: { findMany: tagsFindMany } },
-    }
-    return callback(tx as never)
-  })
 }
 
 function itemWithTagLinks(tags: (typeof TAG_GAMING_ROW)[]): object {
@@ -617,327 +591,20 @@ describe('POST /v1/items', () => {
 describe('PATCH /v1/items/:id', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(OWNER_ACCESS_TOKEN_ENTRY)
   })
 
-  it('replaces tags and returns item with hydrated tags when the user owns the item', async () => {
+  it('returns 404 because items are admin-only and the user update route is removed', async () => {
     const token = await generateTestToken(OWNER_USER.id)
-    mockOwnerAuth()
-    vi.mocked(db.query.items.findFirst)
-      .mockResolvedValueOnce(OWNED_ITEM_ROW)
-      .mockResolvedValueOnce(itemWithTagLinks([TAG_GAMING_ROW, TAG_READING_ROW]) as never)
-    mockUpdateItemTagsTransaction([TAG_GAMING_ROW, TAG_READING_ROW])
 
     const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}`, {
       method: 'PATCH',
       token,
-      body: { tags: ['Gaming', 'Reading'] },
-    })
-
-    const body = await response.json() as { item: { tags: { slug: string }[] } }
-    itemsUpdateResponseSchema.parse(body)
-    expect(response.status).toBe(200)
-    expect(body.item.tags.map((tag) => tag.slug)).toEqual(expect.arrayContaining(['gaming', 'reading']))
-  })
-
-  it('clears all tags when tags: [] is sent', async () => {
-    const token = await generateTestToken(OWNER_USER.id)
-    mockOwnerAuth()
-    vi.mocked(db.query.items.findFirst)
-      .mockResolvedValueOnce(OWNED_ITEM_ROW)
-      .mockResolvedValueOnce(itemWithTagLinks([]) as never)
-    mockUpdateItemTagsTransaction([])
-
-    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}`, {
-      method: 'PATCH',
-      token,
-      body: { tags: [] },
-    })
-
-    const body = await response.json() as { item: { tags: unknown[] } }
-    expect(response.status).toBe(200)
-    expect(body.item.tags).toEqual([])
-  })
-
-  it('returns 403 FORBIDDEN when the user does not own the item', async () => {
-    const token = await generateTestToken(OTHER_USER_ID)
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(makeAccessTokenEntry(OTHER_USER_ID))
-    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce({ ...OWNER_USER, id: OTHER_USER_ID } as never)
-    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(OWNED_ITEM_ROW)
-
-    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}`, {
-      method: 'PATCH',
-      token,
-      body: { tags: ['gaming'] },
-    })
-
-    expect(response.status).toBe(403)
-  })
-
-  it('returns 404 NOT_FOUND when the item does not exist', async () => {
-    const token = await generateTestToken(OWNER_USER.id)
-    mockOwnerAuth()
-    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(undefined)
-
-    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}`, {
-      method: 'PATCH',
-      token,
-      body: { tags: ['gaming'] },
+      body: { name: 'Renamed' },
     })
 
     expect(response.status).toBe(404)
-  })
-
-  it('returns 422 TAG_INVALID_NAME when a tag name normalizes to an empty slug', async () => {
-    const token = await generateTestToken(OWNER_USER.id)
-    mockOwnerAuth()
-    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(OWNED_ITEM_ROW)
-
-    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}`, {
-      method: 'PATCH',
-      token,
-      body: { tags: ['!!!'] },
-    })
-
-    const body = await response.json() as { code: string }
-    expect(response.status).toBe(422)
-    expect(body.code).toBe('TAG_INVALID_NAME')
-  })
-
-  it('returns 422 when tags exceeds max count (20)', async () => {
-    const token = await generateTestToken(OWNER_USER.id)
-    mockOwnerAuth()
-
-    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}`, {
-      method: 'PATCH',
-      token,
-      body: { tags: Array.from({ length: 21 }, (_, i) => `tag-${String(i)}`) },
-    })
-
-    expect(response.status).toBe(422)
-  })
-
-  it('returns 422 when body is empty (no fields to update)', async () => {
-    const token = await generateTestToken(OWNER_USER.id)
-    mockOwnerAuth()
-
-    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}`, {
-      method: 'PATCH',
-      token,
-      body: {},
-    })
-
-    expect(response.status).toBe(422)
-  })
-
-  it('returns 401 when not authenticated', async () => {
-    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}`, {
-      method: 'PATCH',
-      body: { tags: ['gaming'] },
-    })
-
-    expect(response.status).toBe(401)
-  })
-
-  it('replaces categories when categories are provided', async () => {
-    const token = await generateTestToken(OWNER_USER.id)
-    mockOwnerAuth()
-    vi.mocked(db.query.items.findFirst)
-      .mockResolvedValueOnce(OWNED_ITEM_ROW)
-      .mockResolvedValueOnce({
-        ...OWNED_ITEM_ROW,
-        sources: [],
-        itemCategories: [
-          { itemId: OWNED_ITEM_ROW.id, categoryId: CATEGORY_ONE.id, assignedAt: new Date(), category: CATEGORY_ONE },
-          { itemId: OWNED_ITEM_ROW.id, categoryId: CATEGORY_TWO.id, assignedAt: new Date(), category: CATEGORY_TWO },
-        ],
-        itemTags: [],
-      } as never)
-    vi.mocked(db.query.categories.findMany).mockResolvedValueOnce([CATEGORY_ONE, CATEGORY_TWO] as never)
-
-    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}`, {
-      method: 'PATCH',
-      token,
-      body: { categories: [CATEGORY_ONE.id, CATEGORY_TWO.id] },
-    })
-
-    const body = await response.json() as { item: { categories: { slug: string }[] } }
-    expect(response.status).toBe(200)
-    expect(body.item.categories.map((c) => c.slug)).toEqual(expect.arrayContaining(['electronics', 'mode']))
-  })
-
-  it('returns 404 CATEGORY_NOT_FOUND when a categoryId does not exist', async () => {
-    const token = await generateTestToken(OWNER_USER.id)
-    mockOwnerAuth()
-    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(OWNED_ITEM_ROW)
-    vi.mocked(db.query.categories.findMany).mockResolvedValueOnce([CATEGORY_ONE] as never)
-
-    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}`, {
-      method: 'PATCH',
-      token,
-      body: { categories: [CATEGORY_ONE.id, CATEGORY_TWO.id] },
-    })
-
-    const body = await response.json() as { code: string }
-    expect(response.status).toBe(404)
-    expect(body.code).toBe('CATEGORY_NOT_FOUND')
-  })
-
-  it('accepts tags and categories together in one PATCH', async () => {
-    const token = await generateTestToken(OWNER_USER.id)
-    mockOwnerAuth()
-    vi.mocked(db.query.items.findFirst)
-      .mockResolvedValueOnce(OWNED_ITEM_ROW)
-      .mockResolvedValueOnce({
-        ...OWNED_ITEM_ROW,
-        sources: [],
-        itemCategories: [
-          { itemId: OWNED_ITEM_ROW.id, categoryId: CATEGORY_ONE.id, assignedAt: new Date(), category: CATEGORY_ONE },
-        ],
-        itemTags: [
-          { itemId: OWNED_ITEM_ROW.id, tagId: TAG_GAMING_ROW.id, assignedAt: new Date(), tag: TAG_GAMING_ROW },
-        ],
-      } as never)
-    vi.mocked(db.query.categories.findMany).mockResolvedValueOnce([CATEGORY_ONE] as never)
-    mockUpdateItemTagsTransaction([TAG_GAMING_ROW])
-
-    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}`, {
-      method: 'PATCH',
-      token,
-      body: { tags: ['Gaming'], categories: [CATEGORY_ONE.id] },
-    })
-
-    const body = await response.json() as { item: { tags: { slug: string }[]; categories: { slug: string }[] } }
-    expect(response.status).toBe(200)
-    expect(body.item.tags.map((t) => t.slug)).toEqual(['gaming'])
-    expect(body.item.categories.map((c) => c.slug)).toEqual(['electronics'])
-  })
-
-  it('renames an item when only name is sent', async () => {
-    const token = await generateTestToken(OWNER_USER.id)
-    mockOwnerAuth()
-    const renamed = { ...OWNED_ITEM_ROW, name: 'Renamed Item' }
-    vi.mocked(db.query.items.findFirst)
-      .mockResolvedValueOnce(OWNED_ITEM_ROW)
-      .mockResolvedValueOnce({ ...renamed, sources: [], itemCategories: [], itemTags: [] } as never)
-    mockUpdateItemTagsTransaction([])
-
-    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}`, {
-      method: 'PATCH',
-      token,
-      body: { name: 'Renamed Item' },
-    })
-
-    const body = await response.json() as { item: { name: string; tags: unknown[]; categories: unknown[] } }
-    expect(response.status).toBe(200)
-    expect(body.item.name).toBe('Renamed Item')
-    expect(body.item.tags).toEqual([])
-    expect(body.item.categories).toEqual([])
-  })
-
-  it('updates description when only description is sent', async () => {
-    const token = await generateTestToken(OWNER_USER.id)
-    mockOwnerAuth()
-    const updated = { ...OWNED_ITEM_ROW, description: 'A new description' }
-    vi.mocked(db.query.items.findFirst)
-      .mockResolvedValueOnce(OWNED_ITEM_ROW)
-      .mockResolvedValueOnce({ ...updated, sources: [], itemCategories: [], itemTags: [] } as never)
-    mockUpdateItemTagsTransaction([])
-
-    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}`, {
-      method: 'PATCH',
-      token,
-      body: { description: 'A new description' },
-    })
-
-    const body = await response.json() as { item: { description: string | null } }
-    expect(response.status).toBe(200)
-    expect(body.item.description).toBe('A new description')
-  })
-
-  it('clears description when description: null is sent', async () => {
-    const token = await generateTestToken(OWNER_USER.id)
-    mockOwnerAuth()
-    vi.mocked(db.query.items.findFirst)
-      .mockResolvedValueOnce(OWNED_ITEM_ROW)
-      .mockResolvedValueOnce({ ...OWNED_ITEM_ROW, description: null, sources: [], itemCategories: [], itemTags: [] } as never)
-    mockUpdateItemTagsTransaction([])
-
-    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}`, {
-      method: 'PATCH',
-      token,
-      body: { description: null },
-    })
-
-    const body = await response.json() as { item: { description: string | null } }
-    expect(response.status).toBe(200)
-    expect(body.item.description).toBeNull()
-  })
-
-  it('returns 422 when imageUrl is sent (external image URLs are not accepted)', async () => {
-    const token = await generateTestToken(OWNER_USER.id)
-    mockOwnerAuth()
-
-    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}`, {
-      method: 'PATCH',
-      token,
-      body: { imageUrl: 'https://example.com/img.jpg' },
-    })
-
-    expect(response.status).toBe(422)
-    expect(vi.mocked(db.transaction)).not.toHaveBeenCalled()
-  })
-
-  it('updates name and tags together', async () => {
-    const token = await generateTestToken(OWNER_USER.id)
-    mockOwnerAuth()
-    vi.mocked(db.query.items.findFirst)
-      .mockResolvedValueOnce(OWNED_ITEM_ROW)
-      .mockResolvedValueOnce({
-        ...OWNED_ITEM_ROW,
-        name: 'Renamed',
-        sources: [],
-        itemCategories: [],
-        itemTags: [{ itemId: OWNED_ITEM_ROW.id, tagId: TAG_GAMING_ROW.id, assignedAt: new Date(), tag: TAG_GAMING_ROW }],
-      } as never)
-    mockUpdateItemTagsTransaction([TAG_GAMING_ROW])
-
-    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}`, {
-      method: 'PATCH',
-      token,
-      body: { name: 'Renamed', tags: ['Gaming'] },
-    })
-
-    const body = await response.json() as { item: { name: string; tags: { slug: string }[] } }
-    expect(response.status).toBe(200)
-    expect(body.item.name).toBe('Renamed')
-    expect(body.item.tags.map((t) => t.slug)).toEqual(['gaming'])
-  })
-
-  it('returns 422 when name is sent as empty string', async () => {
-    const token = await generateTestToken(OWNER_USER.id)
-    mockOwnerAuth()
-
-    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}`, {
-      method: 'PATCH',
-      token,
-      body: { name: '' },
-    })
-
-    expect(response.status).toBe(422)
-  })
-
-  it('returns 422 when an unknown field is sent (strict schema)', async () => {
-    const token = await generateTestToken(OWNER_USER.id)
-    mockOwnerAuth()
-
-    const response = await apiRequest(`/v1/items/${OWNED_ITEM_ROW.id}`, {
-      method: 'PATCH',
-      token,
-      body: { unknownField: 'value' },
-    })
-
-    expect(response.status).toBe(422)
+    expect(vi.mocked(db.query.items.findFirst)).not.toHaveBeenCalled()
+    expect(vi.mocked(db.update)).not.toHaveBeenCalled()
   })
 })
 
@@ -1000,7 +667,6 @@ const NEW_IMAGE_ROW = {
   updatedAt: new Date('2024-05-01'),
 }
 
-const PREVIOUS_IMAGE_ID = '00000000-0000-0000-0000-00000000b000'
 const IMAGE_BUFFER = Buffer.from([0x89, 0x50, 0x4e, 0x47])
 const UPLOAD_BODY_LIMIT_OVERFLOW_BYTES = 64 * 1024 + 1
 
@@ -1019,7 +685,6 @@ interface ErrorBody {
 
 interface ItemWriteSpies {
   values: ReturnType<typeof vi.fn>
-  set: ReturnType<typeof vi.fn>
 }
 
 function mockItemWriteTransaction(writtenRow: unknown): ItemWriteSpies {
@@ -1027,21 +692,15 @@ function mockItemWriteTransaction(writtenRow: unknown): ItemWriteSpies {
     returning: vi.fn().mockResolvedValue(writtenRow === undefined ? [] : [writtenRow]),
     onConflictDoNothing: vi.fn().mockResolvedValue([]),
   })
-  const set = vi.fn().mockReturnValue({
-    where: vi.fn().mockReturnValue({
-      returning: vi.fn().mockResolvedValue(writtenRow === undefined ? [] : [writtenRow]),
-    }),
-  })
   vi.mocked(db.transaction).mockImplementationOnce((callback) => {
     const tx = {
       insert: vi.fn().mockReturnValue({ values }),
-      update: vi.fn().mockReturnValue({ set }),
       delete: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
       query: { tags: { findMany: vi.fn().mockResolvedValue([TAG_GAMING_ROW]) } },
     }
     return callback(tx as never)
   })
-  return { values, set }
+  return { values }
 }
 
 function hydrated(row: object, image: typeof NEW_IMAGE_ROW | null): object {
@@ -1381,180 +1040,3 @@ describe('POST /v1/items — multipart image upload', () => {
   })
 })
 
-describe('PATCH /v1/items/:id — image replace / clear', () => {
-  const ITEM_WITH_IMAGE_ROW = { ...OWNED_ITEM_ROW, imageId: PREVIOUS_IMAGE_ID }
-  const PATH = `/v1/items/${OWNED_ITEM_ROW.id}`
-
-  beforeEach(() => {
-    vi.clearAllMocks()
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(OWNER_ACCESS_TOKEN_ENTRY)
-    mockProcessImage.mockResolvedValue({ image: NEW_IMAGE_ROW })
-  })
-
-  it('sets the uploaded image on an item without image', async () => {
-    const token = await generateTestToken(OWNER_USER.id)
-    mockOwnerAuth()
-    const updatedRow = { ...OWNED_ITEM_ROW, imageId: NEW_IMAGE_ROW.id }
-    vi.mocked(db.query.items.findFirst)
-      .mockResolvedValueOnce(OWNED_ITEM_ROW)
-      .mockResolvedValueOnce(hydrated(updatedRow, NEW_IMAGE_ROW) as never)
-    const spies = mockItemWriteTransaction(updatedRow)
-
-    const response = await apiMultipartRequest(PATH, { method: 'PATCH', token, image: { buffer: IMAGE_BUFFER } })
-
-    const body = await response.json() as ItemImageBody
-    itemsUpdateResponseSchema.parse(body)
-    expect(response.status).toBe(200)
-    expect(body.item.image?.urls.md).toContain('-800.webp')
-    expect(spies.set).toHaveBeenCalledWith({ imageId: NEW_IMAGE_ROW.id })
-    expect(vi.mocked(db.delete)).not.toHaveBeenCalled()
-  })
-
-  it('replaces an uploaded image and deletes the previous images row', async () => {
-    const token = await generateTestToken(OWNER_USER.id)
-    mockOwnerAuth()
-    const updatedRow = { ...OWNED_ITEM_ROW, imageId: NEW_IMAGE_ROW.id }
-    vi.mocked(db.query.items.findFirst)
-      .mockResolvedValueOnce(ITEM_WITH_IMAGE_ROW)
-      .mockResolvedValueOnce(hydrated(updatedRow, NEW_IMAGE_ROW) as never)
-    mockItemWriteTransaction(updatedRow)
-
-    const response = await apiMultipartRequest(PATH, { method: 'PATCH', token, image: { buffer: IMAGE_BUFFER } })
-
-    const body = await response.json() as ItemImageBody
-    expect(response.status).toBe(200)
-    expect(body.item.imageId).toBe(NEW_IMAGE_ROW.id)
-    expect(vi.mocked(db.delete)).toHaveBeenCalledTimes(1)
-    expect(vi.mocked(db.delete)).toHaveBeenCalledWith(images)
-  })
-
-  it.each([
-    ['multipart', true],
-    ['JSON', false],
-  ])('clears the uploaded image with clearImage=true (%s) and deletes the previous row', async (_label, isMultipart) => {
-    const token = await generateTestToken(OWNER_USER.id)
-    mockOwnerAuth()
-    const updatedRow = { ...OWNED_ITEM_ROW, imageId: null }
-    vi.mocked(db.query.items.findFirst)
-      .mockResolvedValueOnce(ITEM_WITH_IMAGE_ROW)
-      .mockResolvedValueOnce(hydrated(updatedRow, null) as never)
-    const spies = mockItemWriteTransaction(updatedRow)
-
-    const response = isMultipart
-      ? await apiMultipartRequest(PATH, { method: 'PATCH', token, fields: { clearImage: 'true' } })
-      : await apiRequest(PATH, { method: 'PATCH', token, body: { clearImage: true } })
-
-    const body = await response.json() as ItemImageBody
-    expect(response.status).toBe(200)
-    expect(body.item.imageId).toBeNull()
-    expect(body.item.image).toBeNull()
-    expect(spies.set).toHaveBeenCalledWith({ imageId: null })
-    expect(vi.mocked(db.delete)).toHaveBeenCalledWith(images)
-    expect(mockProcessImage).not.toHaveBeenCalled()
-  })
-
-  it('returns 422 NO_FIELDS_TO_UPDATE when only clearImage=false is sent', async () => {
-    const token = await generateTestToken(OWNER_USER.id)
-    mockOwnerAuth()
-
-    const response = await apiMultipartRequest(PATH, { method: 'PATCH', token, fields: { clearImage: 'false' } })
-
-    const body = await response.json() as ErrorBody
-    expect(response.status).toBe(422)
-    expect(body.code).toBe(ErrorCode.NO_FIELDS_TO_UPDATE)
-  })
-
-  it('returns 422 IMAGE_AND_CLEAR_CONFLICT when image and clearImage=true are both sent', async () => {
-    const token = await generateTestToken(OWNER_USER.id)
-    mockOwnerAuth()
-
-    const response = await apiMultipartRequest(PATH, {
-      method: 'PATCH',
-      token,
-      fields: { clearImage: 'true' },
-      image: { buffer: IMAGE_BUFFER },
-    })
-
-    const body = await response.json() as ErrorBody
-    expect(response.status).toBe(422)
-    expect(body.code).toBe(ErrorCode.IMAGE_AND_CLEAR_CONFLICT)
-    expect(mockProcessImage).not.toHaveBeenCalled()
-    expect(vi.mocked(db.transaction)).not.toHaveBeenCalled()
-  })
-
-  it('returns 403 for a non-owner without processing the image', async () => {
-    const token = await generateTestToken(OTHER_USER_ID)
-    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(makeAccessTokenEntry(OTHER_USER_ID))
-    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce({ ...OWNER_USER, id: OTHER_USER_ID } as never)
-    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(OWNED_ITEM_ROW)
-
-    const response = await apiMultipartRequest(PATH, { method: 'PATCH', token, image: { buffer: IMAGE_BUFFER } })
-
-    expect(response.status).toBe(403)
-    expect(mockProcessImage).not.toHaveBeenCalled()
-  })
-
-  it('returns 403 when the item creator was deleted (createdByUserId NULL)', async () => {
-    const token = await generateTestToken(OWNER_USER.id)
-    mockOwnerAuth()
-    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce({ ...OWNED_ITEM_ROW, createdByUserId: null })
-
-    const response = await apiMultipartRequest(PATH, { method: 'PATCH', token, image: { buffer: IMAGE_BUFFER } })
-
-    expect(response.status).toBe(403)
-    expect(mockProcessImage).not.toHaveBeenCalled()
-  })
-
-  it('returns 404 for an unknown item without processing the image', async () => {
-    const token = await generateTestToken(OWNER_USER.id)
-    mockOwnerAuth()
-    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(undefined)
-
-    const response = await apiMultipartRequest(PATH, { method: 'PATCH', token, image: { buffer: IMAGE_BUFFER } })
-
-    expect(response.status).toBe(404)
-    expect(mockProcessImage).not.toHaveBeenCalled()
-  })
-
-  it('returns 401 when not authenticated', async () => {
-    const response = await apiMultipartRequest(PATH, { method: 'PATCH', image: { buffer: IMAGE_BUFFER } })
-
-    expect(response.status).toBe(401)
-  })
-
-  it('rolls back the new image and keeps the previous one when the transaction throws', async () => {
-    const token = await generateTestToken(OWNER_USER.id)
-    mockOwnerAuth()
-    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(ITEM_WITH_IMAGE_ROW)
-    vi.mocked(db.transaction).mockRejectedValueOnce(new Error('update failed'))
-
-    const response = await apiMultipartRequest(PATH, { method: 'PATCH', token, image: { buffer: IMAGE_BUFFER } })
-
-    expect(response.status).toBe(500)
-    expect(vi.mocked(db.delete)).toHaveBeenCalledTimes(1)
-    expect(vi.mocked(db.delete)).toHaveBeenCalledWith(images)
-  })
-
-  it('rolls back the new image when the item vanished before the update', async () => {
-    const token = await generateTestToken(OWNER_USER.id)
-    mockOwnerAuth()
-    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(ITEM_WITH_IMAGE_ROW)
-    mockItemWriteTransaction(undefined)
-
-    const response = await apiMultipartRequest(PATH, { method: 'PATCH', token, image: { buffer: IMAGE_BUFFER } })
-
-    expect(response.status).toBe(404)
-    expect(vi.mocked(db.delete)).toHaveBeenCalledTimes(1)
-  })
-
-  it('returns 413 PAYLOAD_TOO_LARGE from the body limit', async () => {
-    const token = await generateTestToken(OWNER_USER.id)
-    mockOwnerAuth()
-    const oversized = Buffer.alloc(env.UPLOADS_MAX_SIZE_BYTES + UPLOAD_BODY_LIMIT_OVERFLOW_BYTES)
-
-    const response = await apiMultipartRequest(PATH, { method: 'PATCH', token, image: { buffer: oversized } })
-
-    expect(response.status).toBe(413)
-    expect(vi.mocked(db.query.items.findFirst)).not.toHaveBeenCalled()
-  })
-})

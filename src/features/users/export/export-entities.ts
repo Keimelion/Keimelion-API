@@ -220,6 +220,7 @@ const listItemsEntityDescriptor: ExportEntityDescriptor = {
     'itemStatus',
     'sortOrder',
     'creatorNote',
+    'customName',
     'createdAt',
     'updatedAt',
   ],
