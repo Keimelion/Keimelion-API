@@ -1,4 +1,3 @@
-import { createHash } from 'crypto'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { db } from '../../db/client.js'
 import { env } from '../../config/env.js'
@@ -18,6 +17,7 @@ import { NodeEnvs } from '../../shared/enums/node-env.js'
 import { sendMail } from '../../shared/mail/mail.sender.js'
 import { apiMultipartRequest, apiRequest } from '../../shared/test/api-request.js'
 import { generateTestToken, makeAccessTokenEntry } from '../../shared/test/auth.js'
+import { hashSha256Hex } from '../../shared/utils/hash.js'
 import { logger } from '../../shared/utils/logger.js'
 
 vi.mock('../../shared/mail/mail.sender.js', () => ({ sendMail: vi.fn() }))
@@ -87,10 +87,6 @@ async function waitForSentMail(): Promise<SentMail> {
 
 async function flushBackgroundWork(): Promise<void> {
   await new Promise((resolve) => setImmediate(resolve))
-}
-
-function sha256Hex(value: string): string {
-  return createHash('sha256').update(value).digest('hex')
 }
 
 function spyOnAllLogLevels(): () => string {
@@ -675,7 +671,7 @@ describe('POST /v1/auth/forgot-password', () => {
     expect(mail.text).toContain(`Choisir un nouveau mot de passe :\n${resetUrl}`)
     expect(mail.text).toContain("Ce lien est valable 1 heure et ne fonctionne qu'une seule fois.")
     expect(mail.text).toContain('vous pourrez en demander un nouveau avec « Mot de passe oublié »')
-    expect(stored.passwordResetToken).toBe(sha256Hex(body.passwordResetToken))
+    expect(stored.passwordResetToken).toBe(hashSha256Hex(body.passwordResetToken))
     expect(stored.passwordResetTokenExpiresAt.getTime() - before).toBeGreaterThanOrEqual(ONE_HOUR_MS)
     expect(stored.passwordResetTokenExpiresAt.getTime() - before).toBeLessThan(ONE_HOUR_MS + ONE_MINUTE_MS)
   })
@@ -752,7 +748,7 @@ describe('POST /v1/auth/forgot-password', () => {
       })
       const stored = setSpy.mock.calls[0]?.[0] as PasswordResetUpdate
       expect(response.status).toBe(200)
-      expect(stored.passwordResetToken).toBe(sha256Hex(emailedToken))
+      expect(stored.passwordResetToken).toBe(hashSha256Hex(emailedToken))
       expect(readLogs()).not.toContain(emailedToken)
       expect(readLogs()).not.toContain('user@example.com')
     } finally {
