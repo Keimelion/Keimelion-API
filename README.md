@@ -177,6 +177,7 @@ The API bootstraps a small in-process scheduler (`src/cron/`) that runs lightwei
 | Expired refresh token cleanup | `REFRESH_TOKEN_CLEANUP_INTERVAL_MS` | 1 h | Deletes expired refresh-token rows |
 | Hard-delete inactive users | `USER_HARD_DELETE_INTERVAL_MS`, `USER_HARD_DELETE_GRACE_DAYS` | 1 h / 30 d | Purges soft-deleted and 24-month-inactive users |
 | Waitlist entries purge | `WAITLIST_PURGE_INTERVAL_MS`, `WAITLIST_CONFIRMATION_VALIDITY_DAYS` | 1 h / 7 d | Deletes unconfirmed signups once their link lapses, and entries 12 months after the launch email |
+| Affiliate URL generation | `AFFILIATE_URL_GENERATION_INTERVAL_MS`, `AMAZON_ASSOCIATE_TAG` | 15 min | Fills `item_sources.affiliate_url` for sources of affiliated shops whose strategy builds links; without `AMAZON_ASSOCIATE_TAG` no Amazon link is generated |
 | **FX rates refresh** | `FX_REFRESH_ENABLED`, `FX_REFRESH_INTERVAL_MS`, `FX_PROVIDER_URL` | 24 h | Refreshes `currencies.usd_rate` from an FX provider |
 
 ### FX rates refresh
