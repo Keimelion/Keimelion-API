@@ -43,6 +43,8 @@ const baseEnvSchema = z.object({
   BCRYPT_ROUNDS: z.coerce.number().int().positive().default(12),
   APP_URL: z.url().default('http://localhost:3000'),
   LANDING_URL: z.url().default('http://localhost:4321'),
+  WEB_APP_URL: z.url().default('http://localhost:3002'),
+  BACKOFFICE_URL: z.url().default('http://localhost:3001'),
   EMAIL_API_KEY: z.string().optional(),
   EMAIL_FROM: z.string().optional(),
   EMAIL_PROVIDER: z.enum(MAIL_PROVIDER_NAMES).default(DEFAULT_MAIL_PROVIDER),
@@ -90,6 +92,15 @@ const envSchema = baseEnvSchema
     path: ['LANDING_URL'],
     message:
       'LANDING_URL must be the public landing URL in production unless EMAIL_PROVIDER is log',
+  })
+  .refine((settings) => !sendsRealEmails(settings) || !isLocalUrl(settings.WEB_APP_URL), {
+    path: ['WEB_APP_URL'],
+    message: 'WEB_APP_URL must be the public web app URL in production unless EMAIL_PROVIDER is log',
+  })
+  .refine((settings) => !sendsRealEmails(settings) || !isLocalUrl(settings.BACKOFFICE_URL), {
+    path: ['BACKOFFICE_URL'],
+    message:
+      'BACKOFFICE_URL must be the public Backoffice URL in production unless EMAIL_PROVIDER is log',
   })
 
 const parsed = envSchema.safeParse(process.env)

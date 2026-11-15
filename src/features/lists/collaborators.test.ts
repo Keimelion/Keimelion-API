@@ -1,17 +1,48 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createHash } from 'crypto'
 import { db } from '../../db/client.js'
+import { env } from '../../config/env.js'
+import { NodeEnvs } from '../../shared/enums/node-env.js'
+import { sendMail } from '../../shared/mail/mail.sender.js'
 import { apiRequest } from '../../shared/test/api-request.js'
 import { generateTestToken, makeAccessTokenEntry } from '../../shared/test/auth.js'
+import { logger } from '../../shared/utils/logger.js'
 import {
   collaboratorsAcceptInviteResponseSchema,
   collaboratorsCreateInviteResponseSchema,
 } from '@keimelion/sdk/schemas'
 
+vi.mock('../../shared/mail/mail.sender.js', () => ({ sendMail: vi.fn() }))
+
+const WEB_APP_URL = 'https://app.keimelion.test'
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000
+const ONE_MINUTE_MS = 60 * 1000
+
+interface SentMail {
+  to: string
+  subject: string
+  html: string
+  text: string
+}
+
+async function waitForSentMail(): Promise<SentMail> {
+  await vi.waitFor(() => {
+    expect(sendMail).toHaveBeenCalledOnce()
+  })
+  return vi.mocked(sendMail).mock.calls[0]?.[0] as SentMail
+}
+
+function spyOnAllLogLevels(): () => string {
+  const spies = (['debug', 'info', 'warn', 'error'] as const).map((level) =>
+    vi.spyOn(logger, level).mockImplementation(() => undefined),
+  )
+  return () => JSON.stringify(spies.map((spy) => spy.mock.calls))
+}
+
 const OWNER_USER = {
   id: '00000000-0000-0000-0000-000000000001',
   email: 'owner@example.com',
-  username: 'owner',
+  username: 'owner' as string | null,
   passwordHash: 'hashed',
   authProvider: 'email' as const,
   role: 'user' as const,
@@ -124,6 +155,107 @@ const BASE_INVITE_ROW = {
 describe('POST /v1/lists/:listId/collaborators/invites', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(sendMail).mockResolvedValue({ isSuccess: true, messageId: 'message-1' })
+  })
+
+  async function postInvite(
+    owner: typeof OWNER_USER = OWNER_USER,
+    list: typeof MOCK_LIST = MOCK_LIST,
+  ): Promise<Response> {
+    const token = await generateTestToken(owner.id)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(OWNER_ACCESS_TOKEN_ENTRY)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(owner)
+    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(rowWithOwner(list, owner) as never)
+    vi.mocked(db.query.listUsers.findFirst).mockResolvedValueOnce(undefined)
+    mockPurgeExpiredInvites()
+    return apiRequest(`/v1/lists/${LIST_ID}/collaborators/invites`, {
+      method: 'POST',
+      token,
+      body: { email: 'Invitee@Example.com' },
+    })
+  }
+
+  it('emails the invited address a French invitation linking the web app with the raw token', async () => {
+    const valuesSpy = vi.fn().mockReturnValueOnce({
+      returning: vi.fn().mockResolvedValueOnce([BASE_INVITE_ROW]),
+    })
+    vi.mocked(db.insert).mockReturnValueOnce({ values: valuesSpy } as never)
+
+    const before = Date.now()
+    const response = await postInvite()
+
+    const body = (await response.json()) as { inviteToken: string }
+    const mail = await waitForSentMail()
+    const acceptUrl = `${WEB_APP_URL}/invites/accept#token=${body.inviteToken}`
+    const inserted = valuesSpy.mock.calls[0]?.[0] as { inviteToken: string; inviteTokenExpiresAt: Date }
+    expect(response.status).toBe(201)
+    expect(mail.to).toBe('invitee@example.com')
+    expect(mail.subject).toBe('owner vous invite sur la liste « Birthday wishlist »')
+    expect(mail.html).toContain('<html lang="fr">')
+    expect(mail.html).toContain('<strong>owner</strong> (owner@example.com) vous invite')
+    expect(mail.html).toContain(`href="${acceptUrl}"`)
+    expect(mail.html).toContain('banner-invitation.png')
+    expect(mail.text).toContain(`Rejoindre la liste :\n${acceptUrl}`)
+    expect(mail.text).toContain("L'invitation est valable 7 jours.")
+    expect(inserted.inviteToken).toBe(sha256Hex(body.inviteToken))
+    expect(inserted.inviteTokenExpiresAt.getTime() - before).toBeGreaterThanOrEqual(SEVEN_DAYS_MS)
+    expect(inserted.inviteTokenExpiresAt.getTime() - before).toBeLessThan(SEVEN_DAYS_MS + ONE_MINUTE_MS)
+  })
+
+  it('escapes the list title and names an inviter without username by address', async () => {
+    mockInsertInvite(BASE_INVITE_ROW)
+    const owner = { ...OWNER_USER, username: null }
+
+    await postInvite(owner, { ...MOCK_LIST, title: '<b>Léa & Axel</b>' })
+
+    const mail = await waitForSentMail()
+    expect(mail.html).toContain('<strong>&lt;b&gt;Léa &amp; Axel&lt;/b&gt;</strong>')
+    expect(mail.html).not.toContain('<b>Léa')
+    expect(mail.html).toContain('<strong>owner@example.com</strong> vous invite')
+    expect(mail.subject).toBe('owner@example.com vous invite sur la liste « <b>Léa & Axel</b> »')
+  })
+
+  it('still returns 201 when the provider fails, logging neither recipient nor link', async () => {
+    mockInsertInvite(BASE_INVITE_ROW)
+    vi.mocked(sendMail).mockResolvedValueOnce({ isSuccess: false, reason: 'provider_error' })
+    const readLogs = spyOnAllLogLevels()
+
+    const response = await postInvite()
+
+    expect(response.status).toBe(201)
+    await vi.waitFor(() => {
+      expect(logger.warn).toHaveBeenCalledWith({
+        event: 'list_invitation_email_failed',
+        reason: 'provider_error',
+      })
+    })
+    expect(readLogs()).not.toContain('invitee@example.com')
+    expect(readLogs()).not.toContain('#token=')
+  })
+
+  it('keeps the invited address and the token out of the production logs and response', async () => {
+    const originalNodeEnv = env.NODE_ENV
+    env.NODE_ENV = NodeEnvs.PRODUCTION
+    const readLogs = spyOnAllLogLevels()
+    try {
+      mockInsertInvite(BASE_INVITE_ROW)
+
+      const response = await postInvite()
+
+      const body = (await response.json()) as { inviteToken?: string }
+      const emailedToken = /#token=([a-f0-9]+)/.exec((await waitForSentMail()).text)?.[1] ?? ''
+      expect(response.status).toBe(201)
+      expect(body.inviteToken).toBeUndefined()
+      expect(emailedToken).toMatch(/^[a-f0-9]{64}$/)
+      expect(readLogs()).not.toContain(emailedToken)
+      expect(readLogs()).not.toContain('invitee@example.com')
+      expect(logger.info).toHaveBeenCalledWith(
+        { ownerId: OWNER_USER.id, listId: LIST_ID, inviteId: BASE_INVITE_ROW.id },
+        'Collaborator invite created',
+      )
+    } finally {
+      env.NODE_ENV = originalNodeEnv
+    }
   })
 
   it('returns 201 with the created invite and raw token in non-production', async () => {
@@ -212,6 +344,7 @@ describe('POST /v1/lists/:listId/collaborators/invites', () => {
     const body = await response.json() as { code: string }
     expect(response.status).toBe(409)
     expect(body.code).toBe('COLLAB_ALREADY_MEMBER')
+    expect(sendMail).not.toHaveBeenCalled()
   })
 
   it('returns 409 COLLAB_ALREADY_MEMBER when an accepted editor already exists', async () => {

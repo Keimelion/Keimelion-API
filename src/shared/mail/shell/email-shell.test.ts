@@ -16,6 +16,7 @@ const content: EmailShellContent = {
   action: { label: 'Confirmer', url: ACTION_URL },
   infoBox: { highlight: 'Valable 7 jours.', text: 'Ensuite, un seul e-mail.' },
   closingNote: 'Ignorez cet e-mail.',
+  footerReason: null,
   footerLinks: [
     { label: 'Politique de confidentialité', url: 'https://keimelion.test/privacy' },
     { label: 'Supprimer mon inscription', url: 'https://keimelion.test/delete#token=def' },
@@ -127,9 +128,7 @@ Premier paragraphe.
 Confirmer :
 ${ACTION_URL}
 
-Valable 7 jours.
-
-Ensuite, un seul e-mail.
+Valable 7 jours. Ensuite, un seul e-mail.
 
 Ignorez cet e-mail.
 
@@ -142,6 +141,39 @@ Une question ? contact@keimelion.app
 Politique de confidentialité : https://keimelion.test/privacy
 Supprimer mon inscription : https://keimelion.test/delete#token=def
 `)
+  })
+
+  it('sets the bold runs of a paragraph in strong, escaped, and keeps them inline in the text', () => {
+    const { html, text } = renderEmail({
+      ...content,
+      paragraphs: [['Un compte ', { strong: '<modérateur>' }, ' pour ', { strong: 'a&b@x.fr' }, '.']],
+    })
+
+    expect(html).toContain(
+      'Un compte <strong>&lt;modérateur&gt;</strong> pour <strong>a&amp;b@x.fr</strong>.</p>',
+    )
+    expect(text).toContain('\n\nUn compte <modérateur> pour a&b@x.fr.\n\n')
+  })
+
+  it('opens the footer with the reason the recipient gets the email', () => {
+    const reason = 'Vous recevez cet e-mail car <Léa> vous a invité.'
+    const { html, text } = renderEmail({ ...content, footerReason: reason })
+
+    const positions = indexesOf(html, [
+      'le trésor que l&#39;on garde',
+      'Vous recevez cet e-mail car &lt;Léa&gt; vous a invité.',
+      'Alban Pierson',
+    ])
+    expect(positions.every((position) => position >= 0)).toBe(true)
+    expect(positions).toEqual([...positions].sort((left, right) => left - right))
+    expect(text).toContain(`—\n${reason}\nKeimêlion est édité par`)
+  })
+
+  it.each(Object.values(EmailBannerThemes))('loads the %s banner from the API email assets', (theme) => {
+    const { html } = renderEmail({ ...content, bannerTheme: theme })
+
+    expect(html).toContain(`bgcolor="${EMAIL_BANNER_COLORS[theme]}"`)
+    expect(html).toContain(`src="http://localhost:3000/assets/mail/banner-${theme}.png"`)
   })
 
   it('uses the English shell copy for an English email', () => {

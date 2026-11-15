@@ -1,3 +1,4 @@
+import { createHash } from 'crypto'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { db } from '../../db/client.js'
 import { env } from '../../config/env.js'
@@ -14,8 +15,12 @@ import {
   verifyEmailResponseSchema,
 } from '@keimelion/sdk/schemas'
 import { NodeEnvs } from '../../shared/enums/node-env.js'
+import { sendMail } from '../../shared/mail/mail.sender.js'
 import { apiMultipartRequest, apiRequest } from '../../shared/test/api-request.js'
 import { generateTestToken, makeAccessTokenEntry } from '../../shared/test/auth.js'
+import { logger } from '../../shared/utils/logger.js'
+
+vi.mock('../../shared/mail/mail.sender.js', () => ({ sendMail: vi.fn() }))
 
 const TEST_REFRESH_TOKEN_HASH = 'a'.repeat(64)
 
@@ -55,6 +60,56 @@ const VALID_REFRESH_TOKEN_ROW = {
   revokedAt: null,
 }
 
+const WEB_APP_URL = 'https://app.keimelion.test'
+const BACKOFFICE_URL = 'https://backoffice.keimelion.test'
+const ONE_HOUR_MS = 60 * 60 * 1000
+const ONE_MINUTE_MS = 60 * 1000
+const MAIL_SENT = { isSuccess: true, messageId: 'message-1' } as const
+
+interface SentMail {
+  to: string
+  subject: string
+  html: string
+  text: string
+}
+
+interface PasswordResetUpdate {
+  passwordResetToken: string
+  passwordResetTokenExpiresAt: Date
+}
+
+async function waitForSentMail(): Promise<SentMail> {
+  await vi.waitFor(() => {
+    expect(sendMail).toHaveBeenCalledOnce()
+  })
+  return vi.mocked(sendMail).mock.calls[0]?.[0] as SentMail
+}
+
+async function flushBackgroundWork(): Promise<void> {
+  await new Promise((resolve) => setImmediate(resolve))
+}
+
+function sha256Hex(value: string): string {
+  return createHash('sha256').update(value).digest('hex')
+}
+
+function spyOnAllLogLevels(): () => string {
+  const spies = (['debug', 'info', 'warn', 'error'] as const).map((level) =>
+    vi.spyOn(logger, level).mockImplementation(() => undefined),
+  )
+  return () => JSON.stringify(spies.map((spy) => spy.mock.calls))
+}
+
+function mockPasswordResetUpdate(): ReturnType<typeof vi.fn> {
+  const setSpy = vi.fn().mockReturnValueOnce({ where: vi.fn().mockResolvedValueOnce(undefined) })
+  vi.mocked(db.update).mockReturnValueOnce({ set: setSpy } as never)
+  return setSpy
+}
+
+function postForgotPassword(email: string, headers: Record<string, string> = {}): Promise<Response> {
+  return apiRequest('/v1/auth/forgot-password', { method: 'POST', body: { email }, headers })
+}
+
 function mockInsertReturning(returnValue: unknown): void {
   vi.mocked(db.insert).mockReturnValueOnce({
     values: vi.fn().mockReturnValueOnce({
@@ -72,6 +127,89 @@ function mockInsertNoReturning(): void {
 describe('POST /v1/auth/register', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(sendMail).mockResolvedValue(MAIL_SENT)
+  })
+
+  function mockRegistrationInserts(): ReturnType<typeof vi.fn> {
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(undefined)
+    const valuesSpy = vi.fn().mockReturnValueOnce({
+      returning: vi.fn().mockResolvedValueOnce([VALID_USER]),
+    })
+    vi.mocked(db.insert).mockReturnValueOnce({ values: valuesSpy } as never)
+    mockInsertNoReturning()
+    return valuesSpy
+  }
+
+  function postRegister(headers: Record<string, string> = {}): Promise<Response> {
+    return apiRequest('/v1/auth/register', {
+      method: 'POST',
+      body: { email: 'user@example.com', password: 'securepassword123' },
+      headers,
+    })
+  }
+
+  it('sends a French verification email by default, linking the web app with the stored token', async () => {
+    const valuesSpy = mockRegistrationInserts()
+
+    const response = await postRegister()
+
+    const mail = await waitForSentMail()
+    const { emailVerifyToken } = valuesSpy.mock.calls[0]?.[0] as { emailVerifyToken: string }
+    const verifyUrl = `${WEB_APP_URL}/auth/verify-email#token=${emailVerifyToken}`
+    expect(response.status).toBe(201)
+    expect(mail.to).toBe('user@example.com')
+    expect(mail.subject).toBe('Confirmez votre adresse e-mail')
+    expect(mail.html).toContain('<html lang="fr">')
+    expect(mail.html).toContain(`href="${verifyUrl}"`)
+    expect(mail.html).toContain('banner-account.png')
+    expect(mail.text).toContain(`Confirmer mon adresse :\n${verifyUrl}`)
+    expect(mail.text).toContain('Ce lien est valable 24 heures.')
+  })
+
+  it('sends the verification email in the language of the request', async () => {
+    mockRegistrationInserts()
+
+    await postRegister({ 'Accept-Language': 'en-GB,en;q=0.9,fr;q=0.8' })
+
+    const mail = await waitForSentMail()
+    expect(mail.subject).toBe('Confirm your email address')
+    expect(mail.text).toContain('This link is valid for 24 hours.')
+  })
+
+  it('falls back to French for a language the emails do not support', async () => {
+    mockRegistrationInserts()
+
+    await postRegister({ 'Accept-Language': 'de-DE' })
+
+    expect((await waitForSentMail()).subject).toBe('Confirmez votre adresse e-mail')
+  })
+
+  it('still returns 201 when the provider fails, logging neither recipient nor link', async () => {
+    mockRegistrationInserts()
+    vi.mocked(sendMail).mockResolvedValueOnce({ isSuccess: false, reason: 'timeout' })
+    const readLogs = spyOnAllLogLevels()
+
+    const response = await postRegister()
+
+    expect(response.status).toBe(201)
+    await vi.waitFor(() => {
+      expect(logger.warn).toHaveBeenCalledWith({
+        event: 'auth_verification_email_failed',
+        reason: 'timeout',
+      })
+    })
+    expect(readLogs()).not.toContain('user@example.com')
+    expect(readLogs()).not.toContain('verify-email')
+  })
+
+  it('does not send any email when the address is already taken', async () => {
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(VALID_USER)
+
+    const response = await postRegister()
+
+    await flushBackgroundWork()
+    expect(response.status).toBe(409)
+    expect(sendMail).not.toHaveBeenCalled()
   })
 
   it('returns 201 with user and refreshToken when registration is successful', async () => {
@@ -516,6 +654,130 @@ describe('POST /v1/auth/logout', () => {
 describe('POST /v1/auth/forgot-password', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(sendMail).mockResolvedValue(MAIL_SENT)
+  })
+
+  it('emails a web app reset link whose token hash is stored for 1 hour', async () => {
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(VALID_USER)
+    const setSpy = mockPasswordResetUpdate()
+
+    const before = Date.now()
+    const response = await postForgotPassword('user@example.com')
+
+    const body = (await response.json()) as { passwordResetToken: string }
+    const mail = await waitForSentMail()
+    const resetUrl = `${WEB_APP_URL}/auth/reset-password#token=${body.passwordResetToken}`
+    const stored = setSpy.mock.calls[0]?.[0] as PasswordResetUpdate
+    expect(mail.to).toBe('user@example.com')
+    expect(mail.subject).toBe('Réinitialisez votre mot de passe Keimêlion')
+    expect(mail.html).toContain(`href="${resetUrl}"`)
+    expect(mail.text).toContain(`Choisir un nouveau mot de passe :\n${resetUrl}`)
+    expect(mail.text).toContain("Ce lien est valable 1 heure et ne fonctionne qu'une seule fois.")
+    expect(stored.passwordResetToken).toBe(sha256Hex(body.passwordResetToken))
+    expect(stored.passwordResetTokenExpiresAt.getTime() - before).toBeGreaterThanOrEqual(ONE_HOUR_MS)
+    expect(stored.passwordResetTokenExpiresAt.getTime() - before).toBeLessThan(ONE_HOUR_MS + ONE_MINUTE_MS)
+  })
+
+  it('sends the reset email in the language of the request', async () => {
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(VALID_USER)
+    mockPasswordResetUpdate()
+
+    await postForgotPassword('user@example.com', { 'Accept-Language': 'en' })
+
+    const mail = await waitForSentMail()
+    expect(mail.subject).toBe('Reset your Keimêlion password')
+    expect(mail.text).toContain('This link is valid for 1 hour and can only be used once.')
+  })
+
+  it.each(['moderator', 'admin'] as const)('links a %s to the Backoffice reset-password page', async (role) => {
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce({ ...VALID_USER, role })
+    mockPasswordResetUpdate()
+
+    const response = await postForgotPassword('user@example.com')
+
+    const body = (await response.json()) as { passwordResetToken: string }
+    const mail = await waitForSentMail()
+    expect(mail.html).toContain(`href="${BACKOFFICE_URL}/reset-password?token=${body.passwordResetToken}"`)
+    expect(mail.text).not.toContain(WEB_APP_URL)
+  })
+
+  it('sends nothing and stores nothing for an unknown address, with the same response body', async () => {
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(undefined)
+
+    const response = await postForgotPassword('unknown@example.com')
+
+    await flushBackgroundWork()
+    expect(await response.json()).toEqual({ message: 'If this email is registered, a reset link has been sent' })
+    expect(sendMail).not.toHaveBeenCalled()
+    expect(db.update).not.toHaveBeenCalled()
+  })
+
+  it('answers the same in production whether or not the account exists', async () => {
+    const originalEnv = env.NODE_ENV
+    env.NODE_ENV = NodeEnvs.PRODUCTION
+    try {
+      vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(VALID_USER)
+      mockPasswordResetUpdate()
+      const known = await postForgotPassword('user@example.com')
+      vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(undefined)
+      const unknown = await postForgotPassword('unknown@example.com')
+
+      expect(known.status).toBe(unknown.status)
+      expect(await known.json()).toEqual(await unknown.json())
+      await waitForSentMail()
+    } finally {
+      env.NODE_ENV = originalEnv
+    }
+  })
+
+  it('keeps the token and the recipient out of the production logs', async () => {
+    const originalEnv = env.NODE_ENV
+    env.NODE_ENV = NodeEnvs.PRODUCTION
+    const readLogs = spyOnAllLogLevels()
+    try {
+      vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(VALID_USER)
+      const setSpy = mockPasswordResetUpdate()
+      vi.mocked(sendMail).mockResolvedValueOnce({ isSuccess: false, reason: 'provider_error' })
+
+      const response = await postForgotPassword('user@example.com')
+
+      const emailedToken = /#token=([a-f0-9]+)/.exec((await waitForSentMail()).text)?.[1] ?? ''
+      await vi.waitFor(() => {
+        expect(logger.warn).toHaveBeenCalledWith({
+          event: 'auth_password_reset_email_failed',
+          reason: 'provider_error',
+        })
+      })
+      const stored = setSpy.mock.calls[0]?.[0] as PasswordResetUpdate
+      expect(response.status).toBe(200)
+      expect(stored.passwordResetToken).toBe(sha256Hex(emailedToken))
+      expect(readLogs()).not.toContain(emailedToken)
+      expect(readLogs()).not.toContain('user@example.com')
+    } finally {
+      env.NODE_ENV = originalEnv
+    }
+  })
+
+  it('still answers 200 when storing the token fails, and sends no link', async () => {
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(VALID_USER)
+    vi.mocked(db.update).mockReturnValueOnce({
+      set: vi.fn().mockReturnValueOnce({
+        where: vi.fn().mockRejectedValueOnce(new Error('connection lost')),
+      }),
+    } as never)
+    const readLogs = spyOnAllLogLevels()
+
+    const response = await postForgotPassword('user@example.com')
+
+    expect(response.status).toBe(200)
+    await vi.waitFor(() => {
+      expect(logger.error).toHaveBeenCalledWith({
+        event: 'auth_password_reset_failed',
+        errorName: 'Error',
+      })
+    })
+    expect(sendMail).not.toHaveBeenCalled()
+    expect(readLogs()).not.toContain('connection lost')
   })
 
   it('returns 200 with generic message for a registered email user', async () => {

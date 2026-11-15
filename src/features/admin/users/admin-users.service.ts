@@ -2,8 +2,8 @@ import { randomBytes } from 'crypto'
 import { db } from '../../../db/client.js'
 import { env } from '../../../config/env.js'
 import { buildPaginatedResponse } from '../../../shared/utils/pagination.js'
-import { ErrorCode, HttpStatus, UserRoles } from '@keimelion/sdk/enums'
-import type { UserRole } from '@keimelion/sdk/enums'
+import { ErrorCode, HttpStatus } from '@keimelion/sdk/enums'
+import type { StaffRole } from '@keimelion/sdk/enums'
 import type {
   AdminUsersCreateRequestParsed,
   AdminUsersCreateResponseParsed,
@@ -11,6 +11,8 @@ import type {
   PaginatedResponse,
 } from '@keimelion/sdk/schemas'
 import { NodeEnvs } from '../../../shared/enums/node-env.js'
+import { sendMailInBackground } from '../../../shared/mail/mail.background.js'
+import { EMAIL_DEFAULT_LOCALE } from '../../../shared/mail/mail.locale.js'
 import { serviceError } from '../../../shared/utils/response.js'
 import { logger } from '../../../shared/utils/logger.js'
 import { hashPassword, hashSha256Hex } from '../../../shared/utils/hash.js'
@@ -21,6 +23,7 @@ import { findUserById, findUserByIdWithAvatar, softDeleteUser } from '../../../d
 import { revokeAllUserSessions } from '../../../shared/db/user-sessions.js'
 import { cleanupReplacedImage } from '../../uploads/images.service.js'
 import { toAdminUser } from './admin-users.mapper.js'
+import { buildStaffInvitationEmail } from './emails/staff-invitation.email.js'
 import {
   countReservationsByUserIds,
   countReservationsForUser,
@@ -31,8 +34,10 @@ import type { User } from '../../../db/entities/users/users.schema.js'
 import type { ServiceResult } from '../../../shared/types/service.js'
 import type { ListUsersInput } from './endpoints/list-users.js'
 
-const ADMIN_PASSWORD_RESET_TOKEN_TTL_MS = 24 * 60 * 60 * 1000
+const STAFF_INVITATION_VALIDITY_HOURS = 24
+const ONE_HOUR_MS = 60 * 60 * 1000
 const PASSWORD_RESET_TOKEN_BYTE_LENGTH = 32
+const STAFF_INVITATION_EMAIL_FAILED_EVENT = 'admin_staff_invitation_email_failed'
 
 export async function createUser(
   adminId: string,
@@ -40,7 +45,9 @@ export async function createUser(
 ): Promise<ServiceResult<AdminUsersCreateResponseParsed & { passwordResetToken?: string }>> {
   const rawPasswordResetToken = randomBytes(PASSWORD_RESET_TOKEN_BYTE_LENGTH).toString('hex')
   const hashedPasswordResetToken = hashSha256Hex(rawPasswordResetToken)
-  const passwordResetTokenExpiresAt = new Date(Date.now() + ADMIN_PASSWORD_RESET_TOKEN_TTL_MS)
+  const passwordResetTokenExpiresAt = new Date(
+    Date.now() + STAFF_INVITATION_VALIDITY_HOURS * ONE_HOUR_MS,
+  )
 
   const rawPassword = randomBytes(PASSWORD_RESET_TOKEN_BYTE_LENGTH).toString('hex')
   const passwordHash = await hashPassword(rawPassword)
@@ -63,7 +70,7 @@ export async function createUser(
   const createdUser = toAdminUser({ ...outcome.row, avatarImage: null }, 0)
 
   logAdminUserCreation(adminId, createdUser.id, input.role)
-  sendAdminInvitationEmail(input.email, rawPasswordResetToken)
+  sendStaffInvitationEmail(input, rawPasswordResetToken)
 
   return {
     data: {
@@ -173,25 +180,24 @@ export async function deleteUser(adminId: string, targetUserId: string): Promise
   return { data: { message: 'User deleted successfully' }, httpStatus: HttpStatus.OK }
 }
 
-function logAdminUserCreation(adminId: string, targetUserId: string, role: UserRole): void {
-  const payload = { adminId, targetUserId, action: AdminAction.CREATE_USER, role }
-  const isPrivilegedRole = role === UserRoles.MODERATOR || role === UserRoles.ADMIN
-
-  if (isPrivilegedRole) {
-    logger.warn(payload)
-    return
-  }
-
-  logger.info(payload)
+// Every created account is a staff account: always a warning, so privilege grants stand out
+function logAdminUserCreation(adminId: string, targetUserId: string, role: StaffRole): void {
+  logger.warn({ adminId, targetUserId, action: AdminAction.CREATE_USER, role })
 }
 
-function sendAdminInvitationEmail(email: string, rawPasswordResetToken: string): void {
-  const passwordResetUrl = new URL(`/auth/reset-password?token=${rawPasswordResetToken}`, env.APP_URL).href
-
-  if (env.NODE_ENV !== NodeEnvs.PRODUCTION) {
-    logger.info({ email, passwordResetUrl }, 'Admin invitation URL (dev/test)')
-    return
-  }
-
-  logger.info({ email }, 'Sending admin invitation email via Resend')
+// The recipient's language is unknown: the invitation goes out in the default email locale
+function sendStaffInvitationEmail(
+  input: AdminUsersCreateRequestParsed,
+  setPasswordToken: string,
+): void {
+  sendMailInBackground(STAFF_INVITATION_EMAIL_FAILED_EVENT, () => ({
+    to: input.email,
+    ...buildStaffInvitationEmail({
+      locale: EMAIL_DEFAULT_LOCALE,
+      role: input.role,
+      email: input.email,
+      setPasswordToken,
+      validityHours: STAFF_INVITATION_VALIDITY_HOURS,
+    }),
+  }))
 }

@@ -1,5 +1,10 @@
+import { createHash } from 'crypto'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { ErrorCode } from '@keimelion/sdk/enums'
 import { db } from '../../../db/client.js'
+import { env } from '../../../config/env.js'
+import { NodeEnvs } from '../../../shared/enums/node-env.js'
+import { sendMail } from '../../../shared/mail/mail.sender.js'
 import { apiRequest } from '../../../shared/test/api-request.js'
 import { generateTestToken, makeAccessTokenEntry } from '../../../shared/test/auth.js'
 import { ADMIN_USER_FIXTURE as ADMIN_USER, makeAdminUser } from '../../../shared/test/fixtures/users.js'
@@ -20,6 +25,31 @@ vi.mock('../../../shared/utils/logger.js', () => ({
     error: vi.fn(),
   },
 }))
+
+vi.mock('../../../shared/mail/mail.sender.js', () => ({ sendMail: vi.fn() }))
+
+const BACKOFFICE_URL = 'https://backoffice.keimelion.test'
+const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000
+const ONE_MINUTE_MS = 60 * 1000
+
+interface ValidationErrorBody {
+  code: string
+  metadata: { issues: { path: string }[] }
+}
+
+interface SentMail {
+  to: string
+  subject: string
+  html: string
+  text: string
+}
+
+async function waitForSentMail(): Promise<SentMail> {
+  await vi.waitFor(() => {
+    expect(sendMail).toHaveBeenCalledOnce()
+  })
+  return vi.mocked(sendMail).mock.calls[0]?.[0] as SentMail
+}
 
 
 const TARGET_USER = makeAdminUser({
@@ -953,6 +983,7 @@ describe('POST /v1/admin/users', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
+    vi.mocked(sendMail).mockResolvedValue({ isSuccess: true, messageId: 'message-1' })
   })
 
   function mockInsertUser(): void {
@@ -964,7 +995,7 @@ describe('POST /v1/admin/users', () => {
   }
 
   it('returns 401 when no authorization header is provided', async () => {
-    const response = await apiRequest('/v1/admin/users', { method: 'POST', body: { email: 'new@example.com', role: 'user' } })
+    const response = await apiRequest('/v1/admin/users', { method: 'POST', body: { email: 'new@example.com', role: 'moderator' } })
     expect(response.status).toBe(401)
   })
 
@@ -1014,7 +1045,7 @@ describe('POST /v1/admin/users', () => {
     const response = await apiRequest('/v1/admin/users', {
       method: 'POST',
       token,
-      body: { email: 'not-an-email', role: 'user' },
+      body: { email: 'not-an-email', role: 'moderator' },
     })
 
     expect(response.status).toBe(422)
@@ -1027,7 +1058,7 @@ describe('POST /v1/admin/users', () => {
     const response = await apiRequest('/v1/admin/users', {
       method: 'POST',
       token,
-      body: { email: 'new@example.com', username: 'bad username!', role: 'user' },
+      body: { email: 'new@example.com', username: 'bad username!', role: 'moderator' },
     })
 
     expect(response.status).toBe(422)
@@ -1040,7 +1071,7 @@ describe('POST /v1/admin/users', () => {
     const response = await apiRequest('/v1/admin/users', {
       method: 'POST',
       token,
-      body: { email: 'new@example.com', role: 'user', unknownField: 'value' },
+      body: { email: 'new@example.com', role: 'moderator', unknownField: 'value' },
     })
 
     expect(response.status).toBe(422)
@@ -1053,7 +1084,7 @@ describe('POST /v1/admin/users', () => {
     const response = await apiRequest('/v1/admin/users', {
       method: 'POST',
       token,
-      body: { email: 'new@example.com', role: 'user', password: 'somepassword' },
+      body: { email: 'new@example.com', role: 'moderator', password: 'somepassword' },
     })
 
     expect(response.status).toBe(422)
@@ -1128,21 +1159,126 @@ describe('POST /v1/admin/users', () => {
     expect(vi.mocked(logger.warn)).toHaveBeenCalledOnce()
   })
 
-  it('logs at info level for non-privileged role (user)', async () => {
+  it('returns 422 on the role when it is user: regular users only come from public registration', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
-    mockInsertUser()
 
-    await apiRequest('/v1/admin/users', {
+    const response = await apiRequest('/v1/admin/users', {
       method: 'POST',
       token,
       body: { email: 'new@example.com', role: 'user' },
     })
 
-    expect(vi.mocked(logger.warn)).not.toHaveBeenCalled()
-    expect(vi.mocked(logger.info)).toHaveBeenCalledWith(
-      expect.objectContaining({ action: 'admin_create_user', role: 'user' }),
+    const body = (await response.json()) as ValidationErrorBody
+    expect(response.status).toBe(422)
+    expect(body.code).toBe(ErrorCode.UNPROCESSABLE_ENTITY)
+    expect(body.metadata.issues.map((issue) => issue.path)).toEqual(['role'])
+    expect(db.insert).not.toHaveBeenCalled()
+    expect(sendMail).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['moderator', 'modérateur'],
+    ['admin', 'administrateur'],
+  ] as const)('sends the %s a French staff invitation with the Backoffice set-password link', async (role, roleLabel) => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
+    mockInsertUser()
+
+    const response = await apiRequest('/v1/admin/users', {
+      method: 'POST',
+      token,
+      body: { email: 'new@example.com', role },
+    })
+
+    const body = (await response.json()) as { passwordResetToken: string }
+    const mail = await waitForSentMail()
+    const setPasswordUrl = `${BACKOFFICE_URL}/reset-password?token=${body.passwordResetToken}`
+    expect(response.status).toBe(201)
+    expect(mail.to).toBe('new@example.com')
+    expect(mail.subject).toBe('Votre accès au Backoffice Keimêlion')
+    expect(mail.html).toContain('<html lang="fr">')
+    expect(mail.html).toContain(`<strong>${roleLabel}</strong>`)
+    expect(mail.html).toContain(`href="${setPasswordUrl}"`)
+    expect(mail.html).toContain('banner-staff.png')
+    expect(mail.text).toContain(
+      `un compte ${roleLabel} sur le Backoffice, avec l'adresse new@example.com.`,
     )
+    expect(mail.text).toContain(`Définir mon mot de passe :\n${setPasswordUrl}`)
+    expect(mail.text).toContain("Ce lien est valable 24 heures et ne fonctionne qu'une seule fois.")
+  })
+
+  it('stores the hash of the emailed token, valid 24 hours', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
+    const valuesMock = vi.fn().mockReturnValueOnce({
+      returning: vi.fn().mockResolvedValueOnce([TARGET_USER]),
+    })
+    vi.mocked(db.insert).mockReturnValueOnce({ values: valuesMock } as never)
+
+    const before = Date.now()
+    await apiRequest('/v1/admin/users', {
+      method: 'POST',
+      token,
+      body: { email: 'new@example.com', role: 'moderator' },
+    })
+
+    const emailedToken = /\?token=([a-f0-9]+)/.exec((await waitForSentMail()).text)?.[1] ?? ''
+    const inserted = valuesMock.mock.calls[0]?.[0] as { passwordResetToken: string; passwordResetTokenExpiresAt: Date }
+    expect(inserted.passwordResetToken).toBe(createHash('sha256').update(emailedToken).digest('hex'))
+    expect(inserted.passwordResetTokenExpiresAt.getTime() - before).toBeGreaterThanOrEqual(TWENTY_FOUR_HOURS_MS)
+    expect(inserted.passwordResetTokenExpiresAt.getTime() - before).toBeLessThan(TWENTY_FOUR_HOURS_MS + ONE_MINUTE_MS)
+  })
+
+  it('still returns 201 when the provider fails, logging neither recipient nor link', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
+    mockInsertUser()
+    vi.mocked(sendMail).mockResolvedValueOnce({ isSuccess: false, reason: 'provider_error' })
+
+    const response = await apiRequest('/v1/admin/users', {
+      method: 'POST',
+      token,
+      body: { email: 'new@example.com', role: 'moderator' },
+    })
+
+    expect(response.status).toBe(201)
+    await vi.waitFor(() => {
+      expect(logger.warn).toHaveBeenCalledWith({
+        event: 'admin_staff_invitation_email_failed',
+        reason: 'provider_error',
+      })
+    })
+  })
+
+  it('logs neither the token nor the recipient address in production', async () => {
+    const originalNodeEnv = env.NODE_ENV
+    env.NODE_ENV = NodeEnvs.PRODUCTION
+    try {
+      const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+      vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
+      mockInsertUser()
+
+      const response = await apiRequest('/v1/admin/users', {
+        method: 'POST',
+        token,
+        body: { email: 'new@example.com', role: 'moderator' },
+      })
+
+      const body = (await response.json()) as { passwordResetToken?: string }
+      const emailedToken = /\?token=([a-f0-9]+)/.exec((await waitForSentMail()).text)?.[1] ?? ''
+      const logs = JSON.stringify([
+        vi.mocked(logger.info).mock.calls,
+        vi.mocked(logger.warn).mock.calls,
+        vi.mocked(logger.error).mock.calls,
+      ])
+      expect(body.passwordResetToken).toBeUndefined()
+      expect(emailedToken).not.toBe('')
+      expect(logs).not.toContain(emailedToken)
+      expect(logs).not.toContain('new@example.com')
+    } finally {
+      env.NODE_ENV = originalNodeEnv
+    }
   })
 
   it('calls db.insert with expected explicit values', async () => {
@@ -1157,7 +1293,7 @@ describe('POST /v1/admin/users', () => {
     await apiRequest('/v1/admin/users', {
       method: 'POST',
       token,
-      body: { email: 'new@example.com', role: 'user' },
+      body: { email: 'new@example.com', role: 'moderator' },
     })
 
     expect(valuesMock).toHaveBeenCalledOnce()
@@ -1190,9 +1326,10 @@ describe('POST /v1/admin/users', () => {
     const response = await apiRequest('/v1/admin/users', {
       method: 'POST',
       token,
-      body: { email: 'new@example.com', role: 'user' },
+      body: { email: 'new@example.com', role: 'moderator' },
     })
 
     expect(response.status).toBe(409)
+    expect(sendMail).not.toHaveBeenCalled()
   })
 })

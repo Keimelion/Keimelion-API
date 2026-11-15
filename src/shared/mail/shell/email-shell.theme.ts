@@ -35,6 +35,8 @@ export const EmailBannerThemes = {
   RESERVATION: 'reservation',
   ACCOUNT: 'account',
   LAUNCH: 'launch',
+  STAFF: 'staff',
+  INVITATION: 'invitation',
 } as const
 
 export type EmailBannerTheme = (typeof EmailBannerThemes)[keyof typeof EmailBannerThemes]
@@ -44,6 +46,8 @@ export const EMAIL_BANNER_COLORS: Record<EmailBannerTheme, string> = {
   [EmailBannerThemes.RESERVATION]: '#A8E0C0',
   [EmailBannerThemes.ACCOUNT]: '#9FCBF2',
   [EmailBannerThemes.LAUNCH]: '#F2BF3D',
+  [EmailBannerThemes.STAFF]: '#1C1A33',
+  [EmailBannerThemes.INVITATION]: '#F7B8C8',
 }
 
 // Email images (assets/mail/), rendered by src/dev/mail/render-mail-assets.ts at these display

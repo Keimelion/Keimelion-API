@@ -5,6 +5,8 @@ import { NodeEnvs } from '../../shared/enums/node-env.js'
 import { env } from '../../config/env.js'
 import { hashSha256Hex } from '../../shared/utils/hash.js'
 import { logger } from '../../shared/utils/logger.js'
+import { sendMailInBackground } from '../../shared/mail/mail.background.js'
+import { EMAIL_DEFAULT_LOCALE } from '../../shared/mail/mail.locale.js'
 import { runWrite } from '../../shared/utils/admin-write.js'
 import { isPgUniqueViolation } from '../../shared/db/pg-errors.js'
 import { serviceError } from '../../shared/utils/response.js'
@@ -18,6 +20,7 @@ import {
 } from '../../db/entities/list-invites/list-invites.repository.js'
 import { findListById } from '../../db/entities/lists/lists.repository.js'
 import { toInviteDetail } from '../../shared/types/collaborator.js'
+import { buildListInvitationEmail } from './emails/list-invitation.email.js'
 import type { CollaboratorDetail } from '../../shared/types/collaborator.js'
 import type { User } from '../../db/entities/users/users.schema.js'
 import type { ListRowWithOwner } from '../../shared/types/list.js'
@@ -27,7 +30,11 @@ import type {
   CollaboratorsCreateInviteRequestParsed,
 } from '@keimelion/sdk/schemas'
 
-export const COLLAB_INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000
+const COLLAB_INVITE_TTL_DAYS = 7
+const ONE_DAY_MS = 24 * 60 * 60 * 1000
+const LIST_INVITATION_EMAIL_FAILED_EVENT = 'list_invitation_email_failed'
+
+export const COLLAB_INVITE_TTL_MS = COLLAB_INVITE_TTL_DAYS * ONE_DAY_MS
 
 // Raw token sent to the invitee; independent from the stored hash width (SHA256_HEX_LENGTH).
 export const INVITE_TOKEN_BYTE_LENGTH = 32
@@ -80,7 +87,8 @@ export async function createListInvite(
     return serviceError(outcome.errorCode)
   }
 
-  logInviteCreated(owner.id, list.id, input.email, rawToken)
+  logInviteCreated(owner.id, list.id, outcome.row.id)
+  sendListInvitationEmail({ list, owner, invitedEmail: input.email, inviteToken: rawToken })
 
   const invite = toInviteDetail(outcome.row)
   const response: CreateInviteResponse = { invite }
@@ -143,12 +151,30 @@ export async function acceptListInvite(
   }
 }
 
-function logInviteCreated(ownerId: string, listId: string, invitedEmail: string, rawToken: string): void {
-  if (env.NODE_ENV !== NodeEnvs.PRODUCTION) {
-    logger.info({ ownerId, listId, invitedEmail, rawToken }, 'Collaborator invite created (dev/test)')
-    return
-  }
-  logger.info({ ownerId, listId, invitedEmail }, 'Collaborator invite created')
+function logInviteCreated(ownerId: string, listId: string, inviteId: string): void {
+  logger.info({ ownerId, listId, inviteId }, 'Collaborator invite created')
+}
+
+interface ListInvitationDelivery {
+  list: ListRowWithOwner
+  owner: User
+  invitedEmail: string
+  inviteToken: string
+}
+
+// The invitee's language is unknown: the invitation goes out in the default email locale
+function sendListInvitationEmail(delivery: ListInvitationDelivery): void {
+  sendMailInBackground(LIST_INVITATION_EMAIL_FAILED_EVENT, () => ({
+    to: delivery.invitedEmail,
+    ...buildListInvitationEmail({
+      locale: EMAIL_DEFAULT_LOCALE,
+      inviterName: delivery.owner.username,
+      inviterEmail: delivery.owner.email,
+      listName: delivery.list.title,
+      inviteToken: delivery.inviteToken,
+      validityDays: COLLAB_INVITE_TTL_DAYS,
+    }),
+  }))
 }
 
 function logInviteAccepted(acceptorId: string, listId: string, inviteId: string): void {

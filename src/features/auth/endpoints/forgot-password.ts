@@ -3,6 +3,7 @@ import { forgotPasswordRequestSchema } from '@keimelion/sdk/schemas'
 import { RATE_LIMITS } from '../../../shared/utils/rate-limiter.js'
 import { validationErrorHandler } from '../../../shared/utils/validation.js'
 import { jsonResult } from '../../../shared/utils/response.js'
+import { resolveEmailLocale } from '../../../shared/mail/mail.locale.js'
 import { requestPasswordReset } from '../auth.service.js'
 import type { FeatureRouter } from '../../../shared/types/app.js'
 
@@ -13,7 +14,8 @@ export function mountForgotPassword(router: FeatureRouter): void {
     zValidator('json', forgotPasswordRequestSchema, validationErrorHandler),
     async (context) => {
       const input = context.req.valid('json')
-      return jsonResult(context, await requestPasswordReset(input))
+      const emailLocale = resolveEmailLocale(context.req.header('Accept-Language'))
+      return jsonResult(context, await requestPasswordReset(input, emailLocale))
     },
   )
 }
