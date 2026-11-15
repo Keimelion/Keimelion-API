@@ -6,7 +6,15 @@ const EXIT_ERROR = 'process.exit called'
 const API_KEY = 'test-provider-key'
 const FROM = 'noreply@keimelion.app'
 const PUBLIC_LANDING_URL = 'https://keimelion.app'
-const REAL_SENDING = { EMAIL_API_KEY: API_KEY, EMAIL_FROM: FROM, LANDING_URL: PUBLIC_LANDING_URL }
+const PUBLIC_WEB_APP_URL = 'https://app.keimelion.app'
+const PUBLIC_BACKOFFICE_URL = 'https://backoffice.keimelion.app'
+const REAL_SENDING = {
+  EMAIL_API_KEY: API_KEY,
+  EMAIL_FROM: FROM,
+  LANDING_URL: PUBLIC_LANDING_URL,
+  WEB_APP_URL: PUBLIC_WEB_APP_URL,
+  BACKOFFICE_URL: PUBLIC_BACKOFFICE_URL,
+}
 
 // Blank rather than unset: dotenv would otherwise fill the value from a developer's local .env.
 const NO_VALUE = ''
@@ -32,7 +40,7 @@ describe('env mail settings', () => {
     vi.restoreAllMocks()
   })
 
-  it('boots in production with a key, a sender and a public landing URL', async () => {
+  it('boots in production with a key, a sender and public link base URLs', async () => {
     await expect(
       loadEnv({ NODE_ENV: NodeEnvs.PRODUCTION, ...REAL_SENDING }),
     ).resolves.toBeUndefined()
@@ -42,6 +50,8 @@ describe('env mail settings', () => {
     ['EMAIL_API_KEY', { ...REAL_SENDING, EMAIL_API_KEY: NO_VALUE }],
     ['EMAIL_FROM', { ...REAL_SENDING, EMAIL_FROM: NO_VALUE }],
     ['LANDING_URL', { ...REAL_SENDING, LANDING_URL: 'http://localhost:4321' }],
+    ['WEB_APP_URL', { ...REAL_SENDING, WEB_APP_URL: 'http://localhost:3002' }],
+    ['BACKOFFICE_URL', { ...REAL_SENDING, BACKOFFICE_URL: 'http://127.0.0.1:3001' }],
   ])('refuses to boot in production without %s', async (missingKey, mailSettings) => {
     await expect(loadEnv({ NODE_ENV: NodeEnvs.PRODUCTION, ...mailSettings })).rejects.toThrow(
       EXIT_ERROR,
@@ -71,12 +81,14 @@ describe('env mail settings', () => {
     ).resolves.toBeUndefined()
   })
 
-  it('boots in production with a local landing URL when the provider is log', async () => {
+  it('boots in production with local link base URLs when the provider is log', async () => {
     await expect(
       loadEnv({
         NODE_ENV: NodeEnvs.PRODUCTION,
         EMAIL_PROVIDER: MailProviderNames.LOG,
         LANDING_URL: 'http://localhost:4321',
+        WEB_APP_URL: 'http://localhost:3002',
+        BACKOFFICE_URL: 'http://localhost:3001',
       }),
     ).resolves.toBeUndefined()
   })

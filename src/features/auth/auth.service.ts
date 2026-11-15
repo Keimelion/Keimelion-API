@@ -1,10 +1,16 @@
 import { randomUUID, randomBytes } from 'crypto'
 import { env } from '../../config/env.js'
 import { ErrorCode, HttpStatus } from '@keimelion/sdk/enums'
+import type { Locale } from '@keimelion/sdk/enums'
 import { NodeEnvs } from '../../shared/enums/node-env.js'
+import { sendMailInBackground } from '../../shared/mail/mail.background.js'
 import { serviceError } from '../../shared/utils/response.js'
+import { readErrorName } from '../../shared/utils/error.js'
 import { hashPassword, verifyPassword, hashSha256Hex } from '../../shared/utils/hash.js'
 import { logger } from '../../shared/utils/logger.js'
+import { ONE_HOUR_MS } from '../../shared/utils/time.js'
+import { buildEmailVerificationEmail } from './emails/email-verification.email.js'
+import { buildPasswordResetEmail } from './emails/password-reset.email.js'
 import { signJwt } from './jwt.service.js'
 import type { JwtPayload } from './jwt.service.js'
 import {
@@ -45,11 +51,16 @@ import type {
 } from '@keimelion/sdk/schemas'
 import type { ServiceResult } from '../../shared/types/service.js'
 
-const PASSWORD_RESET_TOKEN_TTL_MS = 60 * 60 * 1000
+const PASSWORD_RESET_TOKEN_TTL_HOURS = 1
 const REFRESH_TOKEN_BYTE_LENGTH = 32
+const PASSWORD_RESET_GENERIC_MESSAGE = 'If this email is registered, a reset link has been sent'
+const VERIFICATION_EMAIL_FAILED_EVENT = 'auth_verification_email_failed'
+const PASSWORD_RESET_EMAIL_FAILED_EVENT = 'auth_password_reset_email_failed'
+const PASSWORD_RESET_FAILED_EVENT = 'auth_password_reset_failed'
 
 export async function registerUser(
   input: RegisterRequestParsed,
+  emailLocale: Locale,
   avatarBuffer: Buffer | null = null,
 ): Promise<ServiceResult<RegisterResponseParsed>> {
   if (await isEmailAlreadyTaken(input.email)) {
@@ -63,7 +74,7 @@ export async function registerUser(
     return serviceError(ErrorCode.USER_CREATION_FAILED)
   }
 
-  sendVerificationEmail(input.email, emailVerifyToken)
+  sendVerificationEmail(input.email, emailVerifyToken, emailLocale)
   const rawRefreshToken = await issueRefreshToken(createdUser.id)
 
   const finalUser = await maybeAttachAvatar(createdUser, avatarBuffer)
@@ -182,27 +193,27 @@ export async function logoutUser(payload: JwtPayload, userId: string, refreshTok
   }
 }
 
-export async function requestPasswordReset(input: ForgotPasswordRequestParsed): Promise<ServiceResult<ForgotPasswordResponseParsed & { passwordResetToken?: string }>> {
-  const genericMessage = 'If this email is registered, a reset link has been sent'
+export async function requestPasswordReset(
+  input: ForgotPasswordRequestParsed,
+  emailLocale: Locale,
+): Promise<ServiceResult<ForgotPasswordResponseParsed & { passwordResetToken?: string }>> {
   const user = await findUserByEmail(input.email)
 
   if (!user?.passwordHash) {
-    return { data: { message: genericMessage }, httpStatus: HttpStatus.OK }
+    return { data: { message: PASSWORD_RESET_GENERIC_MESSAGE }, httpStatus: HttpStatus.OK }
   }
 
   const rawToken = randomBytes(REFRESH_TOKEN_BYTE_LENGTH).toString('hex')
-  const tokenHash = hashSha256Hex(rawToken)
-  const expiresAt = new Date(Date.now() + PASSWORD_RESET_TOKEN_TTL_MS)
+  const passwordReset = issuePasswordReset(user, rawToken, emailLocale)
 
-  await setPasswordResetToken(user.id, { passwordResetToken: tokenHash, passwordResetTokenExpiresAt: expiresAt })
+  if (env.NODE_ENV === NodeEnvs.PRODUCTION) {
+    return { data: { message: PASSWORD_RESET_GENERIC_MESSAGE }, httpStatus: HttpStatus.OK }
+  }
 
-  logPasswordResetToken(user.email, rawToken)
-
+  // Outside production the token is returned: it must be stored before the client can use it
+  await passwordReset
   return {
-    data: {
-      message: genericMessage,
-      ...(env.NODE_ENV !== NodeEnvs.PRODUCTION ? { passwordResetToken: rawToken } : {}),
-    },
+    data: { message: PASSWORD_RESET_GENERIC_MESSAGE, passwordResetToken: rawToken },
     httpStatus: HttpStatus.OK,
   }
 }
@@ -236,15 +247,37 @@ async function isPasswordInvalid(password: string, hash: string | null): Promise
   return !hash || !(await verifyPassword(password, hash))
 }
 
-function sendVerificationEmail(email: string, token: string): void {
-  const verifyUrl = new URL(`/auth/verify-email?token=${token}`, env.APP_URL).href
+function sendVerificationEmail(email: string, verifyToken: string, locale: Locale): void {
+  sendMailInBackground(VERIFICATION_EMAIL_FAILED_EVENT, () => ({
+    to: email,
+    ...buildEmailVerificationEmail({
+      locale,
+      verifyToken,
+      validityHours: env.EMAIL_VERIFY_TOKEN_TTL_HOURS,
+    }),
+  }))
+}
 
-  if (env.NODE_ENV !== NodeEnvs.PRODUCTION) {
-    logger.info({ email, verifyUrl }, 'Email verification URL (dev/test)')
-    return
+// Never rejects. In production it runs after the response is sent: an existing account answers as
+// fast as an unknown address.
+async function issuePasswordReset(user: User, rawToken: string, locale: Locale): Promise<void> {
+  try {
+    await setPasswordResetToken(user.id, {
+      passwordResetToken: hashSha256Hex(rawToken),
+      passwordResetTokenExpiresAt: new Date(Date.now() + PASSWORD_RESET_TOKEN_TTL_HOURS * ONE_HOUR_MS),
+    })
+    sendMailInBackground(PASSWORD_RESET_EMAIL_FAILED_EVENT, () => ({
+      to: user.email,
+      ...buildPasswordResetEmail({
+        locale,
+        role: user.role,
+        resetToken: rawToken,
+        validityHours: PASSWORD_RESET_TOKEN_TTL_HOURS,
+      }),
+    }))
+  } catch (error) {
+    logger.error({ event: PASSWORD_RESET_FAILED_EVENT, errorName: readErrorName(error) })
   }
-
-  logger.info({ email }, 'Sending verification email via Resend')
 }
 
 async function issueRefreshToken(userId: string): Promise<string> {
@@ -259,10 +292,4 @@ function generateRawRefreshToken(): string {
 
 function computeRefreshTokenExpiresAt(): Date {
   return new Date(Date.now() + env.REFRESH_TOKEN_EXPIRES_IN * 1000)
-}
-
-function logPasswordResetToken(email: string, rawToken: string): void {
-  if (env.NODE_ENV !== NodeEnvs.PRODUCTION) {
-    logger.info({ email, rawToken }, '[DEV] Password reset token')
-  }
 }

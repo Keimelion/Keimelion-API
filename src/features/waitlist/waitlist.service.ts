@@ -12,6 +12,7 @@ import { sendMail } from '../../shared/mail/mail.sender.js'
 import { readErrorName } from '../../shared/utils/error.js'
 import { hmacSha256Base64Url } from '../../shared/utils/hash.js'
 import { logger } from '../../shared/utils/logger.js'
+import { ONE_DAY_MS } from '../../shared/utils/time.js'
 import { serviceError } from '../../shared/utils/response.js'
 import type { ServiceResult } from '../../shared/types/service.js'
 import { buildWaitlistConfirmationEmail } from './emails/waitlist-confirmation.email.js'
@@ -26,7 +27,6 @@ const HONEYPOT_HIT_EVENT = 'waitlist_honeypot_hit'
 const CONFIRMATION_EMAIL_FAILED_EVENT = 'waitlist_confirmation_email_failed'
 const WAITLIST_TOKEN_BYTE_LENGTH = 32
 const CONFIRMATION_RESEND_COOLDOWN_MS = 15 * 60 * 1000
-const ONE_DAY_MS = 24 * 60 * 60 * 1000
 // Domain separation: the JWT secret also keys this HMAC, never for the same input.
 const UNSUBSCRIBE_TOKEN_CONTEXT = 'waitlist-unsubscribe'
 

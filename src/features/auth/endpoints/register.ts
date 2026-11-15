@@ -1,6 +1,7 @@
 import { registerRequestSchema } from '@keimelion/sdk/schemas'
 import { multipartOnly, RATE_LIMITS } from '../../../shared/utils/rate-limiter.js'
 import { jsonResult } from '../../../shared/utils/response.js'
+import { resolveEmailLocale } from '../../../shared/mail/mail.locale.js'
 import { registerUser } from '../auth.service.js'
 import {
   multipartBoolSchema,
@@ -22,6 +23,7 @@ export function mountRegister(router: FeatureRouter): void {
     if (!parsed.ok) {
       return sendParseFailure(parsed)
     }
-    return jsonResult(context, await registerUser(parsed.data, parsed.imageBuffer))
+    const emailLocale = resolveEmailLocale(context.req.header('Accept-Language'))
+    return jsonResult(context, await registerUser(parsed.data, emailLocale, parsed.imageBuffer))
   })
 }

@@ -1,5 +1,6 @@
 import { SignJWT } from 'jose'
 import type { UserRole } from '@keimelion/sdk/enums'
+import { ONE_HOUR_MS } from '../utils/time.js'
 
 export const TEST_JWT_SECRET = 'test-secret-key-that-is-at-least-32-chars-long'
 export const TEST_JTI = '00000000-0000-0000-0000-000000000099'
@@ -31,5 +32,5 @@ export interface TestAccessTokenEntry {
 }
 
 export function makeAccessTokenEntry(userId: string): TestAccessTokenEntry {
-  return { tokenId: TEST_JTI, userId, expiresAt: new Date(Date.now() + 60 * 60 * 1000) }
+  return { tokenId: TEST_JTI, userId, expiresAt: new Date(Date.now() + ONE_HOUR_MS) }
 }

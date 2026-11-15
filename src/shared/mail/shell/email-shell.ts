@@ -13,8 +13,18 @@ export interface EmailInfoBox {
   text: string
 }
 
-// One email = the KEI-164 v2 modules in a fixed order: logo, banner, kicker, title, body, button,
-// info box, fallback link, ribbon divider, closing note, signature, footer.
+export interface EmailStrongText {
+  strong: string
+}
+
+export type EmailTextRun = string | EmailStrongText
+
+// Plain text, or runs of text where some words are set in bold
+export type EmailParagraph = string | EmailTextRun[]
+
+// One email = the KEI-164 v2 modules in a fixed order: logo, banner, kicker, title, greeting, body, button,
+// info box, fallback link, ribbon divider, closing note, signature, footer. The footer opens with
+// the reason the recipient gets the email, when there is one.
 export interface EmailShellContent {
   locale: Locale
   subject: string
@@ -22,10 +32,11 @@ export interface EmailShellContent {
   bannerTheme: EmailBannerTheme
   kicker: string
   title: string
-  paragraphs: string[]
+  paragraphs: EmailParagraph[]
   action: EmailLink
   infoBox: EmailInfoBox | null
   closingNote: string | null
+  footerReason: string | null
   footerLinks: EmailLink[]
 }
 

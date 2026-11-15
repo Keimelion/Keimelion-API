@@ -16,6 +16,8 @@ vi.mock('../../config/env.js', () => ({
     BCRYPT_ROUNDS: 4,
     APP_URL: 'http://localhost:3000',
     LANDING_URL: 'https://keimelion.test',
+    WEB_APP_URL: 'https://app.keimelion.test',
+    BACKOFFICE_URL: 'https://backoffice.keimelion.test',
     EMAIL_API_KEY: undefined,
     EMAIL_FROM: undefined,
     EMAIL_PROVIDER: DEFAULT_MAIL_PROVIDER,

@@ -128,7 +128,8 @@ The command sends through the real provider, so the local `.env` needs:
 
 - `EMAIL_API_KEY` and `EMAIL_FROM`
 - `MAIL_TEST_TO`, the address that receives the email
-- `LANDING_URL`, a non-local URL such as `https://keimelion.zalbani.dev`
+- `LANDING_URL`, `WEB_APP_URL` and `BACKOFFICE_URL`, non-local URLs such as
+  `https://keimelion.zalbani.dev`
 
 Mail clients can't load images from `localhost`. To see images before they are deployed, point
 `APP_URL` at a pushed commit for that one command:
@@ -138,16 +139,19 @@ Mail clients can't load images from `localhost`. To see images before they are d
 
 1. Create `src/features/<feature>/emails/<name>.email.ts` and return `renderEmail({...})` with the
    content: locale, subject, preheader, `bannerTheme`, kicker, title, paragraphs, button, optional
-   info box and closing note, footer links. Keep the FR and EN copy in that file.
+   info box, closing note and footer reason, footer links. A paragraph is a string, or runs where
+   `{ strong: '...' }` sets words in bold. Keep the FR and EN copy in that file. Build links with
+   `src/shared/mail/mail.links.ts` (token in the URL fragment, privacy policy link).
    `src/features/waitlist/emails/waitlist-confirmation.email.ts` is the model to follow.
 2. Register it in `src/dev/mail/email-catalog.ts` with sample data, so `mail:dev` and `mail:test`
    both cover it.
-3. Send it with `sendMail` from the service, and never make the HTTP response wait for the provider.
+3. Send it from the service with `sendMailInBackground` (`src/shared/mail/mail.background.ts`): the
+   HTTP response never waits for the provider, and a failure is logged without recipient or link.
 
 The shell modules, in order: logo, illustrated banner, handwritten kicker, title, body, button,
 info box, fallback link, ribbon divider, closing note, signature, footer.
 
-The banner themes are `waitlist`, `reservation`, `account` and `launch`
+The banner themes are `waitlist`, `reservation`, `account`, `launch`, `staff` and `invitation`
 (`src/shared/mail/shell/email-shell.theme.ts`).
 
 ### Email images

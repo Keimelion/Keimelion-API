@@ -5,6 +5,7 @@ import { EMAIL_CONTACT_ADDRESS } from '../mail.constants.js'
 export const EMAIL_BRAND_NAME = 'keimêlion'
 
 export interface EmailShellCopy {
+  greeting: string
   labelSeparator: string
   fallbackLabel: string
   signoff: string
@@ -17,6 +18,7 @@ export interface EmailShellCopy {
 // Compliance: the publisher identity must match the legal notice of the landing.
 export const EMAIL_SHELL_COPY: Record<Locale, EmailShellCopy> = {
   fr: {
+    greeting: 'Bonjour,',
     labelSeparator: ' :',
     fallbackLabel: 'Le bouton ne fonctionne pas ? Copiez ce lien dans votre navigateur :',
     signoff: 'À très vite,',
@@ -27,6 +29,7 @@ export const EMAIL_SHELL_COPY: Record<Locale, EmailShellCopy> = {
     contact: `Une question ? ${EMAIL_CONTACT_ADDRESS}`,
   },
   en: {
+    greeting: 'Hello,',
     labelSeparator: ':',
     fallbackLabel: 'Button not working? Copy this link into your browser:',
     signoff: 'See you soon,',

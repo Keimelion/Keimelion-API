@@ -6,12 +6,11 @@ import type { ApiErrorBodyParsed } from '@keimelion/sdk/schemas'
 import { HonoContextKey } from '../enums/context-key.js'
 import { env } from '../../config/env.js'
 import { errorMap, sendError } from './response.js'
+import { ONE_HOUR_MS, ONE_MINUTE_MS } from './time.js'
 import type { AppVariables } from '../types/app.js'
 import type { User } from '../../db/entities/users/users.schema.js'
 
-const ONE_MINUTE_MS = 60 * 1000
-const TEN_MINUTES_MS = 10 * 60 * 1000
-const ONE_HOUR_MS = 60 * 60 * 1000
+const TEN_MINUTES_MS = 10 * ONE_MINUTE_MS
 const MULTIPART_FIELDS_OVERHEAD_BYTES = 64 * 1024
 
 export function getClientIp(context: Context): string {

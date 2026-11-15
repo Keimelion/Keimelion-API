@@ -1,7 +1,13 @@
 import { bannerImageUrl, markImageUrl } from './email-shell.assets.js'
 import { EMAIL_BRAND_NAME, EMAIL_SHELL_COPY } from './email-shell.copy.js'
 import type { EmailShellCopy } from './email-shell.copy.js'
-import type { EmailInfoBox, EmailLink, EmailShellContent } from './email-shell.js'
+import type {
+  EmailInfoBox,
+  EmailLink,
+  EmailParagraph,
+  EmailShellContent,
+  EmailTextRun,
+} from './email-shell.js'
 import {
   EMAIL_BANNER_COLORS,
   EMAIL_BANNER_HEIGHT_PX,
@@ -127,7 +133,9 @@ function renderContentModules(content: EmailShellContent, copy: EmailShellCopy):
   return [
     renderModule(renderKicker(content.kicker), KICKER_GAP_PX),
     renderModule(renderTitle(content.title)),
-    ...content.paragraphs.map((paragraph) => renderModule(renderParagraph(paragraph))),
+    ...[copy.greeting, ...content.paragraphs].map((paragraph) =>
+      renderModule(renderParagraph(paragraph)),
+    ),
     renderModule(renderButton(content.action), BUTTON_GAP_PX),
     ...(content.infoBox === null
       ? []
@@ -153,8 +161,14 @@ function renderTitle(title: string): string {
   return `<h1 class="k-title k-text" style="margin: 0; font-family: ${EmailFonts.DISPLAY}; font-weight: 800; font-size: 34px; line-height: 1.1; letter-spacing: -0.03em; color: ${EmailColors.INK}">${escapeHtml(title)}</h1>`
 }
 
-function renderParagraph(paragraph: string): string {
-  return `<p class="k-text" style="margin: 0; font-size: 16px; line-height: 25px; color: ${EmailColors.INK}">${escapeHtml(paragraph)}</p>`
+function renderParagraph(paragraph: EmailParagraph): string {
+  const runs = [paragraph].flat().map(renderTextRun).join('')
+  return `<p class="k-text" style="margin: 0; font-size: 16px; line-height: 25px; color: ${EmailColors.INK}">${runs}</p>`
+}
+
+function renderTextRun(run: EmailTextRun): string {
+  if (typeof run === 'string') return escapeHtml(run)
+  return `<strong>${escapeHtml(run.strong)}</strong>`
 }
 
 // Bulletproof button. The relief is a deep pill showing 4px below the brand pill: Gmail strips
@@ -211,6 +225,7 @@ function renderFooter(content: EmailShellContent, copy: EmailShellCopy): string 
 <td valign="middle" style="padding: 0 6px 0 0">${renderMark(SMALL_MARK_SIZE_PX)}</td>
 <td valign="middle"><span class="k-brand" style="font-family: ${EmailFonts.HANDWRITTEN}; font-size: 20px; line-height: 24px; font-style: italic; color: ${EmailColors.BRAND}">${escapeHtml(copy.tagline)}</span></td>
 </tr></table>`,
+    ...(content.footerReason === null ? [] : [escapeHtml(content.footerReason)]),
     escapeHtml(copy.publisher),
     escapeHtml(copy.contact),
     content.footerLinks.map((link) => renderFooterLink(link)).join(' · '),
