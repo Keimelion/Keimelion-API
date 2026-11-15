@@ -44,7 +44,8 @@ const PASSWORD_RESET_COPY: Record<Locale, PasswordResetCopy> = {
     cta: 'Choisir un nouveau mot de passe',
     validity: (hours) => formatQuantity(hours, 'heure', 'heures'),
     validityHighlight: (validity) => `Ce lien est valable ${validity}`,
-    singleUse: "et ne fonctionne qu'une seule fois.",
+    singleUse:
+      "et ne fonctionne qu'une seule fois. Passé ce délai, vous pourrez en demander un nouveau avec « Mot de passe oublié » sur la page de connexion.",
     ignore:
       "Vous n'êtes pas à l'origine de cette demande ? Ignorez cet e-mail : votre mot de passe actuel reste inchangé.",
     reason:
@@ -60,7 +61,8 @@ const PASSWORD_RESET_COPY: Record<Locale, PasswordResetCopy> = {
     cta: 'Choose a new password',
     validity: (hours) => formatQuantity(hours, 'hour', 'hours'),
     validityHighlight: (validity) => `This link is valid for ${validity}`,
-    singleUse: 'and can only be used once.',
+    singleUse:
+      'and can only be used once. After that, you can request a new one with “Forgot password” on the sign-in page.',
     ignore:
       "Didn't request this? Ignore this email: your current password stays the same.",
     reason:

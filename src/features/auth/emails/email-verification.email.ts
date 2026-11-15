@@ -39,7 +39,7 @@ const EMAIL_VERIFICATION_COPY: Record<Locale, EmailVerificationCopy> = {
     body: "Merci d'avoir créé votre compte Keimêlion. Confirmez votre adresse e-mail pour commencer votre première liste.",
     cta: 'Confirmer mon adresse',
     validity: (hours) => `Ce lien est valable ${formatQuantity(hours, 'heure', 'heures')}.`,
-    next: 'Passé ce délai, vous pourrez en demander un nouveau depuis la page de connexion.',
+    next: 'Passé ce délai, il ne fonctionnera plus.',
     ignore:
       "Vous n'avez pas créé de compte sur Keimêlion ? Ignorez simplement cet e-mail : sans confirmation, le compte ne sera pas activé.",
     reason: 'Vous recevez cet e-mail car un compte Keimêlion a été créé avec cette adresse.',
@@ -53,7 +53,7 @@ const EMAIL_VERIFICATION_COPY: Record<Locale, EmailVerificationCopy> = {
     body: 'Thanks for creating your Keimêlion account. Confirm your email address to start your first list.',
     cta: 'Confirm my address',
     validity: (hours) => `This link is valid for ${formatQuantity(hours, 'hour', 'hours')}.`,
-    next: 'After that, you can request a new one from the sign-in page.',
+    next: 'After that, it will no longer work.',
     ignore:
       "Didn't create a Keimêlion account? Just ignore this email: without confirmation, the account won't be activated.",
     reason:

@@ -163,7 +163,8 @@ describe('POST /v1/auth/register', () => {
     expect(mail.html).toContain(`href="${verifyUrl}"`)
     expect(mail.html).toContain('banner-account.png')
     expect(mail.text).toContain(`Confirmer mon adresse :\n${verifyUrl}`)
-    expect(mail.text).toContain('Ce lien est valable 24 heures.')
+    expect(mail.text).toContain('Ce lien est valable 24 heures. Passé ce délai, il ne fonctionnera plus.')
+    expect(mail.text).not.toContain('en demander un nouveau')
   })
 
   it('sends the verification email in the language of the request', async () => {
@@ -673,6 +674,7 @@ describe('POST /v1/auth/forgot-password', () => {
     expect(mail.html).toContain(`href="${resetUrl}"`)
     expect(mail.text).toContain(`Choisir un nouveau mot de passe :\n${resetUrl}`)
     expect(mail.text).toContain("Ce lien est valable 1 heure et ne fonctionne qu'une seule fois.")
+    expect(mail.text).toContain('vous pourrez en demander un nouveau avec « Mot de passe oublié »')
     expect(stored.passwordResetToken).toBe(sha256Hex(body.passwordResetToken))
     expect(stored.passwordResetTokenExpiresAt.getTime() - before).toBeGreaterThanOrEqual(ONE_HOUR_MS)
     expect(stored.passwordResetTokenExpiresAt.getTime() - before).toBeLessThan(ONE_HOUR_MS + ONE_MINUTE_MS)
