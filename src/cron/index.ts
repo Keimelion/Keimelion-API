@@ -1,5 +1,6 @@
 import { env } from '../config/env.js'
 import type { CronJob } from './create-cron-job.js'
+import { affiliateUrlGeneration } from './jobs/generate-affiliate-urls.js'
 import { cleanupExpiredAccessTokens } from './jobs/cleanup-expired-access-tokens.js'
 import { cleanupExpiredRefreshTokens } from './jobs/cleanup-expired-refresh-tokens.js'
 import { cleanupExpiredListInvites } from './jobs/cleanup-expired-list-invites.js'
@@ -15,6 +16,7 @@ const jobs: CronJob[] = [
   hardDeleteInactiveUsers,
   cleanupOrphanImages,
   purgeWaitlistEntries,
+  affiliateUrlGeneration,
   ...(env.FX_REFRESH_ENABLED ? [fxRatesRefresh] : []),
 ]
 

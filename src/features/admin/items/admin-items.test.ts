@@ -15,6 +15,7 @@ import {
   messageResponseSchema,
 } from '@keimelion/sdk/schemas'
 import { images } from '../../../db/entities/images/images.schema.js'
+import { amazonUrlStrategy } from '../../affiliate/strategies/amazon.strategy.js'
 
 const { mockProcessImage } = vi.hoisted(() => ({ mockProcessImage: vi.fn() }))
 
@@ -2263,6 +2264,7 @@ describe('shop resolution from sourceUrl', () => {
     it('keeps an explicit shopId even when sourceUrl matches another shop', async () => {
       const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
       mockAdminAuth()
+      mockFindShopsByDomains([SHOP_ROW, AMAZON_FR_SHOP])
       const values = mockInsertItemSourceRecordingValues({ ...SOURCE_WITH_SHOP_ROW, sourceUrl: AMAZON_FR_URL })
       mockFindItemSourceByIdWithShop({ ...SOURCE_WITH_SHOP_ROW, sourceUrl: AMAZON_FR_URL }, SHOP_ROW)
 
@@ -2274,7 +2276,6 @@ describe('shop resolution from sourceUrl', () => {
 
       expect(response.status).toBe(201)
       expect(values).toHaveBeenCalledWith(expect.objectContaining({ shopId: SHOP_ROW.id }))
-      expect(vi.mocked(db.query.shops.findMany)).not.toHaveBeenCalled()
     })
 
     it('returns 409 DUPLICATE_SHOP_FOR_ITEM when the resolved shop is already used on the item', async () => {
@@ -2312,7 +2313,12 @@ describe('shop resolution from sourceUrl', () => {
 
       const body = adminItemsUpdateSourceResponseSchema.parse(await response.json())
       expect(response.status).toBe(200)
-      expect(set).toHaveBeenCalledWith({ shopId: AMAZON_FR_SHOP.id, sourceUrl: AMAZON_FR_URL })
+      expect(set).toHaveBeenCalledWith({
+        shopId: AMAZON_FR_SHOP.id,
+        sourceUrl: AMAZON_FR_URL,
+        originalUrl: AMAZON_FR_URL,
+        affiliateUrl: null,
+      })
       expect(body.source.shop?.slug).toBe(AMAZON_FR_SHOP.slug)
     })
 
@@ -2320,6 +2326,7 @@ describe('shop resolution from sourceUrl', () => {
       const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
       mockAdminAuth()
       mockFindItemSourceById(SOURCE_WITH_SHOP_ROW)
+      mockFindShopsByDomains([SHOP_ROW])
       const set = mockUpdateItemSourceRecordingSet({ ...SOURCE_WITH_SHOP_ROW, sourceUrl: 'https://amzn.to/abc' })
       mockFindItemSourceByIdWithShop({ ...SOURCE_WITH_SHOP_ROW, sourceUrl: 'https://amzn.to/abc' }, SHOP_ROW)
 
@@ -2329,8 +2336,11 @@ describe('shop resolution from sourceUrl', () => {
       )
 
       expect(response.status).toBe(200)
-      expect(set).toHaveBeenCalledWith({ sourceUrl: 'https://amzn.to/abc' })
-      expect(vi.mocked(db.query.shops.findMany)).not.toHaveBeenCalled()
+      expect(set).toHaveBeenCalledWith({
+        sourceUrl: 'https://amzn.to/abc',
+        originalUrl: 'https://amzn.to/abc',
+        affiliateUrl: null,
+      })
     })
 
     it('keeps the current shop when sourceUrl is cleared', async () => {
@@ -2346,13 +2356,14 @@ describe('shop resolution from sourceUrl', () => {
       )
 
       expect(response.status).toBe(200)
-      expect(set).toHaveBeenCalledWith({ sourceUrl: null })
+      expect(set).toHaveBeenCalledWith({ sourceUrl: null, originalUrl: null, affiliateUrl: null })
     })
 
     it('keeps the explicit shopId when both shopId and sourceUrl are sent', async () => {
       const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
       mockAdminAuth()
       mockFindItemSourceById(SOURCE_ROW)
+      mockFindShopsByDomains([SHOP_ROW, AMAZON_FR_SHOP])
       const set = mockUpdateItemSourceRecordingSet(SOURCE_WITH_SHOP_ROW)
       mockFindItemSourceByIdWithShop(SOURCE_WITH_SHOP_ROW, SHOP_ROW)
 
@@ -2363,8 +2374,12 @@ describe('shop resolution from sourceUrl', () => {
       })
 
       expect(response.status).toBe(200)
-      expect(set).toHaveBeenCalledWith({ shopId: SHOP_ROW.id, sourceUrl: AMAZON_FR_URL })
-      expect(vi.mocked(db.query.shops.findMany)).not.toHaveBeenCalled()
+      expect(set).toHaveBeenCalledWith({
+        shopId: SHOP_ROW.id,
+        sourceUrl: AMAZON_FR_URL,
+        originalUrl: AMAZON_FR_URL,
+        affiliateUrl: null,
+      })
     })
 
     it('leaves shopId untouched when sourceUrl is not sent', async () => {
@@ -2463,5 +2478,207 @@ describe('shop resolution from sourceUrl', () => {
 
       expect(response.status).toBe(404)
     })
+  })
+})
+
+describe('source URL normalization', () => {
+  const AMAZON_SHOP = { ...SHOP_ROW, domain: 'amazon.fr' }
+  const AMAZON_PRODUCT_URL = 'https://amazon.fr/Lampe-Design/dp/B08N5WRWNW/ref=sr_1_1?tag=other-21&utm_source=news#reviews'
+  const AMAZON_CANONICAL_URL = 'https://www.amazon.fr/dp/B08N5WRWNW'
+  const TRACKED_URL = 'https://shop.example/product?color=red&size=M,L&utm_campaign=spring&gclid=abc#top'
+  const CLEAN_URL = 'https://shop.example/product?color=red&size=M,L'
+
+  function mockFindShops(rows: unknown[]): void {
+    vi.mocked(db.query.shops.findMany).mockResolvedValueOnce(rows as never)
+  }
+
+  function mockInsertRecordingValues(returnRow: unknown): ReturnType<typeof vi.fn> {
+    const values = vi.fn().mockReturnValueOnce({ returning: vi.fn().mockResolvedValueOnce([returnRow]) })
+    vi.mocked(db.insert).mockReturnValueOnce({ values } as never)
+    return values
+  }
+
+  function mockUpdateRecordingSet(returnRow: unknown): ReturnType<typeof vi.fn> {
+    const set = vi.fn().mockReturnValueOnce({
+      where: vi.fn().mockReturnValueOnce({ returning: vi.fn().mockResolvedValueOnce([returnRow]) }),
+    })
+    vi.mocked(db.update).mockReturnValueOnce({ set } as never)
+    return set
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
+  })
+
+  it('stores the normalized URL and keeps the submitted one when no shop matches', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindShops([])
+    const storedRow = { ...SOURCE_ROW, sourceUrl: CLEAN_URL, originalUrl: TRACKED_URL, affiliateUrl: null }
+    const values = mockInsertRecordingValues(storedRow)
+    mockFindItemSourceByIdWithShop(storedRow, null)
+
+    const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}/sources`, {
+      method: 'POST',
+      token,
+      body: { sourceUrl: TRACKED_URL },
+    })
+
+    expect(response.status).toBe(201)
+    expect(values).toHaveBeenCalledWith(
+      expect.objectContaining({ shopId: null, sourceUrl: CLEAN_URL, originalUrl: TRACKED_URL, affiliateUrl: null }),
+    )
+  })
+
+  it("applies the shop's strategy, which drops a third-party affiliate tag", async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindShops([AMAZON_SHOP])
+    const storedRow = { ...SOURCE_WITH_SHOP_ROW, sourceUrl: AMAZON_CANONICAL_URL, originalUrl: AMAZON_PRODUCT_URL }
+    const values = mockInsertRecordingValues(storedRow)
+    mockFindItemSourceByIdWithShop(storedRow, AMAZON_SHOP)
+
+    const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}/sources`, {
+      method: 'POST',
+      token,
+      body: { sourceUrl: AMAZON_PRODUCT_URL },
+    })
+
+    expect(response.status).toBe(201)
+    expect(values).toHaveBeenCalledWith(
+      expect.objectContaining({ shopId: AMAZON_SHOP.id, sourceUrl: AMAZON_CANONICAL_URL, originalUrl: AMAZON_PRODUCT_URL }),
+    )
+  })
+
+  it('never builds the affiliate URL while creating a source', async () => {
+    const buildAffiliateUrl = vi.spyOn(amazonUrlStrategy, 'buildAffiliateUrl')
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindShops([AMAZON_SHOP])
+    mockInsertItemSource(SOURCE_WITH_SHOP_ROW)
+    mockFindItemSourceByIdWithShop(SOURCE_WITH_SHOP_ROW, AMAZON_SHOP)
+
+    const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}/sources`, {
+      method: 'POST',
+      token,
+      body: { sourceUrl: AMAZON_PRODUCT_URL },
+    })
+
+    expect(response.status).toBe(201)
+    expect(buildAffiliateUrl).not.toHaveBeenCalled()
+    buildAffiliateUrl.mockRestore()
+  })
+
+  it('does not return originalUrl nor affiliateUrl in the source response', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindShops([])
+    const storedRow = {
+      ...SOURCE_ROW,
+      sourceUrl: CLEAN_URL,
+      originalUrl: TRACKED_URL,
+      affiliateUrl: 'https://shop.example/product?aff=1',
+    }
+    mockInsertItemSource(storedRow)
+    mockFindItemSourceByIdWithShop(storedRow, null)
+
+    const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}/sources`, {
+      method: 'POST',
+      token,
+      body: { sourceUrl: TRACKED_URL },
+    })
+
+    const body = await response.json() as { source: Record<string, unknown> }
+    expect(response.status).toBe(201)
+    expect(body.source).not.toHaveProperty('originalUrl')
+    expect(body.source).not.toHaveProperty('affiliateUrl')
+    expect(body.source.sourceUrl).toBe(CLEAN_URL)
+  })
+
+  it('normalizes the new URL and resets the affiliate URL on PATCH', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindItemSourceById({ ...SOURCE_ROW, sourceUrl: 'https://shop.example/old', affiliateUrl: 'https://shop.example/old?aff=1' })
+    mockFindShops([])
+    const set = mockUpdateRecordingSet({ ...SOURCE_ROW, sourceUrl: CLEAN_URL })
+    mockFindItemSourceByIdWithShop({ ...SOURCE_ROW, sourceUrl: CLEAN_URL }, null)
+
+    const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}/sources/${SOURCE_ROW.id}`, {
+      method: 'PATCH',
+      token,
+      body: { sourceUrl: TRACKED_URL },
+    })
+
+    expect(response.status).toBe(200)
+    expect(set).toHaveBeenCalledWith({ sourceUrl: CLEAN_URL, originalUrl: TRACKED_URL, affiliateUrl: null })
+  })
+
+  it('normalizes the submitted URL again with the new shop when only shopId changes', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindItemSourceById({ ...SOURCE_ROW, sourceUrl: AMAZON_PRODUCT_URL, originalUrl: AMAZON_PRODUCT_URL })
+    mockFindShops([AMAZON_SHOP])
+    const set = mockUpdateRecordingSet(SOURCE_WITH_SHOP_ROW)
+    mockFindItemSourceByIdWithShop(SOURCE_WITH_SHOP_ROW, AMAZON_SHOP)
+
+    const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}/sources/${SOURCE_ROW.id}`, {
+      method: 'PATCH',
+      token,
+      body: { shopId: AMAZON_SHOP.id },
+    })
+
+    expect(response.status).toBe(200)
+    expect(set).toHaveBeenCalledWith({
+      shopId: AMAZON_SHOP.id,
+      sourceUrl: AMAZON_CANONICAL_URL,
+      originalUrl: AMAZON_PRODUCT_URL,
+      affiliateUrl: null,
+    })
+  })
+
+  it('leaves the URL columns untouched when the PATCH only changes the price', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindItemSourceById({ ...SOURCE_ROW, sourceUrl: CLEAN_URL, affiliateUrl: 'https://shop.example/product?aff=1' })
+    const set = mockUpdateRecordingSet({ ...SOURCE_ROW, price: '12.00' })
+    mockFindItemSourceByIdWithShop({ ...SOURCE_ROW, price: '12.00' }, null)
+
+    const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}/sources/${SOURCE_ROW.id}`, {
+      method: 'PATCH',
+      token,
+      body: { price: '12.00' },
+    })
+
+    expect(response.status).toBe(200)
+    expect(set).toHaveBeenCalledWith({ price: '12.00' })
+  })
+
+  it('normalizes every source URL on POST /v1/admin/items', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindShops([AMAZON_SHOP])
+    const values = vi.fn()
+    for (const row of [ITEM_ROW, SOURCE_WITH_SHOP_ROW, SOURCE_ROW]) {
+      values.mockReturnValueOnce({ returning: vi.fn().mockResolvedValueOnce([row]) })
+    }
+    vi.mocked(db.transaction).mockImplementationOnce((callback) =>
+      callback({ insert: vi.fn().mockReturnValue({ values }) } as never),
+    )
+    mockFindItemById(itemWith([SOURCE_WITH_SHOP_ROW, SOURCE_ROW]))
+
+    const response = await apiRequest('/v1/admin/items', {
+      method: 'POST',
+      token,
+      body: { name: 'Test Item', sources: [{ sourceUrl: AMAZON_PRODUCT_URL }, { sourceUrl: TRACKED_URL }] },
+    })
+
+    expect(response.status).toBe(201)
+    expect(values).toHaveBeenCalledWith(
+      expect.objectContaining({ shopId: AMAZON_SHOP.id, sourceUrl: AMAZON_CANONICAL_URL, originalUrl: AMAZON_PRODUCT_URL }),
+    )
+    expect(values).toHaveBeenCalledWith(
+      expect.objectContaining({ shopId: null, sourceUrl: CLEAN_URL, originalUrl: TRACKED_URL, affiliateUrl: null }),
+    )
   })
 })

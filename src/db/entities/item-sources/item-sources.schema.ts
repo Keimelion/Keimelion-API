@@ -1,5 +1,5 @@
 import { char, index, numeric, pgTable, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
-import { isNotNull } from 'drizzle-orm'
+import { isNotNull, isNull } from 'drizzle-orm'
 import { timestamps, uuidPrimaryKey } from '../../../shared/db/columns.js'
 import { currencies } from '../currencies/currencies.schema.js'
 import { items } from '../items/items.schema.js'
@@ -12,6 +12,8 @@ export const itemSources = pgTable(
     itemId: uuid('item_id').notNull().references(() => items.id, { onDelete: 'cascade' }),
     shopId: uuid('shop_id').references(() => shops.id, { onDelete: 'set null' }),
     sourceUrl: text('source_url'),
+    originalUrl: text('original_url'),
+    affiliateUrl: text('affiliate_url'),
     price: numeric('price', { precision: 10, scale: 2 }),
     currency: char('currency', { length: 3 })
       .notNull()
@@ -21,6 +23,9 @@ export const itemSources = pgTable(
   },
   (table) => [
     index('item_sources_shop_id_idx').on(table.shopId),
+    index('item_sources_pending_affiliate_url_idx')
+      .on(table.shopId, table.id)
+      .where(isNull(table.affiliateUrl)),
     uniqueIndex('item_sources_item_shop_unique_idx')
       .on(table.itemId, table.shopId)
       .where(isNotNull(table.shopId)),

@@ -35,12 +35,13 @@ import {
 } from './users.repository.js'
 import { toUserDetail } from '../../shared/types/user.js'
 import { toFeedbackDetail } from '../../shared/types/feedback.js'
-import { toItemDetail, toItemSourceDetailWithoutShop, toListItemDetail } from '../../shared/types/item.js'
+import { toItemDetail, toListItemDetail } from '../../shared/types/item.js'
 import { toTagDetail } from '../../shared/types/tag.js'
 import { toImageDetail } from '../uploads/images.mapper.js'
 import { buildExportZipStream } from './export/csv-archive-writer.js'
 import {
   EXPORT_ENTITY_REGISTRY,
+  toExportItemSourceRow,
   toExportListInviteRow,
   toExportListRow,
   toExportListTagRow,
@@ -257,7 +258,7 @@ export async function exportUserData(userId: string, format: UsersExportQueryPar
     payload: {
       profile,
       items: rawItems.map(toItemDetail),
-      itemSources: rawItemSources.map(toItemSourceDetailWithoutShop),
+      itemSources: rawItemSources.map(toExportItemSourceRow),
       listItems: rawListItems.map((row) => toListItemDetail(row)),
       lists: rawLists.map(toExportListRow),
       tags: rawTags.map(toTagDetail),

@@ -212,6 +212,24 @@ describe('GET /v1/items/:id', () => {
     expect(body.item.sources[0]?.shop?.slug).toBe(SHOP_ROW.slug)
   })
 
+  it('does not return the original nor the affiliate URL of a source', async () => {
+    const source = {
+      ...SOURCE_WITH_SHOP_ROW,
+      sourceUrl: 'https://www.amazon.fr/dp/B08N5WRWNW',
+      originalUrl: 'https://www.amazon.fr/dp/B08N5WRWNW?tag=someone-21',
+      affiliateUrl: 'https://www.amazon.fr/dp/B08N5WRWNW?tag=keimelion-21',
+    }
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(itemWith([source]))
+
+    const response = await apiRequest(`/v1/items/${ITEM_ROW.id}`)
+
+    const body = await response.json() as { item: { sources: Record<string, unknown>[] } }
+    expect(response.status).toBe(200)
+    expect(body.item.sources[0]?.sourceUrl).toBe(source.sourceUrl)
+    expect(body.item.sources[0]).not.toHaveProperty('originalUrl')
+    expect(body.item.sources[0]).not.toHaveProperty('affiliateUrl')
+  })
+
   it('returns 404 when item does not exist', async () => {
     vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(undefined)
 

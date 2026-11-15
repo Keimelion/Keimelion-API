@@ -10,6 +10,8 @@ import {
   adminShopsListResponseSchema,
   adminShopsUpdateResponseSchema,
 } from '@keimelion/sdk/schemas'
+import { itemSources } from '../../../db/entities/item-sources/item-sources.schema.js'
+import { shops } from '../../../db/entities/shops/shops.schema.js'
 
 vi.mock('../../../shared/utils/logger.js', () => ({
   logger: {
@@ -80,6 +82,21 @@ function mockDeleteShop(returnRow: unknown): void {
       returning: vi.fn().mockResolvedValueOnce([returnRow]),
     }),
   } as never)
+}
+
+function mockLockShop(row: unknown): void {
+  const chain = {
+    from: vi.fn().mockReturnThis(),
+    where: vi.fn().mockReturnThis(),
+    for: vi.fn().mockResolvedValueOnce(row === undefined ? [] : [row]),
+  }
+  vi.mocked(db.select).mockReturnValueOnce(chain as never)
+}
+
+function mockClearAffiliateUrls(): ReturnType<typeof vi.fn> {
+  const set = vi.fn().mockReturnValueOnce({ where: vi.fn().mockResolvedValueOnce(undefined) })
+  vi.mocked(db.update).mockReturnValueOnce({ set } as never)
+  return set
 }
 
 function mockCountChain(total: number): void {
@@ -850,6 +867,61 @@ describe('PATCH /v1/admin/shops/:id', () => {
     expect(response.status).toBe(403)
   })
 
+  it('clears the affiliate URLs of the shop sources in the same transaction when set to non-affiliated', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    mockFindShopById({ ...SHOP_ROW, isAffiliated: true })
+    mockUpdateShop({ ...SHOP_ROW, isAffiliated: false })
+    const set = mockClearAffiliateUrls()
+
+    const response = await apiRequest(`/v1/admin/shops/${SHOP_ROW.id}`, {
+      method: 'PATCH',
+      token,
+      body: { isAffiliated: false },
+    })
+
+    expect(response.status).toBe(200)
+    expect(vi.mocked(db.transaction)).toHaveBeenCalledOnce()
+    expect(vi.mocked(db.update).mock.calls.map(([table]) => table)).toEqual([shops, itemSources])
+    expect(set).toHaveBeenCalledWith({ affiliateUrl: null })
+  })
+
+  it('keeps the affiliate URLs when the shop is set to affiliated, so the job regenerates them', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    mockFindShopById(SHOP_ROW)
+    mockUpdateShop({ ...SHOP_ROW, isAffiliated: true })
+
+    const response = await apiRequest(`/v1/admin/shops/${SHOP_ROW.id}`, {
+      method: 'PATCH',
+      token,
+      body: { isAffiliated: true },
+    })
+
+    expect(response.status).toBe(200)
+    expect(vi.mocked(db.update)).toHaveBeenCalledOnce()
+    expect(vi.mocked(db.update)).toHaveBeenCalledWith(shops)
+  })
+
+  it('does not touch the affiliate URLs when the patch leaves isAffiliated out', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    mockFindShopById(SHOP_ROW)
+    mockUpdateShop({ ...SHOP_ROW, name: 'Renamed' })
+
+    const response = await apiRequest(`/v1/admin/shops/${SHOP_ROW.id}`, {
+      method: 'PATCH',
+      token,
+      body: { name: 'Renamed' },
+    })
+
+    expect(response.status).toBe(200)
+    expect(vi.mocked(db.update)).not.toHaveBeenCalledWith(itemSources)
+  })
+
   it('logs at info level with changes diff on successful update', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
@@ -879,7 +951,8 @@ describe('DELETE /v1/admin/shops/:id', () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
 
-    mockFindShopById(SHOP_ROW)
+    mockLockShop(SHOP_ROW)
+    mockClearAffiliateUrls()
     mockDeleteShop(SHOP_ROW)
 
     const response = await apiRequest(`/v1/admin/shops/${SHOP_ROW.id}`, {
@@ -888,13 +961,33 @@ describe('DELETE /v1/admin/shops/:id', () => {
     })
 
     expect(response.status).toBe(204)
+    expect(vi.mocked(db.delete)).toHaveBeenCalledWith(shops)
+  })
+
+  it('clears the affiliate URLs of the shop sources in the delete transaction', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    mockLockShop(SHOP_ROW)
+    const set = mockClearAffiliateUrls()
+    mockDeleteShop(SHOP_ROW)
+
+    const response = await apiRequest(`/v1/admin/shops/${SHOP_ROW.id}`, {
+      method: 'DELETE',
+      token,
+    })
+
+    expect(response.status).toBe(204)
+    expect(vi.mocked(db.transaction)).toHaveBeenCalledOnce()
+    expect(vi.mocked(db.update)).toHaveBeenCalledWith(itemSources)
+    expect(set).toHaveBeenCalledWith({ affiliateUrl: null })
   })
 
   it('returns 404 when shop does not exist', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
 
-    mockFindShopById(undefined)
+    mockLockShop(undefined)
 
     const response = await apiRequest(`/v1/admin/shops/${SHOP_ROW.id}`, {
       method: 'DELETE',
@@ -902,6 +995,8 @@ describe('DELETE /v1/admin/shops/:id', () => {
     })
 
     expect(response.status).toBe(404)
+    expect(vi.mocked(db.update)).not.toHaveBeenCalled()
+    expect(vi.mocked(db.delete)).not.toHaveBeenCalled()
   })
 
   it('returns 422 when id is not a UUID', async () => {
@@ -940,7 +1035,8 @@ describe('DELETE /v1/admin/shops/:id', () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
 
-    mockFindShopById(SHOP_ROW)
+    mockLockShop(SHOP_ROW)
+    mockClearAffiliateUrls()
     mockDeleteShop(SHOP_ROW)
 
     await apiRequest(`/v1/admin/shops/${SHOP_ROW.id}`, {

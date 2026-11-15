@@ -25,6 +25,8 @@ import type { ListInvite } from '../../../db/entities/list-invites/list-invites.
 import type { ListUser } from '../../../db/entities/list-users/list-users.schema.js'
 import type { ListTag } from '../../../db/entities/list-tags/list-tags.schema.js'
 import type { ListDetailWithoutCollaborators } from '../../../shared/types/list.js'
+import type { ItemSource } from '../../../db/entities/item-sources/item-sources.schema.js'
+import type { ItemSourceDetail } from '../../../shared/types/item.js'
 import type {
   InviteStatus,
   ListUserRole,
@@ -99,6 +101,15 @@ export function toExportReportRow(row: ReportExportSourceRow): ExportReportRow {
     status: row.reportStatus,
     createdAt: row.createdAt,
   }
+}
+
+// affiliate_url is an internal monetisation field, not data provided by the user: it is not exported.
+export interface ExportItemSourceRow extends ItemSourceDetail {
+  originalUrl: string | null
+}
+
+export function toExportItemSourceRow(row: ItemSource): ExportItemSourceRow {
+  return { ...toItemSourceDetailWithoutShop(row), originalUrl: row.originalUrl }
 }
 
 export interface ExportListRow extends ListDetailWithoutCollaborators {
@@ -186,6 +197,7 @@ const itemSourcesEntityDescriptor: ExportEntityDescriptor = {
     'itemId',
     'shopId',
     'sourceUrl',
+    'originalUrl',
     'price',
     'currency',
     'createdAt',
@@ -193,7 +205,7 @@ const itemSourcesEntityDescriptor: ExportEntityDescriptor = {
   ],
   fetchRows: async (userId: string) => {
     const sources = await findItemSourcesByCreator(userId)
-    return sources.map(toItemSourceDetailWithoutShop)
+    return sources.map(toExportItemSourceRow)
   },
 }
 
