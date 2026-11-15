@@ -1,3 +1,4 @@
+import type { DbTransaction } from '../../../db/client.js'
 import { db } from '../../../db/client.js'
 import { ErrorCode, HttpStatus } from '@keimelion/sdk/enums'
 import { MAX_CATEGORY_DEPTH } from '@keimelion/sdk/schemas'
@@ -28,7 +29,6 @@ import type {
 
 const MAX_ALLOWED_DEPTH = MAX_CATEGORY_DEPTH - 1
 
-type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
 interface NameTranslationsPatch {
   fr?: string | undefined

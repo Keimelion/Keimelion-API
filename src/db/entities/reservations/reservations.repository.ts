@@ -1,3 +1,4 @@
+import type { DbTransaction } from '../../client.js'
 import { and, count, desc, eq, inArray, or, sql } from 'drizzle-orm'
 import type { AnyColumn } from 'drizzle-orm'
 import type { RESERVATION_SORT_FIELDS } from '@keimelion/sdk/schemas'
@@ -12,7 +13,6 @@ import { reservations } from './reservations.schema.js'
 import type { Reservation } from './reservations.schema.js'
 import type { ReservationRowHydrated } from '../../../shared/types/reservation.js'
 
-type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 type DbOrTx = typeof db | DbTransaction
 
 export const RESERVATION_SORTABLE_FIELDS = {

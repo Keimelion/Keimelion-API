@@ -1,8 +1,8 @@
+import type { DbTransaction } from '../../client.js'
 import { eq, lt } from 'drizzle-orm'
 import { db } from '../../client.js'
 import { accessTokens } from './access-tokens.schema.js'
 
-type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
 export async function isTokenActive(tokenId: string): Promise<boolean> {
   const entry = await db.query.accessTokens.findFirst({ where: eq(accessTokens.tokenId, tokenId) })

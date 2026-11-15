@@ -1,3 +1,4 @@
+import type { DbTransaction } from '../../client.js'
 import { and, eq, isNotNull, isNull, sql } from 'drizzle-orm'
 import { db } from '../../../db/client.js'
 import { users } from './users.schema.js'
@@ -20,7 +21,6 @@ interface InsertDeletionAuditInput {
   reason: DeletionReason
 }
 
-type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
 export function findUserById(id: string): Promise<User | undefined> {
   return db.query.users.findFirst({ where: eq(users.id, id) })

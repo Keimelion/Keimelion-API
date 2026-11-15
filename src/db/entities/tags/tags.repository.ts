@@ -1,9 +1,9 @@
+import type { DbTransaction } from '../../client.js'
 import { eq, inArray } from 'drizzle-orm'
 import { db } from '../../client.js'
 import { tags } from './tags.schema.js'
 import type { Tag } from './tags.schema.js'
 
-type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 type DbClient = typeof db | DbTransaction
 
 interface TagWriteFields {

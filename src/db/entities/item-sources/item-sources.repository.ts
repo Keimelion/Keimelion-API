@@ -1,10 +1,10 @@
-import { and, count, eq, ne } from 'drizzle-orm'
+import type { DbTransaction } from '../../client.js'
+import { count, eq } from 'drizzle-orm'
 import { db } from '../../client.js'
 import { itemSources } from './item-sources.schema.js'
 import type { ItemSource } from './item-sources.schema.js'
 import type { ItemSourceWithShop } from '../../../shared/types/item.js'
 
-type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
 interface InsertItemSourceInput {
   itemId: string
@@ -33,10 +33,6 @@ export function findItemSourceByIdWithShop(id: string): Promise<ItemSourceWithSh
   })
 }
 
-export function findItemSourcesByItemId(itemId: string): Promise<ItemSource[]> {
-  return db.query.itemSources.findMany({ where: eq(itemSources.itemId, itemId) })
-}
-
 export async function updateItemSource(
   id: string,
   fields: UpdateItemSourceFields,
@@ -51,25 +47,6 @@ export async function deleteItemSource(id: string, tx?: DbTransaction): Promise<
   const client = tx ?? db
   const [row] = await client.delete(itemSources).where(eq(itemSources.id, id)).returning()
   return row
-}
-
-export async function existsItemSourceForShop(
-  itemId: string,
-  shopId: string,
-  excludeSourceId?: string,
-): Promise<boolean> {
-  const condition = excludeSourceId === undefined
-    ? and(eq(itemSources.itemId, itemId), eq(itemSources.shopId, shopId))
-    : and(
-      eq(itemSources.itemId, itemId),
-      eq(itemSources.shopId, shopId),
-      ne(itemSources.id, excludeSourceId),
-    )
-  const row = await db.query.itemSources.findFirst({
-    columns: { id: true },
-    where: condition,
-  })
-  return row !== undefined
 }
 
 export async function countItemSourcesByItemId(itemId: string, tx?: DbTransaction): Promise<number> {

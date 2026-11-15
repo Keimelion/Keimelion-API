@@ -1,9 +1,11 @@
+import { isIP } from 'node:net'
+
 const MIN_DOMAIN_LABEL_COUNT = 2
 const TRAILING_DOT_REGEX = /\.$/
 
 export function extractDomainCandidates(url: string): string[] {
   const hostname = parseHostname(url)
-  if (hostname === null) return []
+  if (hostname === null || isIP(hostname) !== 0) return []
 
   const labels = hostname.split('.')
   const candidateCount = Math.max(labels.length - MIN_DOMAIN_LABEL_COUNT + 1, 0)

@@ -5,6 +5,7 @@ export type WriteOutcome<T> = { row: T } | { errorCode: ErrorCode }
 
 interface RunWriteOptions {
   fallbackErrorCode?: ErrorCode
+  uniqueErrorCode?: ErrorCode
   foreignKeyErrorCode?: ErrorCode
 }
 
@@ -18,7 +19,7 @@ export async function runWrite<T>(
     if (!row) return { errorCode: fallback }
     return { row }
   } catch (error) {
-    if (isPgUniqueViolation(error)) return { errorCode: ErrorCode.CONFLICT }
+    if (isPgUniqueViolation(error)) return { errorCode: options?.uniqueErrorCode ?? ErrorCode.CONFLICT }
     if (options?.foreignKeyErrorCode !== undefined && isPgForeignKeyViolation(error)) {
       return { errorCode: options.foreignKeyErrorCode }
     }

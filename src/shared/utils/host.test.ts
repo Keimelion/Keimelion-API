@@ -35,4 +35,9 @@ describe('extractDomainCandidates', () => {
     expect(extractDomainCandidates('https://localhost/x')).toEqual([])
     expect(extractDomainCandidates('not a url')).toEqual([])
   })
+
+  it('returns no candidate for an IP-literal host', () => {
+    expect(extractDomainCandidates('https://10.0.0.1/x')).toEqual([])
+    expect(extractDomainCandidates('https://[::1]/x')).toEqual([])
+  })
 })

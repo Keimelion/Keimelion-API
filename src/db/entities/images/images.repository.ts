@@ -1,3 +1,4 @@
+import type { DbTransaction } from '../../client.js'
 import { and, eq, inArray, lt, notExists, sql } from 'drizzle-orm'
 import type { SQL } from 'drizzle-orm'
 import { db } from '../../client.js'
@@ -8,7 +9,6 @@ import { reports } from '../reports/reports.schema.js'
 import { ReportStatuses } from '@keimelion/sdk/enums'
 import type { Image } from './images.schema.js'
 
-type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
 interface InsertImageInput {
   hash: string

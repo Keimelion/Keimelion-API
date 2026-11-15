@@ -1,3 +1,4 @@
+import type { DbTransaction } from '../../../db/client.js'
 import { db } from '../../../db/client.js'
 import { users } from '../../../db/entities/users/users.schema.js'
 import { and, count, eq, type SQL } from 'drizzle-orm'
@@ -12,7 +13,6 @@ import { defineEntity, buildSoftDeleteDefault } from '../../../shared/db/entity-
 import type { User } from '../../../db/entities/users/users.schema.js'
 import type { UserRowWithAvatar } from '../../../shared/types/user.js'
 
-type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 import type { FilterInput } from '../../../shared/db/filter-parser.js'
 
 const roleSchema = z.enum(USER_ROLE_VALUES)

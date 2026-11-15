@@ -12,7 +12,6 @@ export interface ShopWrite {
   logoUrl: string | null
   isAffiliated: boolean
   sortOrder: number
-  isActive: boolean
 }
 
 export function toShopDetail(row: Shop): ShopDetail {
@@ -24,7 +23,6 @@ export function toShopDetail(row: Shop): ShopDetail {
     logoUrl: row.logoUrl ?? null,
     isAffiliated: row.isAffiliated,
     sortOrder: row.sortOrder,
-    isActive: row.isActive,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   }

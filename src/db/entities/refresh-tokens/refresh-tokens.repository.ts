@@ -1,9 +1,9 @@
+import type { DbTransaction } from '../../client.js'
 import { eq, lt } from 'drizzle-orm'
 import { db } from '../../client.js'
 import { refreshTokens } from './refresh-tokens.schema.js'
 import type { RefreshToken } from './refresh-tokens.schema.js'
 
-type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
 export async function insertRefreshToken(tokenHash: string, userId: string, expiresAt: Date): Promise<void> {
   await db.insert(refreshTokens).values({ tokenHash, userId, expiresAt })

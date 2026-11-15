@@ -1,3 +1,4 @@
+import type { DbTransaction } from '../../../db/client.js'
 import { db } from '../../../db/client.js'
 import { buildPaginatedResponse } from '../../../shared/utils/pagination.js'
 import { ErrorCode, HttpStatus } from '@keimelion/sdk/enums'
@@ -21,7 +22,7 @@ import {
 } from '../../../db/entities/items/items.repository.js'
 import { insertItemSource } from '../../../db/entities/item-sources/item-sources.repository.js'
 import { resolveItemRelations, writeItemRelations } from '../../../shared/db/item-relations.js'
-import { resolveSourceShops } from '../../../shared/db/source-shops.js'
+import { resolveSourceShopIds } from '../../../shared/db/source-shops.js'
 import { findAllItemsWithSources, countItems } from './admin-items.repository.js'
 import { toItemWithSources } from '../../../shared/types/item.js'
 import { toAdminItem } from './admin-items.mapper.js'
@@ -48,7 +49,6 @@ export interface UpdateItemInput extends Omit<AdminItemsUpdateRequestParsed, 'cl
 }
 
 type CreateSourceInput = AdminItemsCreateRequestParsed['sources'][number]
-type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 type ItemPatch = Partial<Pick<typeof items.$inferInsert, 'name' | 'description' | 'imageId'>>
 
 const ADMIN_ITEM_CREATE_CONTEXT = 'admin.item.create'
@@ -63,8 +63,7 @@ export async function createItem(
   const relations = await resolveItemRelations(input.tags, input.categories)
   if ('errorCode' in relations) return serviceError(relations.errorCode)
 
-  const sourcesWithShops = await resolveSourcesShopIds(input.sources)
-  if (hasDuplicateShopId(sourcesWithShops)) return serviceError(ErrorCode.DUPLICATE_SHOP_FOR_ITEM)
+  const sources = await withResolvedShopIds(input.sources)
 
   const imageOutcome = await processOptionalImage(input.imageBuffer, adminId)
   if ('errorCode' in imageOutcome) return serviceError(imageOutcome.errorCode)
@@ -83,11 +82,14 @@ export async function createItem(
       )
       if (!item) return undefined
 
-      await insertSourcesWithShops(item.id, sourcesWithShops, tx)
+      await insertSources(item.id, sources, tx)
       await writeItemRelations({ itemId: item.id, tagCreatorId: null, relations }, tx)
       return item
     }),
-  ))
+  ), {
+    uniqueErrorCode: ErrorCode.DUPLICATE_SHOP_FOR_ITEM,
+    foreignKeyErrorCode: ErrorCode.NOT_FOUND,
+  })
 
   if ('errorCode' in outcome) return serviceError(outcome.errorCode)
 
@@ -205,22 +207,15 @@ export async function deleteItemById(
   return { data: { message: 'Item deleted successfully' }, httpStatus: HttpStatus.OK }
 }
 
-async function resolveSourcesShopIds(sources: CreateSourceInput[]): Promise<CreateSourceInput[]> {
-  const resolvedShops = await resolveSourceShops(
+// Sources without an explicit shopId get the shop matching their URL domain.
+async function withResolvedShopIds(sources: CreateSourceInput[]): Promise<CreateSourceInput[]> {
+  const resolvedShopIds = await resolveSourceShopIds(
     sources.map((source) => (source.shopId === null ? source.sourceUrl : null)),
   )
-  return sources.map((source, index) => ({
-    ...source,
-    shopId: source.shopId ?? resolvedShops[index]?.id ?? null,
-  }))
+  return sources.map((source, index) => ({ ...source, shopId: source.shopId ?? resolvedShopIds[index] ?? null }))
 }
 
-function hasDuplicateShopId(sources: CreateSourceInput[]): boolean {
-  const shopIds = sources.flatMap((source) => (source.shopId === null ? [] : [source.shopId]))
-  return new Set(shopIds).size !== shopIds.length
-}
-
-async function insertSourcesWithShops(
+async function insertSources(
   itemId: string,
   sources: CreateSourceInput[],
   tx: DbTransaction,

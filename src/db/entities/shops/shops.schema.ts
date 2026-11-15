@@ -20,7 +20,6 @@ export const shops = pgTable(
     logoUrl: text('logo_url'),
     isAffiliated: boolean('is_affiliated').notNull().default(false),
     sortOrder: nonNegativeSmallInt('sort_order').notNull().default(0),
-    isActive: boolean('is_active').notNull().default(true),
     ...timestamps(),
   },
   (table) => [
