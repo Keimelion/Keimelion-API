@@ -131,6 +131,7 @@ interface ListItemRow {
   itemStatus: string
   sortOrder: number | null
   creatorNote: string | null
+  customName: string | null
   createdAt: Date
   updatedAt: Date
   item: Omit<typeof ITEM_ROW, 'imageId'> & {
@@ -145,6 +146,7 @@ interface ListItemRow {
 interface BuildListItemRowOptions {
   itemCategories?: CategoryLinkRow[]
   itemTags?: TagLinkRow[]
+  customName?: string | null
 }
 
 function buildListItemRow(
@@ -162,6 +164,7 @@ function buildListItemRow(
     itemStatus: 'available',
     sortOrder,
     creatorNote: null,
+    customName: options.customName ?? null,
     createdAt: new Date('2024-01-01'),
     updatedAt: new Date('2024-01-01'),
     item: {
@@ -460,6 +463,25 @@ describe('GET /v1/admin/lists/:id/items', () => {
     }
     expect(response.status).toBe(200)
     expect(body.items[0]?.sources).toEqual([])
+  })
+
+  it('returns the per-list customName alongside the catalogue item name', async () => {
+    const customName = 'Grandma birthday gift'
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindListById(LIST_ROW)
+    mockFindListItems([
+      buildListItemRow('00000000-0000-0000-0000-0000000000d1', null, [], { customName }),
+      LIST_ITEM_WITHOUT_SOURCES,
+    ])
+    mockCountChain(2)
+
+    const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}/items`, { token })
+
+    const body = adminListsListItemsResponseSchema.parse(await response.json())
+    expect(response.status).toBe(200)
+    expect(body.items.map((listItem) => listItem.customName)).toEqual([customName, null])
+    expect(body.items[0]?.item.name).toBe(ITEM_ROW.name)
   })
 
   it('honours pagination query (page=2, limit=1)', async () => {

@@ -73,6 +73,7 @@ const PUBLIC_LIST_ROW = {
       itemStatus: 'available' as const,
       sortOrder: null,
       creatorNote: null,
+      customName: null,
       createdAt: new Date('2024-01-01'),
       updatedAt: new Date('2024-01-01'),
       item: {
@@ -124,6 +125,34 @@ describe('GET /v1/public/lists/:slug', () => {
     expect(body.list.owner?.username).toBe('owner')
     expect(body.list.items).toHaveLength(1)
     expect(body.list.items[0]?.itemStatus).toBe('available')
+    expect(body.list.items[0]?.item.name).toBe('A nice item')
+  })
+
+  it('resolves the list item name to the catalogue item name when no customName is set', async () => {
+    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(PUBLIC_LIST_ROW)
+
+    const response = await apiRequest(`/v1/public/lists/${LIST_SLUG}`)
+    const body = publicListsGetResponseSchema.parse(await response.json())
+
+    expect(response.status).toBe(200)
+    expect(body.list.items[0]?.customName).toBeNull()
+    expect(body.list.items[0]?.name).toBe('A nice item')
+  })
+
+  it('resolves the list item name to the customName when set, keeping the catalogue name on item', async () => {
+    const customName = 'The blue one, please'
+    const customNamedRow = {
+      ...PUBLIC_LIST_ROW,
+      listItems: [{ ...PUBLIC_LIST_ROW.listItems[0], customName }],
+    }
+    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(customNamedRow)
+
+    const response = await apiRequest(`/v1/public/lists/${LIST_SLUG}`)
+    const body = publicListsGetResponseSchema.parse(await response.json())
+
+    expect(response.status).toBe(200)
+    expect(body.list.items[0]?.customName).toBe(customName)
+    expect(body.list.items[0]?.name).toBe(customName)
     expect(body.list.items[0]?.item.name).toBe('A nice item')
   })
 

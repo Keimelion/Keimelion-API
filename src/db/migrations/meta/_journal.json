@@ -225,6 +225,13 @@
       "when": 1794740622635,
       "tag": "0031_item-sources-affiliate-urls",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1794759019351,
+      "tag": "0032_list-items-custom-name",
+      "breakpoints": true
     }
   ]
 }

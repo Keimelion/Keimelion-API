@@ -1,6 +1,7 @@
 import type { Reservation } from '../../db/entities/reservations/reservations.schema.js'
 import type { ListItem } from '../../db/entities/list-items/list-items.schema.js'
 import type { List } from '../../db/entities/lists/lists.schema.js'
+import { resolveListItemName } from '../../shared/types/item.js'
 import type { ItemRowWithImage } from '../../shared/types/item.js'
 import { toImageDetail } from '../uploads/images.mapper.js'
 import { findOwnerUser } from '../../shared/types/list.js'
@@ -54,7 +55,7 @@ export function toReservationProfileEntry(row: ReservationProfileRow): Reservati
     },
     listItem: {
       id: row.listItem.id,
-      name: row.listItem.item.name,
+      name: resolveListItemName(row.listItem),
       quantityDesired: row.listItem.quantityDesired,
       imageId: row.listItem.item.imageId ?? null,
       image: row.listItem.item.image ? toImageDetail(row.listItem.item.image) : null,

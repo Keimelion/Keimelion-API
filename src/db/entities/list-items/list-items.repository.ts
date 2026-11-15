@@ -14,10 +14,11 @@ interface InsertListItemInput {
   itemId: string
   quantityDesired: number
   creatorNote: string | null
+  customName: string | null
   itemStatus: ItemStatus
 }
 
-type UpdateListItemFields = Partial<Pick<typeof listItems.$inferInsert, 'quantityDesired' | 'creatorNote' | 'sortOrder'>>
+type UpdateListItemFields = Partial<Pick<typeof listItems.$inferInsert, 'quantityDesired' | 'creatorNote' | 'customName' | 'sortOrder'>>
 
 interface UpdateReservationStateInput {
   quantityReservedTotal: number

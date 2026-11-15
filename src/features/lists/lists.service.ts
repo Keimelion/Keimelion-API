@@ -163,6 +163,7 @@ export async function addItemToList(
     itemId: item.id,
     quantityDesired: input.quantityDesired ?? DEFAULT_QUANTITY_DESIRED,
     creatorNote: input.creatorNote ?? null,
+    customName: input.customName ?? null,
     itemStatus: ItemStatuses.AVAILABLE,
   })
   if (!listItem) return serviceError(ErrorCode.INTERNAL_ERROR)

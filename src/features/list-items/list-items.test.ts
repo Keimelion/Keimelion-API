@@ -5,6 +5,7 @@ import { generateTestToken, makeAccessTokenEntry } from '../../shared/test/auth.
 import {
   listItemsCreateResponseSchema,
   listItemsUpdateResponseSchema,
+  MAX_CUSTOM_NAME_LENGTH,
   messageResponseSchema,
 } from '@keimelion/sdk/schemas'
 
@@ -57,9 +58,13 @@ const MOCK_LIST_ITEM = {
   itemStatus: 'available',
   sortOrder: null,
   creatorNote: null,
+  customName: null,
   createdAt: new Date('2024-01-01'),
   updatedAt: new Date('2024-01-01'),
 }
+
+const CUSTOM_NAME = 'Blue headphones for the office'
+const TOO_LONG_CUSTOM_NAME = 'a'.repeat(MAX_CUSTOM_NAME_LENGTH + 1)
 
 const ACCESS_TOKEN_ENTRY = makeAccessTokenEntry(AUTH_USER.id)
 
@@ -76,6 +81,26 @@ const MOCK_ITEM = {
 function mockAuthChain(): void {
   vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
   vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(AUTH_USER)
+}
+
+function mockOwnerListChain(): void {
+  vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(
+    { ...MOCK_LIST, listUsers: [{ userId: AUTH_USER.id, role: 'owner' as const, user: AUTH_USER }] } as never,
+  )
+}
+
+function mockInsertReturning(row: object): ReturnType<typeof vi.fn> {
+  const values = vi.fn().mockReturnValueOnce({ returning: vi.fn().mockResolvedValueOnce([row]) })
+  vi.mocked(db.insert).mockReturnValueOnce({ values } as never)
+  return values
+}
+
+function mockUpdateReturning(row: object): ReturnType<typeof vi.fn> {
+  const set = vi.fn().mockReturnValueOnce({
+    where: vi.fn().mockReturnValueOnce({ returning: vi.fn().mockResolvedValueOnce([row]) }),
+  })
+  vi.mocked(db.update).mockReturnValueOnce({ set } as never)
+  return set
 }
 
 function mockListItemOwnershipChain(): void {
@@ -159,6 +184,64 @@ describe('POST /v1/list-items', () => {
     expect(response.status).toBe(401)
   })
 
+  it('returns 201 and persists a trimmed customName', async () => {
+    const token = await generateTestToken(AUTH_USER.id)
+    mockAuthChain()
+    mockOwnerListChain()
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(MOCK_ITEM)
+    const values = mockInsertReturning({ ...MOCK_LIST_ITEM, customName: CUSTOM_NAME })
+
+    const response = await apiRequest('/v1/list-items', {
+      method: 'POST',
+      token,
+      body: { listId: LIST_ID, itemId: ITEM_ID, customName: `  ${CUSTOM_NAME}  ` },
+    })
+
+    const body = listItemsCreateResponseSchema.parse(await response.json())
+    expect(response.status).toBe(201)
+    expect(body.listItem.customName).toBe(CUSTOM_NAME)
+    expect(values).toHaveBeenCalledWith(expect.objectContaining({ customName: CUSTOM_NAME }))
+  })
+
+  it('defaults customName to null when omitted', async () => {
+    const token = await generateTestToken(AUTH_USER.id)
+    mockAuthChain()
+    mockOwnerListChain()
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(MOCK_ITEM)
+    const values = mockInsertReturning(MOCK_LIST_ITEM)
+
+    const response = await apiRequest('/v1/list-items', {
+      method: 'POST',
+      token,
+      body: { listId: LIST_ID, itemId: ITEM_ID },
+    })
+
+    const body = listItemsCreateResponseSchema.parse(await response.json())
+    expect(response.status).toBe(201)
+    expect(body.listItem.customName).toBeNull()
+    expect(values).toHaveBeenCalledWith(expect.objectContaining({ customName: null }))
+  })
+
+  it('returns 422 when customName exceeds the maximum length', async () => {
+    const token = await generateTestToken(AUTH_USER.id)
+    mockAuthChain()
+    mockOwnerListChain()
+
+    const response = await apiRequest('/v1/list-items', {
+      method: 'POST',
+      token,
+      body: { listId: LIST_ID, itemId: ITEM_ID, customName: TOO_LONG_CUSTOM_NAME },
+    })
+
+    const body = await response.json() as { metadata: { issues: { path: string; message: string }[] } }
+    expect(response.status).toBe(422)
+    expect(body.metadata.issues[0]?.path).toBe('customName')
+    expect(body.metadata.issues[0]?.message).toBe(
+      `customName must be at most ${String(MAX_CUSTOM_NAME_LENGTH)} characters`,
+    )
+    expect(vi.mocked(db.insert)).not.toHaveBeenCalled()
+  })
+
   it('returns 422 when listId is not a UUID', async () => {
     const token = await generateTestToken(AUTH_USER.id)
     mockAuthChain()
@@ -228,6 +311,61 @@ describe('PATCH /v1/list-items/:id', () => {
     })
 
     expect(response.status).toBe(200)
+  })
+
+  it('returns 200 and sets the customName', async () => {
+    const token = await generateTestToken(AUTH_USER.id)
+    mockAuthChain()
+    mockListItemOwnershipChain()
+    const set = mockUpdateReturning({ ...MOCK_LIST_ITEM, customName: CUSTOM_NAME })
+
+    const response = await apiRequest(`/v1/list-items/${LIST_ITEM_ID}`, {
+      method: 'PATCH',
+      token,
+      body: { customName: CUSTOM_NAME },
+    })
+
+    const body = listItemsUpdateResponseSchema.parse(await response.json())
+    expect(response.status).toBe(200)
+    expect(body.listItem.customName).toBe(CUSTOM_NAME)
+    expect(set).toHaveBeenCalledWith({ customName: CUSTOM_NAME })
+  })
+
+  it.each([null, '   '])('returns 200 and clears the customName when %j is sent', async (customName) => {
+    const token = await generateTestToken(AUTH_USER.id)
+    mockAuthChain()
+    mockListItemOwnershipChain()
+    const set = mockUpdateReturning(MOCK_LIST_ITEM)
+
+    const response = await apiRequest(`/v1/list-items/${LIST_ITEM_ID}`, {
+      method: 'PATCH',
+      token,
+      body: { customName },
+    })
+
+    const body = listItemsUpdateResponseSchema.parse(await response.json())
+    expect(response.status).toBe(200)
+    expect(body.listItem.customName).toBeNull()
+    expect(set).toHaveBeenCalledWith({ customName: null })
+  })
+
+  it('returns 422 when customName exceeds the maximum length', async () => {
+    const token = await generateTestToken(AUTH_USER.id)
+    mockAuthChain()
+
+    const response = await apiRequest(`/v1/list-items/${LIST_ITEM_ID}`, {
+      method: 'PATCH',
+      token,
+      body: { customName: TOO_LONG_CUSTOM_NAME },
+    })
+
+    const body = await response.json() as { metadata: { issues: { path: string; message: string }[] } }
+    expect(response.status).toBe(422)
+    expect(body.metadata.issues[0]?.path).toBe('customName')
+    expect(body.metadata.issues[0]?.message).toBe(
+      `customName must be at most ${String(MAX_CUSTOM_NAME_LENGTH)} characters`,
+    )
+    expect(vi.mocked(db.update)).not.toHaveBeenCalled()
   })
 
   it('returns 200 when user is an editor of the list', async () => {

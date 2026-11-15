@@ -54,7 +54,13 @@ export type ListItemDetail = ListItemDetailParsed
 export interface ListItemWrite {
   quantityDesired: number
   creatorNote: string | null
+  customName: string | null
   sortOrder: number | null
+}
+
+interface NamedListItemRow {
+  customName: string | null
+  item: Pick<Item, 'name'>
 }
 
 export function toItemDetail(item: ItemRowWithImage): ItemDetail {
@@ -116,7 +122,12 @@ export function toListItemDetail(listItem: ListItem): ListItemDetail {
     itemStatus: listItem.itemStatus,
     sortOrder: listItem.sortOrder ?? null,
     creatorNote: listItem.creatorNote ?? null,
+    customName: listItem.customName ?? null,
     createdAt: listItem.createdAt,
     updatedAt: listItem.updatedAt,
   }
+}
+
+export function resolveListItemName(listItem: NamedListItemRow): string {
+  return listItem.customName ?? listItem.item.name
 }

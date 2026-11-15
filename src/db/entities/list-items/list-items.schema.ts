@@ -1,11 +1,14 @@
 import { pgEnum, pgTable, text, unique, uuid } from 'drizzle-orm/pg-core'
 import { timestamps, uuidPrimaryKey } from '../../../shared/db/columns.js'
 import {
+  nonEmptyCheck,
+  nonEmptyVarchar,
   nonNegativeCheck,
   nonNegativeInt,
   nonNegativeSmallInt,
 } from '../../../shared/db/checks.js'
 import { ITEM_STATUS_VALUES, ItemStatuses } from '@keimelion/sdk/enums'
+import { MAX_CUSTOM_NAME_LENGTH } from '@keimelion/sdk/schemas'
 import { lists } from '../lists/lists.schema.js'
 import { items } from '../items/items.schema.js'
 
@@ -22,6 +25,7 @@ export const listItems = pgTable(
     itemStatus: itemStatusEnum('item_status').notNull().default(ItemStatuses.AVAILABLE),
     sortOrder: nonNegativeInt('sort_order'),
     creatorNote: text('creator_note'),
+    customName: nonEmptyVarchar('custom_name', MAX_CUSTOM_NAME_LENGTH),
     ...timestamps(),
   },
   (table) => [
@@ -29,6 +33,7 @@ export const listItems = pgTable(
     nonNegativeCheck(table.quantityDesired),
     nonNegativeCheck(table.quantityReservedTotal),
     nonNegativeCheck(table.sortOrder, { nullable: true }),
+    nonEmptyCheck(table.customName),
   ],
 )
 

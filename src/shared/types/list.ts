@@ -8,7 +8,7 @@ import { CONTRIBUTOR_ROLE_VALUES, ListUserRoles } from '@keimelion/sdk/enums'
 import type { ListUserRole, Locale } from '@keimelion/sdk/enums'
 import { toUserDetail } from './user.js'
 import { toTagPublic } from './tag.js'
-import { toItemSourceDetail } from './item.js'
+import { resolveListItemName, toItemSourceDetail } from './item.js'
 import type { ItemRowWithSources } from './item.js'
 import { resolveCategoryName, toCategoryPublic } from './category.js'
 import { toImageDetail } from '../../features/uploads/images.mapper.js'
@@ -131,6 +131,8 @@ function toPublicListItem(row: PublicListItemRow, locale: Locale): PublicListIte
     itemStatus: row.itemStatus,
     sortOrder: row.sortOrder ?? null,
     creatorNote: row.creatorNote ?? null,
+    customName: row.customName ?? null,
+    name: resolveListItemName(row),
     item: toPublicItemDetail(row.item, locale),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,

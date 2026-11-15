@@ -8,6 +8,7 @@ import {
   listsGetResponseSchema,
   listsListResponseSchema,
   listsUpdateResponseSchema,
+  MAX_CUSTOM_NAME_LENGTH,
 } from '@keimelion/sdk/schemas'
 
 const AUTH_USER = {
@@ -87,6 +88,7 @@ const MOCK_LIST_ITEM = {
   itemStatus: 'available',
   sortOrder: null,
   creatorNote: null,
+  customName: null,
   createdAt: new Date('2024-01-01'),
   updatedAt: new Date('2024-01-01'),
 }
@@ -768,12 +770,12 @@ describe('POST /v1/lists/:id/items', () => {
     vi.clearAllMocks()
   })
 
-  function mockInsertListItem(returnRow: unknown): void {
-    vi.mocked(db.insert).mockReturnValueOnce({
-      values: vi.fn().mockReturnValueOnce({
-        returning: vi.fn().mockResolvedValueOnce([returnRow]),
-      }),
-    } as never)
+  function mockInsertListItem(returnRow: unknown): ReturnType<typeof vi.fn> {
+    const values = vi.fn().mockReturnValueOnce({
+      returning: vi.fn().mockResolvedValueOnce([returnRow]),
+    })
+    vi.mocked(db.insert).mockReturnValueOnce({ values } as never)
+    return values
   }
 
   it('returns 201 and links the existing item when owner posts a valid itemId', async () => {
@@ -795,6 +797,47 @@ describe('POST /v1/lists/:id/items', () => {
     expect(body.listItem.item.id).toBe(ITEM_ID)
     expect(body.listItem.item.name).toBe('My Item')
     expect(body.listItem.itemStatus).toBe('available')
+  })
+
+  it('returns 201 with the customName while keeping the catalogue item name', async () => {
+    const customName = 'Grandma birthday gift'
+    const token = await generateTestToken(AUTH_USER.id)
+    mockAuthChain()
+    mockListAndOwner()
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(MOCK_ITEM)
+    const values = mockInsertListItem({ ...MOCK_LIST_ITEM, customName })
+
+    const response = await apiRequest(`/v1/lists/${LIST_ID}/items`, {
+      method: 'POST',
+      token,
+      body: { itemId: ITEM_ID, customName },
+    })
+
+    const body = listsAddItemResponseSchema.parse(await response.json())
+    expect(response.status).toBe(201)
+    expect(body.listItem.customName).toBe(customName)
+    expect(body.listItem.item.name).toBe('My Item')
+    expect(values).toHaveBeenCalledWith(expect.objectContaining({ customName }))
+  })
+
+  it('returns 422 when customName exceeds the maximum length', async () => {
+    const token = await generateTestToken(AUTH_USER.id)
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(AUTH_USER)
+
+    const response = await apiRequest(`/v1/lists/${LIST_ID}/items`, {
+      method: 'POST',
+      token,
+      body: { itemId: ITEM_ID, customName: 'a'.repeat(MAX_CUSTOM_NAME_LENGTH + 1) },
+    })
+
+    const body = await response.json() as { metadata: { issues: { path: string; message: string }[] } }
+    expect(response.status).toBe(422)
+    expect(body.metadata.issues[0]?.path).toBe('customName')
+    expect(body.metadata.issues[0]?.message).toBe(
+      `customName must be at most ${String(MAX_CUSTOM_NAME_LENGTH)} characters`,
+    )
+    expect(vi.mocked(db.insert)).not.toHaveBeenCalled()
   })
 
   it('returns 404 when the referenced item does not exist', async () => {

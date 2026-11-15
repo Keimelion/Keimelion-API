@@ -1,0 +1,2 @@
+ALTER TABLE "list_items" ADD COLUMN "custom_name" varchar(300);--> statement-breakpoint
+ALTER TABLE "list_items" ADD CONSTRAINT "custom_name_non_empty_check" CHECK (char_length("list_items"."custom_name") >= 1);
