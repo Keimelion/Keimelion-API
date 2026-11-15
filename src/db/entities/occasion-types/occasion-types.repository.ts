@@ -1,3 +1,4 @@
+import type { DbTransaction } from '../../client.js'
 import { and, asc, count, eq, sql } from 'drizzle-orm'
 import { db } from '../../client.js'
 import { occasionTypes, occasionTypeTranslations } from './occasion-types.schema.js'
@@ -8,7 +9,6 @@ import type { PaginationQueryParsed } from '@keimelion/sdk/schemas'
 import type { OccasionType, OccasionTypeTranslation } from './occasion-types.schema.js'
 import type { OccasionTypeRowWithTranslations } from '../../../shared/types/occasion-type.js'
 
-type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
 type InsertOccasionTypeFields = Omit<typeof occasionTypes.$inferInsert, 'id' | 'createdAt' | 'updatedAt'>
 

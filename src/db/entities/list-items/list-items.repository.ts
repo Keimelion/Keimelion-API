@@ -1,3 +1,4 @@
+import type { DbTransaction } from '../../client.js'
 import { eq } from 'drizzle-orm'
 import { db } from '../../client.js'
 import { ListUserRoles } from '@keimelion/sdk/enums'
@@ -6,7 +7,6 @@ import { listUsers } from '../list-users/list-users.schema.js'
 import { listItems } from './list-items.schema.js'
 import type { ListItem } from './list-items.schema.js'
 
-type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 type DbOrTx = typeof db | DbTransaction
 
 interface InsertListItemInput {

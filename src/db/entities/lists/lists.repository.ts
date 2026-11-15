@@ -1,3 +1,4 @@
+import type { DbTransaction } from '../../client.js'
 import { and, asc, eq, isNull, sql } from 'drizzle-orm'
 import type { AnyColumn } from 'drizzle-orm'
 import type { LIST_SORT_FIELDS } from '@keimelion/sdk/schemas'
@@ -135,7 +136,6 @@ export async function insertList(data: InsertList, tx?: DbOrTx): Promise<List | 
   return row
 }
 
-type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 type DbClient = typeof db | DbTransaction
 
 export async function updateList(

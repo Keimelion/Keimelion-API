@@ -34,7 +34,6 @@ const SHOP_ROW = {
   logoUrl: null,
   isAffiliated: false,
   sortOrder: 0,
-  isActive: true,
   createdAt: new Date('2024-01-01'),
   updatedAt: new Date('2024-01-01'),
 }
@@ -111,7 +110,6 @@ describe('POST /v1/admin/shops', () => {
         domain: 'amazon.com',
         isAffiliated: false,
         sortOrder: 0,
-        isActive: true,
       },
     })
 
@@ -397,7 +395,7 @@ describe('GET /v1/admin/shops', () => {
     expect(item).toHaveProperty('domain')
     expect(item).toHaveProperty('isAffiliated')
     expect(item).toHaveProperty('sortOrder')
-    expect(item).toHaveProperty('isActive')
+    expect(item).not.toHaveProperty('isActive')
     expect(item).toHaveProperty('createdAt')
     expect(item).toHaveProperty('updatedAt')
   })
@@ -415,34 +413,6 @@ describe('GET /v1/admin/shops', () => {
     expect(response.status).toBe(200)
     expect(body.items).toHaveLength(0)
     expect(body.pagination.total).toBe(0)
-  })
-
-  it('returns both active and inactive shops', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
-    mockAdminAuth()
-
-    const inactiveShop = { ...SHOP_ROW, id: '00000000-0000-0000-0000-000000000011', isActive: false }
-    vi.mocked(db.query.shops.findMany).mockResolvedValueOnce([SHOP_ROW, inactiveShop] as never)
-    mockCountChain(2)
-
-    const response = await apiRequest('/v1/admin/shops', { token })
-
-    const body = await response.json() as { items: { isActive: boolean }[] }
-    expect(response.status).toBe(200)
-    expect(body.items).toHaveLength(2)
-    expect(body.items.some((item) => !item.isActive)).toBe(true)
-  })
-
-  it('filters by isActive[eq]=true', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
-    mockAdminAuth()
-
-    vi.mocked(db.query.shops.findMany).mockResolvedValueOnce([SHOP_ROW] as never)
-    mockCountChain(1)
-
-    const response = await apiRequest('/v1/admin/shops?isActive%5Beq%5D=true', { token })
-
-    expect(response.status).toBe(200)
   })
 
   it('filters by isAffiliated[eq]=true', async () => {
@@ -540,16 +510,16 @@ describe('GET /v1/admin/shops', () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
 
-    const response = await apiRequest('/v1/admin/shops?isActive%5Bilike%5D=true', { token })
+    const response = await apiRequest('/v1/admin/shops?isAffiliated%5Bilike%5D=true', { token })
 
     expect(response.status).toBe(422)
   })
 
-  it('returns 422 when isActive[eq] is not "true" or "false"', async () => {
+  it('returns 422 when isAffiliated[eq] is not "true" or "false"', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
 
-    const response = await apiRequest('/v1/admin/shops?isActive%5Beq%5D=yes', { token })
+    const response = await apiRequest('/v1/admin/shops?isAffiliated%5Beq%5D=yes', { token })
 
     expect(response.status).toBe(422)
   })
@@ -751,25 +721,6 @@ describe('PATCH /v1/admin/shops/:id', () => {
     adminShopsUpdateResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.shop.name).toBe('Amazon Updated')
-  })
-
-  it('returns 200 when toggling isActive to false', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
-    mockAdminAuth()
-
-    mockFindShopById(SHOP_ROW)
-    const updatedRow = { ...SHOP_ROW, isActive: false }
-    mockUpdateShop(updatedRow)
-
-    const response = await apiRequest(`/v1/admin/shops/${SHOP_ROW.id}`, {
-      method: 'PATCH',
-      token,
-      body: { isActive: false },
-    })
-
-    const body = await response.json() as { shop: { isActive: boolean } }
-    expect(response.status).toBe(200)
-    expect(body.shop.isActive).toBe(false)
   })
 
   it('returns 404 when shop does not exist', async () => {

@@ -1,3 +1,4 @@
+import type { DbTransaction } from '../../client.js'
 import { and, asc, eq, inArray, sql } from 'drizzle-orm'
 import { db } from '../../client.js'
 import { DEFAULT_LOCALE } from '@keimelion/sdk/enums'
@@ -9,7 +10,6 @@ import type {
   CategoryRowWithTranslations,
 } from '../../../shared/types/category.js'
 
-type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 type DbClient = typeof db | DbTransaction
 
 interface CategoryWriteFields {

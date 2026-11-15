@@ -6,3 +6,5 @@ import * as schema from './entities/index.js'
 const queryClient = postgres(env.DATABASE_URL)
 
 export const db = drizzle(queryClient, { schema })
+
+export type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]

@@ -2,7 +2,8 @@
 name: po
 description: Product Owner — analyses Notion specs and generates backlog tasks in the project Notion kanban board. Use this agent to break down a feature into tasks, create tickets in Notion, or update backlog status.
 tools: Read, Grep, Glob, Bash
-model: haiku
+model: sonnet
+effort: medium
 color: blue
 ---
 

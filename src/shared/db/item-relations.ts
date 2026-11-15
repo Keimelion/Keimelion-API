@@ -1,4 +1,4 @@
-import type { db } from '../../db/client.js'
+import type { DbTransaction } from '../../db/client.js'
 import { ErrorCode } from '@keimelion/sdk/enums'
 import { normalizeTagSlugs } from '../utils/slug.js'
 import { findCategoriesByIds } from '../../db/entities/categories/categories.repository.js'
@@ -6,7 +6,6 @@ import { replaceItemCategories } from '../../db/entities/item-categories/item-ca
 import { upsertTagsBySlugs } from '../../db/entities/tags/tags.repository.js'
 import { replaceItemTags } from '../../db/entities/item-tags/item-tags.repository.js'
 
-type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
 // null = leave the relation untouched; [] = clear it.
 export interface ItemRelations {

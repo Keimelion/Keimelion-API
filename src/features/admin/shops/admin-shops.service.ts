@@ -39,7 +39,6 @@ export async function createShop(
       logoUrl: input.logoUrl ?? null,
       isAffiliated: input.isAffiliated,
       sortOrder: input.sortOrder,
-      isActive: input.isActive,
     }),
   )
 
@@ -98,7 +97,6 @@ export async function updateShopById(
     logoUrl: input.logoUrl,
     isAffiliated: input.isAffiliated,
     sortOrder: input.sortOrder,
-    isActive: input.isActive,
   })
 
   const logBase = { adminId, action: AdminAction.UPDATE_SHOP, shopId: id, slug: existingRow.slug }

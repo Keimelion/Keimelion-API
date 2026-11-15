@@ -27,7 +27,6 @@ export const shopsEntity = defineEntity({
     name:         { column: shops.name,         operators: ['eq', 'ilike'] },
     slug:         { column: shops.slug,         operators: ['eq', 'ilike'] },
     domain:       { column: shops.domain,       operators: ['eq', 'ilike', 'isNull'] },
-    isActive:     { column: shops.isActive,     operators: ['eq'], valueType: 'boolean' },
     isAffiliated: { column: shops.isAffiliated, operators: ['eq'], valueType: 'boolean' },
   },
 })

@@ -54,7 +54,6 @@ const SHOP_ROW = {
   logoUrl: null,
   isAffiliated: false,
   sortOrder: 0,
-  isActive: true,
   createdAt: new Date('2024-01-01'),
   updatedAt: new Date('2024-01-01'),
 }

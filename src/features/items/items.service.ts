@@ -1,3 +1,4 @@
+import type { DbTransaction } from '../../db/client.js'
 import { db } from '../../db/client.js'
 import { buildPaginatedResponse } from '../../shared/utils/pagination.js'
 import { ErrorCode, HttpStatus } from '@keimelion/sdk/enums'
@@ -39,7 +40,6 @@ export interface UpdateUserItemInput extends Omit<ItemsUpdateRequestParsed, 'cle
   clearImage: boolean
 }
 
-type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 type ItemPatch = Parameters<typeof updateItem>[1]
 
 interface ItemUpdateWrite {

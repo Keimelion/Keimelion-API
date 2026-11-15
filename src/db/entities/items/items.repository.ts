@@ -1,3 +1,4 @@
+import type { DbTransaction } from '../../client.js'
 import { count, desc, eq } from 'drizzle-orm'
 import { db } from '../../client.js'
 import { items } from './items.schema.js'
@@ -7,7 +8,6 @@ import type { PaginationQueryParsed } from '@keimelion/sdk/schemas'
 import type { Item } from './items.schema.js'
 import type { ItemRowWithImage, ItemRowWithSources } from '../../../shared/types/item.js'
 
-type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
 interface InsertItemInput {
   name: string

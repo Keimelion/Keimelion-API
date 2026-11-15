@@ -53,7 +53,6 @@ const SHOP_ROW = {
   logoUrl: null,
   isAffiliated: false,
   sortOrder: 0,
-  isActive: true,
   createdAt: new Date('2024-01-01'),
   updatedAt: new Date('2024-01-01'),
 }
@@ -158,35 +157,26 @@ function mockFindItemSourceByIdWithShop(row: unknown, shop: unknown): void {
   vi.mocked(db.query.itemSources.findFirst).mockResolvedValueOnce(rowOut as never)
 }
 
-function mockFindShopById(row: unknown): void {
-  vi.mocked(db.query.shops.findFirst).mockResolvedValueOnce(row as never)
+const UNIQUE_VIOLATION = '23505'
+const FOREIGN_KEY_VIOLATION = '23503'
+
+function pgError(code: string): Error {
+  return Object.assign(new Error('postgres error'), { code })
 }
 
-function mockExistsItemSourceForShop(exists: boolean): void {
-  vi.mocked(db.query.itemSources.findFirst).mockResolvedValueOnce(
-    (exists ? { id: 'any-id' } : undefined) as never,
-  )
-}
-
-function mockInsertItemSourceUniqueViolation(): void {
-  const error = Object.assign(new Error('duplicate key value violates unique constraint'), {
-    code: '23505',
-  })
+function mockInsertItemSourceRejected(code: string): void {
   vi.mocked(db.insert).mockReturnValueOnce({
     values: vi.fn().mockReturnValueOnce({
-      returning: vi.fn().mockRejectedValueOnce(error),
+      returning: vi.fn().mockRejectedValueOnce(pgError(code)),
     }),
   } as never)
 }
 
-function mockUpdateItemSourceUniqueViolation(): void {
-  const error = Object.assign(new Error('duplicate key value violates unique constraint'), {
-    code: '23505',
-  })
+function mockUpdateItemSourceRejected(code: string): void {
   vi.mocked(db.update).mockReturnValueOnce({
     set: vi.fn().mockReturnValueOnce({
       where: vi.fn().mockReturnValueOnce({
-        returning: vi.fn().mockRejectedValueOnce(error),
+        returning: vi.fn().mockRejectedValueOnce(pgError(code)),
       }),
     }),
   } as never)
@@ -1479,8 +1469,8 @@ describe('POST /v1/admin/items/:id/sources', () => {
   it('returns 201 with created source', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
-    mockFindItemById(ITEM_ROW)
     mockInsertItemSource(SOURCE_ROW)
+    mockFindItemSourceByIdWithShop(SOURCE_ROW, null)
 
     const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}/sources`, {
       method: 'POST',
@@ -1498,9 +1488,8 @@ describe('POST /v1/admin/items/:id/sources', () => {
   it('returns 201 with embedded shop when shopId is provided', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
-    mockFindItemById(ITEM_ROW)
-    mockFindShopById(SHOP_ROW)
     mockInsertItemSource(SOURCE_WITH_SHOP_ROW)
+    mockFindItemSourceByIdWithShop(SOURCE_WITH_SHOP_ROW, SHOP_ROW)
 
     const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}/sources`, {
       method: 'POST',
@@ -1516,7 +1505,7 @@ describe('POST /v1/admin/items/:id/sources', () => {
   it('returns 404 when parent item does not exist', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
-    mockFindItemById(undefined)
+    mockInsertItemSourceRejected(FOREIGN_KEY_VIOLATION)
 
     const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}/sources`, {
       method: 'POST',
@@ -1527,11 +1516,10 @@ describe('POST /v1/admin/items/:id/sources', () => {
     expect(response.status).toBe(404)
   })
 
-  it('returns 404 when shopId does not exist or is inactive', async () => {
+  it('returns 404 when shopId does not exist', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
-    mockFindItemById(ITEM_ROW)
-    mockFindShopById(undefined)
+    mockInsertItemSourceRejected(FOREIGN_KEY_VIOLATION)
 
     const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}/sources`, {
       method: 'POST',
@@ -1610,8 +1598,8 @@ describe('POST /v1/admin/items/:id/sources', () => {
   it('logs at info level on successful creation', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
-    mockFindItemById(ITEM_ROW)
     mockInsertItemSource(SOURCE_ROW)
+    mockFindItemSourceByIdWithShop(SOURCE_ROW, null)
 
     await apiRequest(`/v1/admin/items/${ITEM_ROW.id}/sources`, {
       method: 'POST',
@@ -1646,12 +1634,10 @@ describe('POST /v1/admin/items/:id/sources', () => {
     expect(response.status).toBe(401)
   })
 
-  it('returns 409 when the item already has a source for the same shop', async () => {
+  it('returns 409 DUPLICATE_SHOP_FOR_ITEM when the DB unique index rejects the insert', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
-    mockFindItemById(ITEM_ROW)
-    mockFindShopById(SHOP_ROW)
-    mockExistsItemSourceForShop(true)
+    mockInsertItemSourceRejected(UNIQUE_VIOLATION)
 
     const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}/sources`, {
       method: 'POST',
@@ -1663,43 +1649,6 @@ describe('POST /v1/admin/items/:id/sources', () => {
     expect(response.status).toBe(409)
     expect(body.code).toBe('DUPLICATE_SHOP_FOR_ITEM')
     expect(body.message).toBe('This shop is already used by another source of this item.')
-  })
-
-  it('returns 409 when the DB unique index rejects a concurrent duplicate insert', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
-    mockAdminAuth()
-    mockFindItemById(ITEM_ROW)
-    mockFindShopById(SHOP_ROW)
-    mockExistsItemSourceForShop(false)
-    mockInsertItemSourceUniqueViolation()
-
-    const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}/sources`, {
-      method: 'POST',
-      token,
-      body: { shopId: SHOP_ROW.id, currency: 'EUR' },
-    })
-
-    const body = await response.json() as { code: string; message: string }
-    expect(response.status).toBe(409)
-    expect(body.code).toBe('DUPLICATE_SHOP_FOR_ITEM')
-    expect(body.message).toBe('This shop is already used by another source of this item.')
-  })
-
-  it('skips the uniqueness probe when shopId is null (any number allowed)', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
-    mockAdminAuth()
-    mockFindItemById(ITEM_ROW)
-    mockInsertItemSource(SOURCE_ROW)
-
-    const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}/sources`, {
-      method: 'POST',
-      token,
-      body: { shopId: null, currency: 'EUR' },
-    })
-
-    expect(response.status).toBe(201)
-    // Only the auth findFirst runs; the uniqueness probe is not reached.
-    expect(vi.mocked(db.query.itemSources.findFirst)).not.toHaveBeenCalled()
   })
 })
 
@@ -1736,8 +1685,6 @@ describe('PATCH /v1/admin/items/:id/sources/:sourceId', () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
     mockFindItemSourceById(SOURCE_ROW)
-    mockFindShopById(SHOP_ROW)
-    mockExistsItemSourceForShop(false)
     mockUpdateItemSource({ ...SOURCE_ROW, shopId: SHOP_ROW.id })
     mockFindItemSourceByIdWithShop({ ...SOURCE_ROW, shopId: SHOP_ROW.id }, SHOP_ROW)
 
@@ -1851,12 +1798,11 @@ describe('PATCH /v1/admin/items/:id/sources/:sourceId', () => {
     expect(response.status).toBe(401)
   })
 
-  it('returns 409 when patching shopId to one already used by another source of the item', async () => {
+  it('returns 409 DUPLICATE_SHOP_FOR_ITEM when the DB unique index rejects the update', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
     mockFindItemSourceById(SOURCE_ROW)
-    mockFindShopById(SHOP_ROW)
-    mockExistsItemSourceForShop(true)
+    mockUpdateItemSourceRejected(UNIQUE_VIOLATION)
 
     const response = await apiRequest(
       `/v1/admin/items/${ITEM_ROW.id}/sources/${SOURCE_ROW.id}`,
@@ -1873,13 +1819,11 @@ describe('PATCH /v1/admin/items/:id/sources/:sourceId', () => {
     expect(body.message).toBe('This shop is already used by another source of this item.')
   })
 
-  it('returns 409 when the DB unique index rejects a concurrent duplicate update', async () => {
+  it('returns 404 when the patched shopId does not exist', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
     mockFindItemSourceById(SOURCE_ROW)
-    mockFindShopById(SHOP_ROW)
-    mockExistsItemSourceForShop(false)
-    mockUpdateItemSourceUniqueViolation()
+    mockUpdateItemSourceRejected(FOREIGN_KEY_VIOLATION)
 
     const response = await apiRequest(
       `/v1/admin/items/${ITEM_ROW.id}/sources/${SOURCE_ROW.id}`,
@@ -1890,33 +1834,7 @@ describe('PATCH /v1/admin/items/:id/sources/:sourceId', () => {
       },
     )
 
-    const body = await response.json() as { code: string; message: string }
-    expect(response.status).toBe(409)
-    expect(body.code).toBe('DUPLICATE_SHOP_FOR_ITEM')
-    expect(body.message).toBe('This shop is already used by another source of this item.')
-  })
-
-  it('skips the uniqueness probe when shopId is unchanged', async () => {
-    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
-    mockAdminAuth()
-    mockFindItemSourceById({ ...SOURCE_ROW, shopId: SHOP_ROW.id })
-    mockFindShopById(SHOP_ROW)
-    mockUpdateItemSource({ ...SOURCE_ROW, shopId: SHOP_ROW.id, currency: 'USD' })
-    mockFindItemSourceByIdWithShop({ ...SOURCE_ROW, shopId: SHOP_ROW.id, currency: 'USD' }, SHOP_ROW)
-
-    const response = await apiRequest(
-      `/v1/admin/items/${ITEM_ROW.id}/sources/${SOURCE_ROW.id}`,
-      {
-        method: 'PATCH',
-        token,
-        body: { shopId: SHOP_ROW.id, currency: 'USD' },
-      },
-    )
-
-    expect(response.status).toBe(200)
-    // Only findItemSourceById + findItemSourceByIdWithShop (both use itemSources.findFirst),
-    // so exactly 2 calls — the probe would push it to 3.
-    expect(vi.mocked(db.query.itemSources.findFirst)).toHaveBeenCalledTimes(2)
+    expect(response.status).toBe(404)
   })
 })
 
@@ -2192,5 +2110,358 @@ describe('admin items — image upload', () => {
 
     expect(response.status).toBe(200)
     expect(vi.mocked(db.delete)).toHaveBeenCalledWith(images)
+  })
+})
+
+describe('shop resolution from sourceUrl', () => {
+  const AMAZON_FR_SHOP = {
+    ...SHOP_ROW,
+    id: '00000000-0000-0000-0000-000000000021',
+    slug: 'amazon-fr',
+    name: 'Amazon France',
+    domain: 'amazon.fr',
+  }
+  const AMAZON_FR_URL = 'https://www.amazon.fr/dp/B000'
+
+  function mockFindShopsByDomains(rows: unknown[]): void {
+    vi.mocked(db.query.shops.findMany).mockResolvedValueOnce(rows as never)
+  }
+
+  function mockInsertItemSourceRecordingValues(returnRow: unknown): ReturnType<typeof vi.fn> {
+    const values = vi.fn().mockReturnValueOnce({
+      returning: vi.fn().mockResolvedValueOnce([returnRow]),
+    })
+    vi.mocked(db.insert).mockReturnValueOnce({ values } as never)
+    return values
+  }
+
+  function mockUpdateItemSourceRecordingSet(returnRow: unknown): ReturnType<typeof vi.fn> {
+    const set = vi.fn().mockReturnValueOnce({
+      where: vi.fn().mockReturnValueOnce({
+        returning: vi.fn().mockResolvedValueOnce([returnRow]),
+      }),
+    })
+    vi.mocked(db.update).mockReturnValueOnce({ set } as never)
+    return set
+  }
+
+  function mockCreateItemTransactionRecordingValues(itemRow: unknown, sourceRows: unknown[]): ReturnType<typeof vi.fn> {
+    const values = vi.fn()
+    for (const row of [itemRow, ...sourceRows]) {
+      values.mockReturnValueOnce({ returning: vi.fn().mockResolvedValueOnce([row]) })
+    }
+    vi.mocked(db.transaction).mockImplementationOnce((callback) =>
+      callback({ insert: vi.fn().mockReturnValue({ values }) } as never),
+    )
+    return values
+  }
+
+  function mockCreateItemTransactionRejected(code: string): void {
+    vi.mocked(db.transaction).mockRejectedValueOnce(pgError(code))
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
+  })
+
+  describe('POST /v1/admin/items/:id/sources', () => {
+    it('sets shopId from a subdomain of the shop domain', async () => {
+      const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+      mockAdminAuth()
+      mockFindShopsByDomains([AMAZON_FR_SHOP])
+      const insertedRow = { ...SOURCE_ROW, shopId: AMAZON_FR_SHOP.id, sourceUrl: AMAZON_FR_URL }
+      const values = mockInsertItemSourceRecordingValues(insertedRow)
+      mockFindItemSourceByIdWithShop(insertedRow, AMAZON_FR_SHOP)
+
+      const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}/sources`, {
+        method: 'POST',
+        token,
+        body: { sourceUrl: AMAZON_FR_URL },
+      })
+
+      const body = adminItemsCreateSourceResponseSchema.parse(await response.json())
+      expect(response.status).toBe(201)
+      expect(values).toHaveBeenCalledWith(expect.objectContaining({ shopId: AMAZON_FR_SHOP.id }))
+      expect(body.source.shop?.slug).toBe(AMAZON_FR_SHOP.slug)
+    })
+
+    it('prefers the most specific matching shop domain', async () => {
+      const subdomainShop = {
+        ...AMAZON_FR_SHOP,
+        id: '00000000-0000-0000-0000-000000000022',
+        slug: 'amazon-fr-mobile',
+        domain: 'm.amazon.fr',
+      }
+      const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+      mockAdminAuth()
+      mockFindShopsByDomains([AMAZON_FR_SHOP, subdomainShop])
+      const values = mockInsertItemSourceRecordingValues({ ...SOURCE_ROW, shopId: subdomainShop.id })
+      mockFindItemSourceByIdWithShop({ ...SOURCE_ROW, shopId: subdomainShop.id }, subdomainShop)
+
+      const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}/sources`, {
+        method: 'POST',
+        token,
+        body: { sourceUrl: 'https://m.amazon.fr/dp/B000' },
+      })
+
+      expect(response.status).toBe(201)
+      expect(values).toHaveBeenCalledWith(expect.objectContaining({ shopId: subdomainShop.id }))
+    })
+
+    it('ignores IP-literal hosts', async () => {
+      const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+      mockAdminAuth()
+      mockInsertItemSource(SOURCE_ROW)
+      mockFindItemSourceByIdWithShop(SOURCE_ROW, null)
+
+      const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}/sources`, {
+        method: 'POST',
+        token,
+        body: { sourceUrl: 'https://10.0.0.1/x' },
+      })
+
+      expect(response.status).toBe(201)
+      expect(vi.mocked(db.query.shops.findMany)).not.toHaveBeenCalled()
+    })
+
+    it('leaves shopId null and succeeds when no shop matches', async () => {
+      const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+      mockAdminAuth()
+      mockFindShopsByDomains([])
+      const values = mockInsertItemSourceRecordingValues({ ...SOURCE_ROW, sourceUrl: 'https://notamazon.fr/x' })
+      mockFindItemSourceByIdWithShop({ ...SOURCE_ROW, sourceUrl: 'https://notamazon.fr/x' }, null)
+
+      const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}/sources`, {
+        method: 'POST',
+        token,
+        body: { sourceUrl: 'https://notamazon.fr/x' },
+      })
+
+      const body = adminItemsCreateSourceResponseSchema.parse(await response.json())
+      expect(response.status).toBe(201)
+      expect(values).toHaveBeenCalledWith(expect.objectContaining({ shopId: null }))
+      expect(body.source.shop).toBeNull()
+    })
+
+    it('does not look up shops by domain when sourceUrl is absent', async () => {
+      const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+      mockAdminAuth()
+      mockInsertItemSource(SOURCE_ROW)
+      mockFindItemSourceByIdWithShop(SOURCE_ROW, null)
+
+      const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}/sources`, {
+        method: 'POST',
+        token,
+        body: { currency: 'EUR' },
+      })
+
+      expect(response.status).toBe(201)
+      expect(vi.mocked(db.query.shops.findMany)).not.toHaveBeenCalled()
+    })
+
+    it('keeps an explicit shopId even when sourceUrl matches another shop', async () => {
+      const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+      mockAdminAuth()
+      const values = mockInsertItemSourceRecordingValues({ ...SOURCE_WITH_SHOP_ROW, sourceUrl: AMAZON_FR_URL })
+      mockFindItemSourceByIdWithShop({ ...SOURCE_WITH_SHOP_ROW, sourceUrl: AMAZON_FR_URL }, SHOP_ROW)
+
+      const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}/sources`, {
+        method: 'POST',
+        token,
+        body: { shopId: SHOP_ROW.id, sourceUrl: AMAZON_FR_URL },
+      })
+
+      expect(response.status).toBe(201)
+      expect(values).toHaveBeenCalledWith(expect.objectContaining({ shopId: SHOP_ROW.id }))
+      expect(vi.mocked(db.query.shops.findMany)).not.toHaveBeenCalled()
+    })
+
+    it('returns 409 DUPLICATE_SHOP_FOR_ITEM when the resolved shop is already used on the item', async () => {
+      const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+      mockAdminAuth()
+      mockFindShopsByDomains([AMAZON_FR_SHOP])
+      mockInsertItemSourceRejected(UNIQUE_VIOLATION)
+
+      const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}/sources`, {
+        method: 'POST',
+        token,
+        body: { sourceUrl: AMAZON_FR_URL },
+      })
+
+      const body = await response.json() as { code: string }
+      expect(response.status).toBe(409)
+      expect(body.code).toBe('DUPLICATE_SHOP_FOR_ITEM')
+    })
+  })
+
+  describe('PATCH /v1/admin/items/:id/sources/:sourceId', () => {
+    it('resolves shopId from the new sourceUrl when the source has no shop', async () => {
+      const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+      mockAdminAuth()
+      mockFindItemSourceById(SOURCE_ROW)
+      mockFindShopsByDomains([AMAZON_FR_SHOP])
+      const set = mockUpdateItemSourceRecordingSet({ ...SOURCE_ROW, shopId: AMAZON_FR_SHOP.id })
+      mockFindItemSourceByIdWithShop({ ...SOURCE_ROW, shopId: AMAZON_FR_SHOP.id }, AMAZON_FR_SHOP)
+
+      const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}/sources/${SOURCE_ROW.id}`, {
+        method: 'PATCH',
+        token,
+        body: { sourceUrl: AMAZON_FR_URL },
+      })
+
+      const body = adminItemsUpdateSourceResponseSchema.parse(await response.json())
+      expect(response.status).toBe(200)
+      expect(set).toHaveBeenCalledWith({ shopId: AMAZON_FR_SHOP.id, sourceUrl: AMAZON_FR_URL })
+      expect(body.source.shop?.slug).toBe(AMAZON_FR_SHOP.slug)
+    })
+
+    it('keeps the current shop when only sourceUrl changes', async () => {
+      const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+      mockAdminAuth()
+      mockFindItemSourceById(SOURCE_WITH_SHOP_ROW)
+      const set = mockUpdateItemSourceRecordingSet({ ...SOURCE_WITH_SHOP_ROW, sourceUrl: 'https://amzn.to/abc' })
+      mockFindItemSourceByIdWithShop({ ...SOURCE_WITH_SHOP_ROW, sourceUrl: 'https://amzn.to/abc' }, SHOP_ROW)
+
+      const response = await apiRequest(
+        `/v1/admin/items/${ITEM_ROW.id}/sources/${SOURCE_WITH_SHOP_ROW.id}`,
+        { method: 'PATCH', token, body: { sourceUrl: 'https://amzn.to/abc' } },
+      )
+
+      expect(response.status).toBe(200)
+      expect(set).toHaveBeenCalledWith({ sourceUrl: 'https://amzn.to/abc' })
+      expect(vi.mocked(db.query.shops.findMany)).not.toHaveBeenCalled()
+    })
+
+    it('keeps the current shop when sourceUrl is cleared', async () => {
+      const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+      mockAdminAuth()
+      mockFindItemSourceById(SOURCE_WITH_SHOP_ROW)
+      const set = mockUpdateItemSourceRecordingSet({ ...SOURCE_WITH_SHOP_ROW, sourceUrl: null })
+      mockFindItemSourceByIdWithShop({ ...SOURCE_WITH_SHOP_ROW, sourceUrl: null }, SHOP_ROW)
+
+      const response = await apiRequest(
+        `/v1/admin/items/${ITEM_ROW.id}/sources/${SOURCE_WITH_SHOP_ROW.id}`,
+        { method: 'PATCH', token, body: { sourceUrl: null } },
+      )
+
+      expect(response.status).toBe(200)
+      expect(set).toHaveBeenCalledWith({ sourceUrl: null })
+    })
+
+    it('keeps the explicit shopId when both shopId and sourceUrl are sent', async () => {
+      const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+      mockAdminAuth()
+      mockFindItemSourceById(SOURCE_ROW)
+      const set = mockUpdateItemSourceRecordingSet(SOURCE_WITH_SHOP_ROW)
+      mockFindItemSourceByIdWithShop(SOURCE_WITH_SHOP_ROW, SHOP_ROW)
+
+      const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}/sources/${SOURCE_ROW.id}`, {
+        method: 'PATCH',
+        token,
+        body: { shopId: SHOP_ROW.id, sourceUrl: AMAZON_FR_URL },
+      })
+
+      expect(response.status).toBe(200)
+      expect(set).toHaveBeenCalledWith({ shopId: SHOP_ROW.id, sourceUrl: AMAZON_FR_URL })
+      expect(vi.mocked(db.query.shops.findMany)).not.toHaveBeenCalled()
+    })
+
+    it('leaves shopId untouched when sourceUrl is not sent', async () => {
+      const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+      mockAdminAuth()
+      mockFindItemSourceById(SOURCE_WITH_SHOP_ROW)
+      const set = mockUpdateItemSourceRecordingSet({ ...SOURCE_WITH_SHOP_ROW, price: '10.00' })
+      mockFindItemSourceByIdWithShop({ ...SOURCE_WITH_SHOP_ROW, price: '10.00' }, SHOP_ROW)
+
+      const response = await apiRequest(
+        `/v1/admin/items/${ITEM_ROW.id}/sources/${SOURCE_WITH_SHOP_ROW.id}`,
+        { method: 'PATCH', token, body: { price: '10.00' } },
+      )
+
+      expect(response.status).toBe(200)
+      expect(set).toHaveBeenCalledWith({ price: '10.00' })
+      expect(vi.mocked(db.query.shops.findMany)).not.toHaveBeenCalled()
+    })
+
+    it('returns 409 DUPLICATE_SHOP_FOR_ITEM when the resolved shop is used by another source', async () => {
+      const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+      mockAdminAuth()
+      mockFindItemSourceById(SOURCE_ROW)
+      mockFindShopsByDomains([AMAZON_FR_SHOP])
+      mockUpdateItemSourceRejected(UNIQUE_VIOLATION)
+
+      const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}/sources/${SOURCE_ROW.id}`, {
+        method: 'PATCH',
+        token,
+        body: { sourceUrl: AMAZON_FR_URL },
+      })
+
+      const body = await response.json() as { code: string }
+      expect(response.status).toBe(409)
+      expect(body.code).toBe('DUPLICATE_SHOP_FOR_ITEM')
+    })
+  })
+
+  describe('POST /v1/admin/items', () => {
+    it('resolves the shop of each source in a single lookup', async () => {
+      const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+      mockAdminAuth()
+      mockFindShopsByDomains([AMAZON_FR_SHOP])
+      const values = mockCreateItemTransactionRecordingValues(ITEM_ROW, [SOURCE_WITH_SHOP_ROW, SOURCE_ROW])
+      mockFindItemById(itemWith([SOURCE_WITH_SHOP_ROW, SOURCE_ROW]))
+
+      const response = await apiRequest('/v1/admin/items', {
+        method: 'POST',
+        token,
+        body: {
+          name: 'Test Item',
+          sources: [{ sourceUrl: AMAZON_FR_URL }, { sourceUrl: 'https://notamazon.fr/x' }],
+        },
+      })
+
+      expect(response.status).toBe(201)
+      expect(vi.mocked(db.query.shops.findMany)).toHaveBeenCalledTimes(1)
+      expect(values).toHaveBeenCalledWith(
+        expect.objectContaining({ shopId: AMAZON_FR_SHOP.id, sourceUrl: AMAZON_FR_URL }),
+      )
+      expect(values).toHaveBeenCalledWith(
+        expect.objectContaining({ shopId: null, sourceUrl: 'https://notamazon.fr/x' }),
+      )
+    })
+
+    it('returns 409 DUPLICATE_SHOP_FOR_ITEM when two sources end up on the same shop', async () => {
+      const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+      mockAdminAuth()
+      mockFindShopsByDomains([AMAZON_FR_SHOP])
+      mockCreateItemTransactionRejected(UNIQUE_VIOLATION)
+
+      const response = await apiRequest('/v1/admin/items', {
+        method: 'POST',
+        token,
+        body: {
+          name: 'Test Item',
+          sources: [{ shopId: AMAZON_FR_SHOP.id }, { sourceUrl: AMAZON_FR_URL }],
+        },
+      })
+
+      const body = await response.json() as { code: string }
+      expect(response.status).toBe(409)
+      expect(body.code).toBe('DUPLICATE_SHOP_FOR_ITEM')
+    })
+
+    it('returns 404 when an explicit shopId does not exist', async () => {
+      const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+      mockAdminAuth()
+      mockCreateItemTransactionRejected(FOREIGN_KEY_VIOLATION)
+
+      const response = await apiRequest('/v1/admin/items', {
+        method: 'POST',
+        token,
+        body: { name: 'Test Item', sources: [{ shopId: SHOP_ROW.id }] },
+      })
+
+      expect(response.status).toBe(404)
+    })
   })
 })

@@ -1,8 +1,8 @@
+import type { DbTransaction } from '../../client.js'
 import { eq } from 'drizzle-orm'
 import { db } from '../../client.js'
 import { itemTags } from './item-tags.schema.js'
 
-type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 type DbClient = typeof db | DbTransaction
 
 export async function replaceItemTags(

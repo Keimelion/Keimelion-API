@@ -1,3 +1,4 @@
+import type { DbTransaction } from '../../db/client.js'
 import { db } from '../../db/client.js'
 import { ErrorCode, HttpStatus, ItemStatuses } from '@keimelion/sdk/enums'
 import type { ItemStatus } from '@keimelion/sdk/enums'
@@ -35,7 +36,6 @@ import type {
   ReservationActionResponse,
 } from './reservations.types.js'
 
-type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
 const ReservationModes = {
   SELF: 'self',

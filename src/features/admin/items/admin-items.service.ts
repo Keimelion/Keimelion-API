@@ -1,3 +1,4 @@
+import type { DbTransaction } from '../../../db/client.js'
 import { db } from '../../../db/client.js'
 import { buildPaginatedResponse } from '../../../shared/utils/pagination.js'
 import { ErrorCode, HttpStatus } from '@keimelion/sdk/enums'
@@ -21,6 +22,7 @@ import {
 } from '../../../db/entities/items/items.repository.js'
 import { insertItemSource } from '../../../db/entities/item-sources/item-sources.repository.js'
 import { resolveItemRelations, writeItemRelations } from '../../../shared/db/item-relations.js'
+import { resolveSourceShopIds } from '../../../shared/db/source-shops.js'
 import { findAllItemsWithSources, countItems } from './admin-items.repository.js'
 import { toItemWithSources } from '../../../shared/types/item.js'
 import { toAdminItem } from './admin-items.mapper.js'
@@ -46,6 +48,7 @@ export interface UpdateItemInput extends Omit<AdminItemsUpdateRequestParsed, 'cl
   clearImage: boolean
 }
 
+type CreateSourceInput = AdminItemsCreateRequestParsed['sources'][number]
 type ItemPatch = Partial<Pick<typeof items.$inferInsert, 'name' | 'description' | 'imageId'>>
 
 const ADMIN_ITEM_CREATE_CONTEXT = 'admin.item.create'
@@ -59,6 +62,8 @@ export async function createItem(
 ): Promise<ServiceResult<{ item: ItemWithSources }>> {
   const relations = await resolveItemRelations(input.tags, input.categories)
   if ('errorCode' in relations) return serviceError(relations.errorCode)
+
+  const sources = await withResolvedShopIds(input.sources)
 
   const imageOutcome = await processOptionalImage(input.imageBuffer, adminId)
   if ('errorCode' in imageOutcome) return serviceError(imageOutcome.errorCode)
@@ -77,24 +82,14 @@ export async function createItem(
       )
       if (!item) return undefined
 
-      for (const source of input.sources) {
-        const inserted = await insertItemSource(
-          {
-            itemId: item.id,
-            shopId: source.shopId,
-            sourceUrl: source.sourceUrl,
-            price: source.price,
-            currency: source.currency,
-          },
-          tx,
-        )
-        if (!inserted) throw new Error('item_source_insert_failed')
-      }
-
+      await insertSources(item.id, sources, tx)
       await writeItemRelations({ itemId: item.id, tagCreatorId: null, relations }, tx)
       return item
     }),
-  ))
+  ), {
+    uniqueErrorCode: ErrorCode.DUPLICATE_SHOP_FOR_ITEM,
+    foreignKeyErrorCode: ErrorCode.NOT_FOUND,
+  })
 
   if ('errorCode' in outcome) return serviceError(outcome.errorCode)
 
@@ -210,4 +205,32 @@ export async function deleteItemById(
 
   logger.warn({ adminId, action: AdminAction.DELETE_ITEM, itemId: id })
   return { data: { message: 'Item deleted successfully' }, httpStatus: HttpStatus.OK }
+}
+
+// Sources without an explicit shopId get the shop matching their URL domain.
+async function withResolvedShopIds(sources: CreateSourceInput[]): Promise<CreateSourceInput[]> {
+  const resolvedShopIds = await resolveSourceShopIds(
+    sources.map((source) => (source.shopId === null ? source.sourceUrl : null)),
+  )
+  return sources.map((source, index) => ({ ...source, shopId: source.shopId ?? resolvedShopIds[index] ?? null }))
+}
+
+async function insertSources(
+  itemId: string,
+  sources: CreateSourceInput[],
+  tx: DbTransaction,
+): Promise<void> {
+  for (const source of sources) {
+    const inserted = await insertItemSource(
+      {
+        itemId,
+        shopId: source.shopId,
+        sourceUrl: source.sourceUrl,
+        price: source.price,
+        currency: source.currency,
+      },
+      tx,
+    )
+    if (!inserted) throw new Error('item_source_insert_failed')
+  }
 }

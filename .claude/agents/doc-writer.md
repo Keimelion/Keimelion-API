@@ -3,6 +3,7 @@ name: doc-writer
 description: Documentation Writer — updates Notion spec pages (DB schema, features spec, MVP scope) to reflect what was actually implemented. Use this agent after a feature is Validated to keep the documentation in sync with the codebase.
 tools: Read, Grep, Glob, Bash
 model: haiku
+effort: low
 color: yellow
 ---
 
