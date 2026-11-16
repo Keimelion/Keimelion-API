@@ -5,6 +5,7 @@ import type { ErrorCode } from '@keimelion/sdk/enums'
 import type { ApiErrorBodyParsed } from '@keimelion/sdk/schemas'
 import {
   DUPLICATE_SHOP_IN_SOURCES_MESSAGE,
+  LIST_ITEM_ALREADY_EXISTS_MESSAGE,
   SLUG_GENERATION_EXHAUSTED_MESSAGE,
   CATEGORY_NOT_FOUND_MESSAGE,
   CATEGORY_MAX_DEPTH_EXCEEDED_MESSAGE,
@@ -37,6 +38,7 @@ export const errorMap: Record<ErrorCode, { status: ContentfulStatusCode; message
   NOT_FOUND:               { status: HttpStatus.NOT_FOUND,             message: 'Resource not found' },
   CONFLICT:                { status: HttpStatus.CONFLICT,              message: 'Resource already exists' },
   DUPLICATE_SHOP_FOR_ITEM: { status: HttpStatus.CONFLICT,              message: DUPLICATE_SHOP_IN_SOURCES_MESSAGE },
+  LIST_ITEM_ALREADY_EXISTS: { status: HttpStatus.CONFLICT,             message: LIST_ITEM_ALREADY_EXISTS_MESSAGE },
   SLUG_GENERATION_EXHAUSTED: { status: HttpStatus.CONFLICT,            message: SLUG_GENERATION_EXHAUSTED_MESSAGE },
   CATEGORY_NOT_FOUND:      { status: HttpStatus.NOT_FOUND,             message: CATEGORY_NOT_FOUND_MESSAGE },
   CATEGORY_MAX_DEPTH_EXCEEDED: { status: HttpStatus.UNPROCESSABLE_ENTITY, message: CATEGORY_MAX_DEPTH_EXCEEDED_MESSAGE },

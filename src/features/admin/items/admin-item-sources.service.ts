@@ -16,6 +16,7 @@ import { resolveSourceShop } from '../../../shared/db/source-shops.js'
 import { buildSourceUrlFields } from '../../affiliate/affiliate.service.js'
 import { toItemSourceDetail } from '../../../shared/types/item.js'
 import { AdminAction } from '../admin.enums.js'
+import { ITEM_SOURCES_ITEM_SHOP_UNIQUE_INDEX } from '../../../db/entities/item-sources/item-sources.schema.js'
 import type { ItemSource } from '../../../db/entities/item-sources/item-sources.schema.js'
 import type { ItemSourceDetail } from '../../../shared/types/item.js'
 import type { Shop } from '../../../db/entities/shops/shops.schema.js'
@@ -31,8 +32,9 @@ interface SourceShopAndUrlPatch extends Partial<SourceUrlFields> {
 }
 
 // A missing item or shop surfaces as a FK violation, a second source on the same shop as a unique violation.
+// A URL already held by another source falls back to CONFLICT.
 const SOURCE_WRITE_ERRORS = {
-  uniqueErrorCode: ErrorCode.DUPLICATE_SHOP_FOR_ITEM,
+  uniqueErrorCodeByConstraint: { [ITEM_SOURCES_ITEM_SHOP_UNIQUE_INDEX]: ErrorCode.DUPLICATE_SHOP_FOR_ITEM },
   foreignKeyErrorCode: ErrorCode.NOT_FOUND,
 }
 
@@ -51,6 +53,7 @@ export async function createItemSource(
         ...buildSourceUrlFields(input.sourceUrl, shop?.slug ?? null),
         price: input.price,
         currency: input.currency,
+        createdByUserId: null,
       }),
     SOURCE_WRITE_ERRORS,
   )

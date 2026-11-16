@@ -21,6 +21,7 @@ import {
   countListItemsReferencing,
 } from '../../../db/entities/items/items.repository.js'
 import { insertItemSource } from '../../../db/entities/item-sources/item-sources.repository.js'
+import { ITEM_SOURCES_ITEM_SHOP_UNIQUE_INDEX } from '../../../db/entities/item-sources/item-sources.schema.js'
 import { resolveItemRelations, writeItemRelations } from '../../../shared/db/item-relations.js'
 import { resolveSourceShops } from '../../../shared/db/source-shops.js'
 import { buildSourceUrlFields } from '../../affiliate/affiliate.service.js'
@@ -51,8 +52,8 @@ export interface UpdateItemInput extends Omit<AdminItemsUpdateRequestParsed, 'cl
 }
 
 type CreateSourceInput = AdminItemsCreateRequestParsed['sources'][number]
-type SourceWrite = Omit<InsertItemSourceInput, 'itemId'>
-type ItemPatch = Partial<Pick<typeof items.$inferInsert, 'name' | 'description' | 'imageId'>>
+type SourceWrite = Omit<InsertItemSourceInput, 'itemId' | 'createdByUserId'>
+type ItemPatch = Partial<Pick<typeof items.$inferInsert, 'name' | 'description' | 'gtin' | 'imageId'>>
 
 const ADMIN_ITEM_CREATE_CONTEXT = 'admin.item.create'
 const ADMIN_ITEM_UPDATE_CONTEXT = 'admin.item.update'
@@ -78,6 +79,7 @@ export async function createItem(
         {
           name: input.name,
           description: input.description,
+          gtin: input.gtin,
           imageId: newImageId,
           createdByUserId: null,
         },
@@ -90,7 +92,7 @@ export async function createItem(
       return item
     }),
   ), {
-    uniqueErrorCode: ErrorCode.DUPLICATE_SHOP_FOR_ITEM,
+    uniqueErrorCodeByConstraint: { [ITEM_SOURCES_ITEM_SHOP_UNIQUE_INDEX]: ErrorCode.DUPLICATE_SHOP_FOR_ITEM },
     foreignKeyErrorCode: ErrorCode.NOT_FOUND,
   })
 
@@ -150,6 +152,7 @@ export async function updateItemById(
   const fieldPatch: ItemPatch = pickDefined({
     name: input.name,
     description: input.description,
+    gtin: input.gtin,
   })
 
   const { categories, tags } = input
@@ -231,7 +234,7 @@ async function insertSources(
   tx: DbTransaction,
 ): Promise<void> {
   for (const source of sources) {
-    const inserted = await insertItemSource({ itemId, ...source }, tx)
+    const inserted = await insertItemSource({ itemId, ...source, createdByUserId: null }, tx)
     if (!inserted) throw new Error('item_source_insert_failed')
   }
 }

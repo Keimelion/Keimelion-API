@@ -1,11 +1,11 @@
 import { ErrorCode } from '@keimelion/sdk/enums'
-import { isPgUniqueViolation, isPgForeignKeyViolation } from '../db/pg-errors.js'
+import { findPgConstraintName, isPgUniqueViolation, isPgForeignKeyViolation } from '../db/pg-errors.js'
 
 export type WriteOutcome<T> = { row: T } | { errorCode: ErrorCode }
 
 interface RunWriteOptions {
   fallbackErrorCode?: ErrorCode
-  uniqueErrorCode?: ErrorCode
+  uniqueErrorCodeByConstraint?: Readonly<Record<string, ErrorCode>>
   foreignKeyErrorCode?: ErrorCode
 }
 
@@ -19,12 +19,18 @@ export async function runWrite<T>(
     if (!row) return { errorCode: fallback }
     return { row }
   } catch (error) {
-    if (isPgUniqueViolation(error)) return { errorCode: options?.uniqueErrorCode ?? ErrorCode.CONFLICT }
+    if (isPgUniqueViolation(error)) return { errorCode: resolveUniqueErrorCode(error, options) }
     if (options?.foreignKeyErrorCode !== undefined && isPgForeignKeyViolation(error)) {
       return { errorCode: options.foreignKeyErrorCode }
     }
     return { errorCode: fallback }
   }
+}
+
+function resolveUniqueErrorCode(error: unknown, options: RunWriteOptions | undefined): ErrorCode {
+  const constraintName = findPgConstraintName(error)
+  if (constraintName === null) return ErrorCode.CONFLICT
+  return options?.uniqueErrorCodeByConstraint?.[constraintName] ?? ErrorCode.CONFLICT
 }
 
 interface BuildChangesOptions {

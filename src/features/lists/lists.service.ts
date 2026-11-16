@@ -1,14 +1,7 @@
 import { db } from '../../db/client.js'
 import { buildPaginatedResponse } from '../../shared/utils/pagination.js'
-import {
-  ErrorCode,
-  HttpStatus,
-  ItemStatuses,
-  ListStatuses,
-  ListUserRoles,
-} from '@keimelion/sdk/enums'
+import { ErrorCode, HttpStatus, ListStatuses, ListUserRoles } from '@keimelion/sdk/enums'
 import type {
-  ListsAddItemRequestParsed,
   ListsCreateRequestParsed,
   ListsListQueryParsed,
   ListsUpdateRequestParsed,
@@ -19,8 +12,6 @@ import { runWrite } from '../../shared/utils/admin-write.js'
 import { buildSlugFromTitle, normalizeTagSlugs } from '../../shared/utils/slug.js'
 import { isPgForeignKeyViolation, isPgUniqueViolation } from '../../shared/db/pg-errors.js'
 import { logger } from '../../shared/utils/logger.js'
-import { findItemByIdWithImage } from '../../db/entities/items/items.repository.js'
-import { insertListItem } from '../../db/entities/list-items/list-items.repository.js'
 import {
   buildListUpdatePatch,
   findListWithOwner,
@@ -32,17 +23,14 @@ import { insertListUser } from '../../db/entities/list-users/list-users.reposito
 import { findUserByIdWithAvatar } from '../../db/entities/users/users.repository.js'
 import { upsertTagsBySlugs } from '../../db/entities/tags/tags.repository.js'
 import { replaceListTags } from '../../db/entities/list-tags/list-tags.repository.js'
-import { toItemDetail, toListItemDetail } from '../../shared/types/item.js'
 import { toListDetail } from '../../shared/types/list.js'
 import { findListsAccessibleBy, countListsAccessibleBy } from './lists.repository.js'
 import { buildCollaboratorsByListId, buildCollaboratorsForList } from './collaborators.mapper.js'
 import type { User } from '../../db/entities/users/users.schema.js'
 import type { InsertList } from '../../db/entities/lists/lists.repository.js'
 import type { ListDetail, ListRowWithOwner } from '../../shared/types/list.js'
-import type { ListItemResponse } from './lists.types.js'
 import type { ServiceResult } from '../../shared/types/service.js'
 
-const DEFAULT_QUANTITY_DESIRED = 1
 const MAX_SLUG_RETRIES = 3
 
 export async function createUserList(
@@ -149,35 +137,6 @@ export async function updateUserList(
 export async function deleteUserList(id: string): Promise<ServiceResult<null>> {
   await softDeleteList(id)
   return { data: null, httpStatus: HttpStatus.NO_CONTENT }
-}
-
-export async function addItemToList(
-  listId: string,
-  input: ListsAddItemRequestParsed,
-): Promise<ServiceResult<{ listItem: ListItemResponse }>> {
-  const item = await findItemByIdWithImage(input.itemId)
-  if (!item) return serviceError(ErrorCode.NOT_FOUND)
-
-  const listItem = await insertListItem({
-    listId,
-    itemId: item.id,
-    quantityDesired: input.quantityDesired ?? DEFAULT_QUANTITY_DESIRED,
-    creatorNote: input.creatorNote ?? null,
-    customName: input.customName ?? null,
-    itemStatus: ItemStatuses.AVAILABLE,
-  })
-  if (!listItem) return serviceError(ErrorCode.INTERNAL_ERROR)
-
-  return {
-    data: {
-      listItem: {
-        ...toListItemDetail(listItem),
-        item: toItemDetail(item),
-        source: null,
-      },
-    },
-    httpStatus: HttpStatus.CREATED,
-  }
 }
 
 async function insertListWithSlugRetry(

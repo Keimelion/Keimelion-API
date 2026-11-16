@@ -8,7 +8,20 @@ export interface SourceUrlFields {
   affiliateUrl: null
 }
 
+export interface SubmittedSourceUrlFields extends SourceUrlFields {
+  sourceUrl: string
+  originalUrl: string
+}
+
 // The affiliate URL is reset on every URL write: the generation job rebuilds it out of band.
+export function buildSourceUrlFields(
+  submittedUrl: string,
+  shopSlug: string | null,
+): SubmittedSourceUrlFields
+export function buildSourceUrlFields(
+  submittedUrl: string | null,
+  shopSlug: string | null,
+): SourceUrlFields
 export function buildSourceUrlFields(
   submittedUrl: string | null,
   shopSlug: string | null,

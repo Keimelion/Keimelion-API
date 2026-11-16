@@ -902,6 +902,7 @@ describe('reservation mappers', () => {
           id: ITEM_ID,
           name: 'Catalog Item',
           description: null,
+          gtin: null,
           imageId: null,
           image: null,
           createdByUserId: null,
