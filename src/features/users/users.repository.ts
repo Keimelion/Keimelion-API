@@ -1,4 +1,4 @@
-import { and, count, eq, inArray, isNull } from 'drizzle-orm'
+import { and, count, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { db } from '../../db/client.js'
 import { users } from '../../db/entities/users/users.schema.js'
 import { reservations } from '../../db/entities/reservations/reservations.schema.js'
@@ -57,6 +57,7 @@ export async function insertUser(
       ...(avatarImageId !== null && { avatarImageId }),
       emailVerifyToken,
       emailVerifyTokenExpiresAt,
+      activatedAt: new Date(),
     })
     .returning()
 
@@ -95,8 +96,13 @@ export async function setPasswordResetToken(userId: string, input: SetPasswordRe
   await db.update(users).set(input).where(eq(users.id, userId))
 }
 
+// Setting a password through a reset link activates a pending staff account; an activated account
+// keeps its first activation date.
 export async function resetUserPassword(userId: string, input: ResetPasswordFields): Promise<void> {
-  await db.update(users).set(input).where(eq(users.id, userId))
+  await db
+    .update(users)
+    .set({ ...input, activatedAt: sql`COALESCE(${users.activatedAt}, now())` })
+    .where(eq(users.id, userId))
 }
 
 const MY_RESERVATIONS_HYDRATION = {

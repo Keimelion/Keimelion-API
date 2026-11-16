@@ -4,6 +4,7 @@ import { mountListUsers } from './endpoints/list-users.js'
 import { mountGetUser } from './endpoints/get-user.js'
 import { mountUpdateUser } from './endpoints/update-user.js'
 import { mountDeleteUser } from './endpoints/delete-user.js'
+import { mountResendInvitation } from './endpoints/resend-invitation.js'
 
 export const adminUsersRouter = createFeatureRouter()
 
@@ -12,3 +13,4 @@ mountListUsers(adminUsersRouter)
 mountGetUser(adminUsersRouter)
 mountUpdateUser(adminUsersRouter)
 mountDeleteUser(adminUsersRouter)
+mountResendInvitation(adminUsersRouter)

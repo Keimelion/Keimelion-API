@@ -1,17 +1,18 @@
 import type { DbTransaction } from '../../../db/client.js'
 import { db } from '../../../db/client.js'
 import { users } from '../../../db/entities/users/users.schema.js'
-import { and, count, eq, type SQL } from 'drizzle-orm'
+import { and, count, eq, inArray, type SQL } from 'drizzle-orm'
 import type { AnyColumn } from 'drizzle-orm'
 import type { ADMIN_USERS_SORT_FIELDS } from '@keimelion/sdk/schemas'
 import { z } from 'zod'
 import { getOffset } from '../../../shared/utils/pagination.js'
-import { USER_ROLE_VALUES } from '@keimelion/sdk/enums'
-import type { UserRole } from '@keimelion/sdk/enums'
+import { STAFF_ROLE_VALUES, USER_ROLE_VALUES, UserStatuses } from '@keimelion/sdk/enums'
+import type { UserRole, UserStatus } from '@keimelion/sdk/enums'
 import type { PaginationQueryParsed, SortInput } from '@keimelion/sdk/schemas'
 import { defineEntity, buildSoftDeleteDefault } from '../../../shared/db/entity-descriptor.js'
 import type { User } from '../../../db/entities/users/users.schema.js'
 import type { UserRowWithAvatar } from '../../../shared/types/user.js'
+import { buildUserStatusCondition } from './admin-users.status.js'
 
 import type { FilterInput } from '../../../shared/db/filter-parser.js'
 
@@ -41,6 +42,12 @@ export type UsersSortField = keyof typeof usersEntity.sortable
 export interface ListUsersFilters {
   sort?: SortInput<UsersSortField> | undefined
   genericFilters?: FilterInput[] | undefined
+  status?: UserStatus | undefined
+}
+
+interface StaffInvitationTokenFields {
+  passwordResetToken: string
+  passwordResetTokenExpiresAt: Date
 }
 
 interface AdminInsertUserFields {
@@ -57,6 +64,9 @@ type AdminUpdateUserFields = Partial<Pick<typeof users.$inferInsert, 'avatarImag
 function buildUsersWhere(filters: ListUsersFilters): SQL | undefined {
   const generic = filters.genericFilters ?? []
   const genericClause = generic.length > 0 ? usersEntity.buildWhere(generic) : undefined
+  if (filters.status !== undefined) {
+    return and(buildUserStatusCondition(filters.status), genericClause)
+  }
   return and(buildSoftDeleteDefault(generic, users.deletedAt), genericClause)
 }
 
@@ -114,7 +124,27 @@ export async function adminInsertUser(fields: AdminInsertUserFields): Promise<Us
       emailVerifyTokenExpiresAt: null,
       passwordResetToken: fields.passwordResetToken,
       passwordResetTokenExpiresAt: fields.passwordResetTokenExpiresAt,
+      activatedAt: null,
     })
+    .returning()
+
+  return user
+}
+
+export async function renewStaffInvitationToken(
+  id: string,
+  fields: StaffInvitationTokenFields,
+): Promise<User | undefined> {
+  const [user] = await db
+    .update(users)
+    .set(fields)
+    .where(
+      and(
+        eq(users.id, id),
+        inArray(users.role, STAFF_ROLE_VALUES),
+        buildUserStatusCondition(UserStatuses.INVITED),
+      ),
+    )
     .returning()
 
   return user

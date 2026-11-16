@@ -48,6 +48,7 @@ const AUTH_USER = {
   passwordResetToken: null,
   passwordResetTokenExpiresAt: null,
   lastActiveAt: null,
+  activatedAt: new Date('2024-01-01'),
   deletedAt: null,
   bannedAt: null,
   banReason: null,

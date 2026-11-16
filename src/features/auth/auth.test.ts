@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import type { SQL } from 'drizzle-orm'
+import { PgDialect } from 'drizzle-orm/pg-core'
 import { db } from '../../db/client.js'
 import { env } from '../../config/env.js'
 import { ErrorCode } from '@keimelion/sdk/enums'
@@ -42,6 +44,7 @@ const VALID_USER = {
   passwordResetToken: null,
   passwordResetTokenExpiresAt: null,
   lastActiveAt: null,
+  activatedAt: new Date('2024-01-01'),
   deletedAt: null,
   bannedAt: null,
   banReason: null,
@@ -143,6 +146,16 @@ describe('POST /v1/auth/register', () => {
       headers,
     })
   }
+
+  it('activates the account at registration: only admin-created staff start as invited', async () => {
+    const valuesSpy = mockRegistrationInserts()
+
+    const response = await postRegister()
+
+    const { activatedAt } = valuesSpy.mock.calls[0]?.[0] as { activatedAt: unknown }
+    expect(response.status).toBe(201)
+    expect(activatedAt).toBeInstanceOf(Date)
+  })
 
   it('sends a French verification email by default, linking the web app with the stored token', async () => {
     const valuesSpy = mockRegistrationInserts()
@@ -908,6 +921,30 @@ describe('POST /v1/auth/reset-password', () => {
     const body = resetPasswordResponseSchema.parse(await response.json())
     expect(response.status).toBe(200)
     expect(body.message).toBe('Password reset successfully')
+  })
+
+  it('activates a pending staff account on its first password, keeping an earlier activation date', async () => {
+    const pendingStaffUser = {
+      ...VALID_USER,
+      role: 'moderator' as const,
+      activatedAt: null,
+      passwordResetToken: 'some-hash',
+      passwordResetTokenExpiresAt: new Date(Date.now() + 30 * 60 * 1000),
+    }
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(pendingStaffUser)
+    const setSpy = vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) })
+    vi.mocked(db.update).mockReturnValue({ set: setSpy } as never)
+    vi.mocked(db.delete).mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) } as never)
+
+    const response = await apiRequest('/v1/auth/reset-password', {
+      method: 'POST',
+      body: { passwordResetToken: 'valid-raw-token-64-chars-long-at-least-to-pass', password: 'newpassword123' },
+    })
+
+    const stored = setSpy.mock.calls[0]?.[0] as { activatedAt: SQL; passwordResetToken: string | null }
+    expect(response.status).toBe(200)
+    expect(stored.passwordResetToken).toBeNull()
+    expect(new PgDialect().sqlToQuery(stored.activatedAt).sql).toBe('COALESCE("users"."activated_at", now())')
   })
 
   it('returns 400 when token does not match any user', async () => {

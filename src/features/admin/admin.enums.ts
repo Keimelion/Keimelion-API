@@ -2,6 +2,7 @@ export const AdminAction = {
   CREATE_USER: 'admin_create_user',
   UPDATE_USER: 'admin_update_user',
   DELETE_USER: 'admin_delete_user',
+  RESEND_STAFF_INVITATION: 'admin_resend_staff_invitation',
   CREATE_OCCASION_TYPE: 'admin_create_occasion_type',
   UPDATE_OCCASION_TYPE: 'admin_update_occasion_type',
   DELETE_OCCASION_TYPE: 'admin_delete_occasion_type',

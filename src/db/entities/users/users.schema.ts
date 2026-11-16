@@ -29,6 +29,7 @@ export const users = pgTable('users', {
   passwordResetToken: text('password_reset_token'),
   passwordResetTokenExpiresAt: timestamp('password_reset_token_expires_at', { withTimezone: true }),
   lastActiveAt: timestamp('last_active_at', { withTimezone: true }),
+  activatedAt: timestamp('activated_at', { withTimezone: true }),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
   bannedAt: timestamp('banned_at', { withTimezone: true }),
   banReason: text('ban_reason'),
