@@ -625,17 +625,17 @@ describe('PATCH /v1/admin/lists/:id', () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
     mockFindListByIdWithOwner(LIST_ROW, OWNER_USER)
-    mockUpdateList({ ...LIST_ROW, listStatus: 'archived' })
+    mockUpdateList({ ...LIST_ROW, listStatus: 'deleted' })
 
     const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}`, {
       method: 'PATCH',
       token,
-      body: { listStatus: 'archived' },
+      body: { listStatus: 'deleted' },
     })
 
     const body = await response.json() as { list: { listStatus: string } }
     expect(response.status).toBe(200)
-    expect(body.list.listStatus).toBe('archived')
+    expect(body.list.listStatus).toBe('deleted')
   })
 
   it('logs with title/description redacted and only change keys recorded', async () => {
@@ -689,14 +689,14 @@ describe('PATCH /v1/admin/lists/:id', () => {
     expect(response.status).toBe(422)
   })
 
-  it('returns 422 when listStatus is an invalid enum value', async () => {
+  it.each(['banned', 'archived'])('returns 422 when listStatus is an invalid enum value (%s)', async (listStatus) => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
 
     const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}`, {
       method: 'PATCH',
       token,
-      body: { listStatus: 'banned' },
+      body: { listStatus },
     })
 
     expect(response.status).toBe(422)

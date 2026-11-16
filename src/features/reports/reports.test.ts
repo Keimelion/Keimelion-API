@@ -83,7 +83,7 @@ function buildListRow(overrides: Record<string, unknown> = {}): Record<string, u
     title: 'Birthday',
     slug: 'birthday-abc123',
     description: null,
-    listStatus: 'archived',
+    listStatus: 'active',
     occasionTypeId: null,
     deletedAt: null,
     createdAt: new Date('2024-01-01'),
@@ -200,7 +200,7 @@ describe('POST /v1/reports', () => {
     expect(JSON.stringify(inserted.targetSnapshot)).not.toContain('secret-hash')
   })
 
-  it('returns 201 for an archived list and snapshots the list detail without items nor owner email', async () => {
+  it('returns 201 for a list and snapshots the list detail without items nor owner email', async () => {
     const token = await authenticateReporter()
     vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(buildListRow() as never)
     const valuesSpy = mockInsertReturning(buildReportRow({ targetType: 'list', targetId: LIST_ID }))
@@ -210,7 +210,7 @@ describe('POST /v1/reports', () => {
     expect(response.status).toBe(201)
     const inserted = insertedReport(valuesSpy)
     expect(inserted.targetImageId).toBeNull()
-    expect(inserted.targetSnapshot).toMatchObject({ id: LIST_ID, listStatus: 'archived', owner: { id: TARGET_USER_ID } })
+    expect(inserted.targetSnapshot).toMatchObject({ id: LIST_ID, listStatus: 'active', owner: { id: TARGET_USER_ID } })
     expect(inserted.targetSnapshot).not.toHaveProperty('items')
     expect(Object.keys(inserted.targetSnapshot.owner as object).sort()).toEqual(['avatar', 'id', 'username'])
     expect(findSensitiveKeys(inserted.targetSnapshot)).toEqual([])

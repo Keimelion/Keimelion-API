@@ -14,7 +14,6 @@ export const LIST_IDS = {
   HOUSEWARMING: '7d3f0b40-0001-4b60-8000-000000000002',
   WEDDING: '7d3f0b40-0001-4b60-8000-000000000003',
   SOFT_DELETED: '7d3f0b40-0001-4b60-8000-000000000004',
-  ARCHIVED: '7d3f0b40-0001-4b60-8000-000000000005',
   STATUS_DELETED: '7d3f0b40-0001-4b60-8000-000000000006',
 } as const
 
@@ -64,15 +63,6 @@ const LIST_FIXTURES: readonly ListFixture[] = [
     occasionSlug: null,
     listStatus: ListStatuses.ACTIVE,
     deletedAt: new Date('2026-02-01T00:00:00Z'),
-  },
-  {
-    id: LIST_IDS.ARCHIVED,
-    title: 'Noël 2024',
-    slug: 'noel-2024-dev01',
-    description: 'Archived dev list — covers the list_status = archived admin filter.',
-    occasionSlug: null,
-    listStatus: ListStatuses.ARCHIVED,
-    deletedAt: null,
   },
   {
     id: LIST_IDS.STATUS_DELETED,
