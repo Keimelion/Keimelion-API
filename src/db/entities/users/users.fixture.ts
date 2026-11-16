@@ -15,6 +15,7 @@ export const DEV_RESET_TOKENS = {
   USER_VALID: 'dev-reset-token-user-valid-01',
   USER_EXPIRED: 'dev-reset-token-user-expired-01',
   STAFF_INVITATION: 'dev-reset-token-staff-invitation-01',
+  STAFF_INVITATION_EXPIRED: 'dev-reset-token-staff-invitation-expired-01',
 } as const
 
 export async function seedUsers(db: typeof Db): Promise<void> {
@@ -130,6 +131,22 @@ export async function seedUsers(db: typeof Db): Promise<void> {
       emailVerifiedAt: new Date('2026-11-01T10:00:00Z'),
       passwordResetToken: hashSha256Hex(DEV_RESET_TOKENS.STAFF_INVITATION),
       passwordResetTokenExpiresAt: new Date('2099-12-31T23:59:59Z'),
+    },
+    // Invitation link expired before use: the case POST /admin/users/:id/resend-invitation exists for
+    {
+      email: 'expired.invitation.admin@example.com',
+      username: 'expiredinvitationadmin',
+      passwordHash: passwordHashed,
+      authProvider: 'email' as const,
+      role: 'admin' as const,
+      isCgvAccepted: false,
+      cgvAcceptedAt: null,
+      activatedAt: null,
+      isMarketingOptedIn: false,
+      emailVerifiedAt: new Date('2026-10-01T09:00:00Z'),
+      passwordResetToken: hashSha256Hex(DEV_RESET_TOKENS.STAFF_INVITATION_EXPIRED),
+      passwordResetTokenExpiresAt: new Date('2026-10-02T09:00:00Z'),
+      createdAt: new Date('2026-10-01T09:00:00Z'),
     },
     {
       email: 'inactive.user@example.com',
