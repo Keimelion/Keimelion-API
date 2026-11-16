@@ -6,17 +6,18 @@ import type { AnyColumn } from 'drizzle-orm'
 import type { ADMIN_USERS_SORT_FIELDS } from '@keimelion/sdk/schemas'
 import { z } from 'zod'
 import { getOffset } from '../../../shared/utils/pagination.js'
-import { STAFF_ROLE_VALUES, USER_ROLE_VALUES, UserStatuses } from '@keimelion/sdk/enums'
-import type { UserRole, UserStatus } from '@keimelion/sdk/enums'
+import { STAFF_ROLE_VALUES, USER_ROLE_VALUES, USER_STATUS_VALUES, UserStatuses } from '@keimelion/sdk/enums'
+import type { UserRole } from '@keimelion/sdk/enums'
 import type { PaginationQueryParsed, SortInput } from '@keimelion/sdk/schemas'
 import { defineEntity, buildSoftDeleteDefault } from '../../../shared/db/entity-descriptor.js'
 import type { User } from '../../../db/entities/users/users.schema.js'
 import type { UserRowWithAvatar } from '../../../shared/types/user.js'
-import { buildUserStatusCondition } from './admin-users.status.js'
+import { NEW_ACCOUNT_STATUS_FIELDS, computeUserStatus } from '../../../db/entities/users/users.status.js'
 
 import type { FilterInput } from '../../../shared/db/filter-parser.js'
 
 const roleSchema = z.enum(USER_ROLE_VALUES)
+const statusSchema = z.enum(USER_STATUS_VALUES)
 
 export const usersEntity = defineEntity({
   sortable: {
@@ -34,6 +35,7 @@ export const usersEntity = defineEntity({
     bannedAt:  { column: users.bannedAt,  operators: ['isNull'] },
     deletedAt: { column: users.deletedAt, operators: ['isNull'] },
     role:      { column: users.role,      operators: ['eq', 'in'], valueSchema: roleSchema },
+    status:    { column: users.userStatus, operators: ['eq', 'in'], valueSchema: statusSchema },
   },
 })
 
@@ -42,7 +44,6 @@ export type UsersSortField = keyof typeof usersEntity.sortable
 export interface ListUsersFilters {
   sort?: SortInput<UsersSortField> | undefined
   genericFilters?: FilterInput[] | undefined
-  status?: UserStatus | undefined
 }
 
 interface StaffInvitationTokenFields {
@@ -64,9 +65,8 @@ type AdminUpdateUserFields = Partial<Pick<typeof users.$inferInsert, 'avatarImag
 function buildUsersWhere(filters: ListUsersFilters): SQL | undefined {
   const generic = filters.genericFilters ?? []
   const genericClause = generic.length > 0 ? usersEntity.buildWhere(generic) : undefined
-  if (filters.status !== undefined) {
-    return and(buildUserStatusCondition(filters.status), genericClause)
-  }
+  const hasStatusFilter = generic.some((filter) => filter.field === 'status')
+  if (hasStatusFilter) return genericClause
   return and(buildSoftDeleteDefault(generic, users.deletedAt), genericClause)
 }
 
@@ -108,6 +108,8 @@ export async function adminUpdateUser(
 }
 
 export async function adminInsertUser(fields: AdminInsertUserFields): Promise<User | undefined> {
+  const now = new Date()
+  const statusFields = { ...NEW_ACCOUNT_STATUS_FIELDS, activatedAt: null, emailVerifiedAt: now, createdAt: now }
   const [user] = await db
     .insert(users)
     .values({
@@ -119,12 +121,13 @@ export async function adminInsertUser(fields: AdminInsertUserFields): Promise<Us
       isCgvAccepted: false,
       cgvAcceptedAt: null,
       isMarketingOptedIn: false,
-      emailVerifiedAt: new Date(),
+      emailVerifiedAt: now,
       emailVerifyToken: null,
       emailVerifyTokenExpiresAt: null,
       passwordResetToken: fields.passwordResetToken,
       passwordResetTokenExpiresAt: fields.passwordResetTokenExpiresAt,
       activatedAt: null,
+      userStatus: computeUserStatus(statusFields, now),
     })
     .returning()
 
@@ -142,7 +145,7 @@ export async function renewStaffInvitationToken(
       and(
         eq(users.id, id),
         inArray(users.role, STAFF_ROLE_VALUES),
-        buildUserStatusCondition(UserStatuses.INVITED),
+        eq(users.userStatus, UserStatuses.INVITED),
       ),
     )
     .returning()

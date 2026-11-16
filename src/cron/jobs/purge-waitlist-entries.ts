@@ -3,6 +3,7 @@ import {
   deleteExpiredUnconfirmedWaitlistEntries,
   deleteWaitlistEntriesLaunchEmailedBefore,
 } from '../../db/entities/waitlist/waitlist.repository.js'
+import { subtractMonths } from '../../shared/utils/time.js'
 import { createCronJob } from '../create-cron-job.js'
 
 // Compliance: the privacy policy promises deletion 12 months after the launch email.
@@ -17,12 +18,6 @@ async function runWaitlistPurge(): Promise<number> {
     subtractMonths(now, LAUNCH_EMAIL_RETENTION_MONTHS),
   )
   return unconfirmedCount + launchEmailedCount
-}
-
-function subtractMonths(date: Date, months: number): Date {
-  const result = new Date(date)
-  result.setUTCMonth(result.getUTCMonth() - months)
-  return result
 }
 
 export const purgeWaitlistEntries = createCronJob({

@@ -1,6 +1,7 @@
 import type { db as Db } from '../../client.js'
 import { hashPassword, hashSha256Hex } from '../../../shared/utils/hash.js'
 import { users } from './users.schema.js'
+import { computeUserStatus } from './users.status.js'
 
 const FIXTURE_PASSWORD = 'password'
 
@@ -146,9 +147,25 @@ export async function seedUsers(db: typeof Db): Promise<void> {
     },
   ]
 
+  const now = new Date()
+  const rows = fixtures.map((fixture) => ({
+    ...fixture,
+    userStatus: computeUserStatus(
+      {
+        deletedAt: fixture.deletedAt ?? null,
+        bannedAt: fixture.bannedAt ?? null,
+        activatedAt: fixture.activatedAt,
+        emailVerifiedAt: fixture.emailVerifiedAt ?? null,
+        lastActiveAt: fixture.lastActiveAt ?? null,
+        createdAt: fixture.createdAt ?? now,
+      },
+      now,
+    ),
+  }))
+
   const inserted = await db
     .insert(users)
-    .values(fixtures)
+    .values(rows)
     .onConflictDoNothing({ target: users.email })
     .returning({ id: users.id, email: users.email })
   console.log(`  users        ${String(inserted.length)} rows`)

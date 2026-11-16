@@ -58,6 +58,7 @@ const OWNER_USER = {
   passwordResetTokenExpiresAt: null,
   lastActiveAt: null,
   activatedAt: new Date('2024-01-01'),
+  userStatus: 'active' as const,
   deletedAt: null,
   bannedAt: null,
   banReason: null,

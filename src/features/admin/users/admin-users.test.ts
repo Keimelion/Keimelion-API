@@ -2,8 +2,7 @@ import { createHash } from 'crypto'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { SQL } from 'drizzle-orm'
 import { PgDialect } from 'drizzle-orm/pg-core'
-import { ErrorCode, UserStatuses } from '@keimelion/sdk/enums'
-import type { UserStatus } from '@keimelion/sdk/enums'
+import { ErrorCode } from '@keimelion/sdk/enums'
 import { db } from '../../../db/client.js'
 import { env } from '../../../config/env.js'
 import { NodeEnvs } from '../../../shared/enums/node-env.js'
@@ -13,8 +12,6 @@ import { generateTestToken, makeAccessTokenEntry } from '../../../shared/test/au
 import { ADMIN_USER_FIXTURE as ADMIN_USER, makeAdminUser } from '../../../shared/test/fixtures/users.js'
 import { logger } from '../../../shared/utils/logger.js'
 import { images } from '../../../db/entities/images/images.schema.js'
-import { buildUserStatusCondition, deriveUserStatus } from './admin-users.status.js'
-import type { UserStatusFields } from './admin-users.status.js'
 import {
   adminUsersCreateResponseSchema,
   adminUsersGetResponseSchema,
@@ -926,25 +923,27 @@ describe('DELETE /v1/admin/users/:id', () => {
     vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
   })
 
-  it('returns 200 and soft-deletes the user', async () => {
+  it('returns 200 and soft-deletes the user, storing the pending_deletion status', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     const deletedUser = { ...TARGET_USER, deletedAt: new Date() }
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(TARGET_USER)
-    vi.mocked(db.update).mockReturnValueOnce({
-      set: vi.fn().mockReturnValueOnce({
-        where: vi.fn().mockReturnValueOnce({
-          returning: vi.fn().mockResolvedValueOnce([deletedUser]),
-        }),
+    const setSpy = vi.fn().mockReturnValueOnce({
+      where: vi.fn().mockReturnValueOnce({
+        returning: vi.fn().mockResolvedValueOnce([deletedUser]),
       }),
-    } as never)
+    })
+    vi.mocked(db.update).mockReturnValueOnce({ set: setSpy } as never)
 
     const response = await apiRequest(`/v1/admin/users/${TARGET_USER.id}`, { method: 'DELETE', token })
 
     const body = await response.json() as { message: string }
+    const stored = setSpy.mock.calls[0]?.[0] as { deletedAt: Date; userStatus: string }
     messageResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.message).toBe('User deleted successfully')
+    expect(stored.deletedAt).toBeInstanceOf(Date)
+    expect(stored.userStatus).toBe('pending_deletion')
   })
 
   it('returns 422 when id is not a UUID', async () => {
@@ -1314,6 +1313,7 @@ describe('POST /v1/admin/users', () => {
     expect(insertedFields.passwordResetToken).toBeDefined()
     expect(insertedFields.passwordResetTokenExpiresAt).toBeInstanceOf(Date)
     expect(insertedFields.activatedAt).toBeNull()
+    expect(insertedFields.userStatus).toBe('invited')
   })
 
   it('returns 409 when insert hits the unique constraint', async () => {
@@ -1341,22 +1341,9 @@ describe('POST /v1/admin/users', () => {
   })
 })
 
-const NOW = new Date('2026-11-16T12:00:00Z')
-const ELEVEN_MONTHS_AGO = new Date('2025-12-16T12:00:00Z')
-const THIRTEEN_MONTHS_AGO = new Date('2025-10-16T12:00:00Z')
-
-const ACTIVE_FIELDS: UserStatusFields = {
-  deletedAt: null,
-  bannedAt: null,
-  activatedAt: ELEVEN_MONTHS_AGO,
-  emailVerifiedAt: ELEVEN_MONTHS_AGO,
-  lastActiveAt: ELEVEN_MONTHS_AGO,
-  createdAt: THIRTEEN_MONTHS_AGO,
-}
-
-function renderSql(condition: SQL | undefined): string {
-  if (!condition) return ''
-  return new PgDialect().sqlToQuery(condition).sql
+function renderQuery(condition: SQL | undefined): { sql: string; params: unknown[] } {
+  if (!condition) return { sql: '', params: [] }
+  return new PgDialect().sqlToQuery(condition)
 }
 
 function lastFindManyWhere(): SQL {
@@ -1364,59 +1351,29 @@ function lastFindManyWhere(): SQL {
   return options.where
 }
 
-describe('deriveUserStatus', () => {
-  it.each<[string, Partial<UserStatusFields>, UserStatus]>([
-    ['a soft-deleted account, whatever else it matches', { deletedAt: NOW, bannedAt: NOW, activatedAt: null }, UserStatuses.PENDING_DELETION],
-    ['a banned account still pending its invitation', { bannedAt: NOW, activatedAt: null }, UserStatuses.BANNED],
-    ['a staff account that never set a password', { activatedAt: null, emailVerifiedAt: null, lastActiveAt: null }, UserStatuses.INVITED],
-    ['an activated account with an unverified email', { emailVerifiedAt: null, lastActiveAt: THIRTEEN_MONTHS_AGO }, UserStatuses.UNVERIFIED],
-    ['an account last active more than 12 months ago', { lastActiveAt: THIRTEEN_MONTHS_AGO }, UserStatuses.INACTIVE],
-    ['an account never active, created more than 12 months ago', { lastActiveAt: null }, UserStatuses.INACTIVE],
-    ['an account never active, created less than 12 months ago', { lastActiveAt: null, createdAt: ELEVEN_MONTHS_AGO }, UserStatuses.ACTIVE],
-    ['an account active within the last 12 months', {}, UserStatuses.ACTIVE],
-  ])('reports %s', (_label, overrides, expected) => {
-    expect(deriveUserStatus({ ...ACTIVE_FIELDS, ...overrides }, NOW)).toBe(expected)
-  })
-})
-
-describe('buildUserStatusCondition', () => {
-  const DELETED = '"users"."deleted_at" is not null'
-  const BANNED = '"users"."banned_at" is not null'
-  const INVITED = '"users"."activated_at" is null'
-  const UNVERIFIED = '"users"."email_verified_at" is null'
-  const INACTIVE = 'COALESCE("users"."last_active_at", "users"."created_at") < now() - make_interval(months => $1)'
-
-  it.each<[UserStatus, string]>([
-    [UserStatuses.PENDING_DELETION, DELETED],
-    [UserStatuses.BANNED, `(not ${DELETED} and ${BANNED})`],
-    [UserStatuses.INVITED, `(not ${DELETED} and not ${BANNED} and ${INVITED})`],
-    [UserStatuses.UNVERIFIED, `(not ${DELETED} and not ${BANNED} and not ${INVITED} and ${UNVERIFIED})`],
-    [UserStatuses.INACTIVE, `(not ${DELETED} and not ${BANNED} and not ${INVITED} and not ${UNVERIFIED} and ${INACTIVE})`],
-    [UserStatuses.ACTIVE, `(not ${DELETED} and not ${BANNED} and not ${INVITED} and not ${UNVERIFIED} and not ${INACTIVE})`],
-  ])('matches %s only when no higher-precedence status applies', (status, expectedSql) => {
-    expect(renderSql(buildUserStatusCondition(status))).toBe(expectedSql)
-  })
-
-  it('uses the 12-month inactivity threshold', () => {
-    const condition = buildUserStatusCondition(UserStatuses.INACTIVE)
-
-    expect(condition && new PgDialect().sqlToQuery(condition).params).toEqual([12])
-  })
-})
-
-describe('GET /v1/admin/users — derived status', () => {
+describe('GET /v1/admin/users — stored status', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
   })
 
-  it('exposes activatedAt and the derived status on each user', async () => {
+  function mockEmptyList(): void {
+    mockListUsers([])
+    mockCountChain(0)
+    mockReservationCountsByUserIds()
+  }
+
+  it('exposes activatedAt and the stored status on each user', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
-    const invitedStaff = makeAdminUser({ id: '00000000-0000-0000-0000-000000000003', role: 'moderator', activatedAt: null })
-    const bannedUser = { ...TARGET_USER, bannedAt: new Date('2024-06-01') }
-    const activeAdmin = { ...ADMIN_USER, lastActiveAt: new Date() }
+    const invitedStaff = makeAdminUser({
+      id: '00000000-0000-0000-0000-000000000003',
+      role: 'moderator',
+      activatedAt: null,
+      userStatus: 'invited',
+    })
+    const bannedUser = { ...TARGET_USER, bannedAt: new Date('2024-06-01'), userStatus: 'banned' as const }
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
-    mockListUsers([invitedStaff, bannedUser, activeAdmin])
+    mockListUsers([invitedStaff, bannedUser, ADMIN_USER])
     mockCountChain(3)
     mockReservationCountsByUserIds()
 
@@ -1429,59 +1386,50 @@ describe('GET /v1/admin/users — derived status', () => {
     expect(body.items[2]?.activatedAt).toEqual(new Date('2024-01-01'))
   })
 
-  it('filters by status with the same precedence as the derived status', async () => {
+  it('filters on the stored column with status[eq], without the default soft-delete clause', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
-    mockListUsers([])
-    mockCountChain(0)
-    mockReservationCountsByUserIds()
+    mockEmptyList()
 
-    const response = await apiRequest('/v1/admin/users?status=invited', { token })
+    const response = await apiRequest('/v1/admin/users?status[eq]=pending_deletion', { token })
 
+    const where = renderQuery(lastFindManyWhere())
     expect(response.status).toBe(200)
-    expect(renderSql(lastFindManyWhere())).toBe(renderSql(buildUserStatusCondition(UserStatuses.INVITED)))
+    expect(where.sql).toContain('"users"."user_status" = $1')
+    expect(where.sql).not.toContain('"users"."deleted_at" is null')
+    expect(where.params).toEqual(['pending_deletion'])
   })
 
-  it('lists soft-deleted users for status=pending_deletion instead of hiding them by default', async () => {
+  it('filters on several statuses with status[in][]', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
-    const deletedUser = { ...TARGET_USER, deletedAt: new Date('2024-06-01') }
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
-    mockListUsers([deletedUser])
-    mockCountChain(1)
-    mockReservationCountsByUserIds()
+    mockEmptyList()
 
-    const response = await apiRequest('/v1/admin/users?status=pending_deletion', { token })
+    const response = await apiRequest('/v1/admin/users?status[in][]=invited&status[in][]=inactive', { token })
 
-    const body = adminUsersListResponseSchema.parse(await response.json())
+    const where = renderQuery(lastFindManyWhere())
     expect(response.status).toBe(200)
-    expect(body.items[0]?.status).toBe('pending_deletion')
-    expect(renderSql(lastFindManyWhere())).toBe('"users"."deleted_at" is not null')
+    expect(where.sql).toContain('"users"."user_status" in ($1, $2)')
+    expect(where.params).toEqual(['invited', 'inactive'])
   })
 
-  it('combines the status filter with bracket filters', async () => {
+  it('keeps hiding soft-deleted users when no status filter is given', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
-    mockListUsers([])
-    mockCountChain(0)
-    mockReservationCountsByUserIds()
+    mockEmptyList()
 
-    const response = await apiRequest('/v1/admin/users?status=active&role[eq]=moderator', { token })
+    await apiRequest('/v1/admin/users?role[eq]=moderator', { token })
 
-    const whereSql = renderSql(lastFindManyWhere())
-    expect(response.status).toBe(200)
-    expect(whereSql).toContain(renderSql(buildUserStatusCondition(UserStatuses.ACTIVE)))
-    expect(whereSql).toContain('"users"."role" = $')
+    expect(renderQuery(lastFindManyWhere()).sql).toContain('"users"."deleted_at" is null')
   })
 
   it('returns 422 when status is not a known status', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
 
-    const response = await apiRequest('/v1/admin/users?status=deleted', { token })
+    const response = await apiRequest('/v1/admin/users?status[eq]=deleted', { token })
 
-    const body = await response.json() as ValidationErrorBody
     expect(response.status).toBe(422)
-    expect(body.metadata.issues.map((issue) => issue.path)).toEqual(['status'])
     expect(db.query.users.findMany).not.toHaveBeenCalled()
   })
 })
@@ -1494,6 +1442,7 @@ describe('POST /v1/admin/users/:id/resend-invitation', () => {
       username: 'pendingstaff',
       role: 'moderator',
       activatedAt: null,
+      userStatus: 'invited',
       passwordResetToken: 'previous-token-hash',
       passwordResetTokenExpiresAt: new Date('2024-01-02'),
     }),
@@ -1570,9 +1519,10 @@ describe('POST /v1/admin/users/:id/resend-invitation', () => {
 
     await postResend()
 
-    const whereSql = renderSql(where.mock.calls[0]?.[0] as SQL)
-    expect(whereSql).toContain('"users"."role" in (')
-    expect(whereSql).toContain(renderSql(buildUserStatusCondition(UserStatuses.INVITED)))
+    const condition = renderQuery(where.mock.calls[0]?.[0] as SQL)
+    expect(condition.sql).toContain('"users"."role" in (')
+    expect(condition.sql).toContain('"users"."user_status" = $')
+    expect(condition.params).toContain('invited')
   })
 
   it('logs the resend at warn level without the recipient or the link', async () => {
@@ -1625,7 +1575,7 @@ describe('POST /v1/admin/users/:id/resend-invitation', () => {
   })
 
   it('returns 409 STAFF_INVITATION_NOT_PENDING when the account is already activated', async () => {
-    mockTargetUser({ ...PENDING_STAFF, activatedAt: new Date('2024-01-03') })
+    mockTargetUser({ ...PENDING_STAFF, activatedAt: new Date('2024-01-03'), userStatus: 'active' })
     mockTokenRenewal([])
 
     const response = await postResend()
