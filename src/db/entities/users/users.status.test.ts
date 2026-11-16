@@ -5,9 +5,9 @@ import type { UserStatus } from '@keimelion/sdk/enums'
 import {
   USER_INACTIVITY_THRESHOLD_MONTHS,
   buildStatusAfterActivity,
+  buildStatusOnAction,
   computeInactivityThreshold,
   computeUserStatus,
-  withUserStatus,
 } from './users.status.js'
 import type { UserStatusFields } from './users.status.js'
 
@@ -78,14 +78,48 @@ describe('computeInactivityThreshold', () => {
   })
 })
 
-describe('withUserStatus', () => {
-  it('returns the changes with the status computed on the updated row', () => {
-    const pendingStaff = { ...ACTIVE_FIELDS, activatedAt: null }
+describe('buildStatusOnAction', () => {
+  const dialect = new PgDialect()
 
-    expect(withUserStatus(pendingStaff, { activatedAt: NOW }, NOW)).toEqual({
-      activatedAt: NOW,
-      userStatus: UserStatuses.ACTIVE,
-    })
+  it('activates an account: deletion and ban still rank first, then the email verification', () => {
+    const query = dialect.sqlToQuery(buildStatusOnAction({ activatesAccount: true }))
+
+    expect(query.sql).toBe(
+      'CASE WHEN "users"."deleted_at" IS NOT NULL THEN $1::user_status WHEN "users"."banned_at" IS NOT NULL THEN $2::user_status WHEN "users"."email_verified_at" IS NULL THEN $3::user_status ELSE $4::user_status END',
+    )
+    expect(query.params).toEqual([
+      UserStatuses.PENDING_DELETION,
+      UserStatuses.BANNED,
+      UserStatuses.UNVERIFIED,
+      UserStatuses.ACTIVE,
+    ])
+  })
+
+  it('verifies an email: deletion and ban still rank first, then the pending invitation', () => {
+    const query = dialect.sqlToQuery(buildStatusOnAction({ verifiesEmail: true }))
+
+    expect(query.sql).toBe(
+      'CASE WHEN "users"."deleted_at" IS NOT NULL THEN $1::user_status WHEN "users"."banned_at" IS NOT NULL THEN $2::user_status WHEN "users"."activated_at" IS NULL THEN $3::user_status ELSE $4::user_status END',
+    )
+    expect(query.params).toEqual([
+      UserStatuses.PENDING_DELETION,
+      UserStatuses.BANNED,
+      UserStatuses.INVITED,
+      UserStatuses.ACTIVE,
+    ])
+  })
+
+  it('agrees with computeUserStatus on every account once the action and the activity are applied', () => {
+    const combinations = buildAllFieldCombinations()
+    const expectedOnActivation = (fields: UserStatusFields): UserStatus =>
+      computeUserStatus({ ...fields, activatedAt: fields.activatedAt ?? NOW, lastActiveAt: NOW }, NOW)
+    const expectedOnVerification = (fields: UserStatusFields): UserStatus =>
+      computeUserStatus({ ...fields, emailVerifiedAt: NOW, lastActiveAt: NOW }, NOW)
+
+    expect(new Set(combinations.map(expectedOnActivation))).not.toContain(UserStatuses.INACTIVE)
+    expect(new Set(combinations.map(expectedOnActivation))).not.toContain(UserStatuses.INVITED)
+    expect(new Set(combinations.map(expectedOnVerification))).not.toContain(UserStatuses.INACTIVE)
+    expect(new Set(combinations.map(expectedOnVerification))).not.toContain(UserStatuses.UNVERIFIED)
   })
 })
 

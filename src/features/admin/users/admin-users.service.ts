@@ -2,7 +2,7 @@ import { randomBytes } from 'crypto'
 import { db } from '../../../db/client.js'
 import { env } from '../../../config/env.js'
 import { buildPaginatedResponse } from '../../../shared/utils/pagination.js'
-import { ErrorCode, HttpStatus } from '@keimelion/sdk/enums'
+import { ErrorCode, HttpStatus, UserStatuses } from '@keimelion/sdk/enums'
 import type { StaffRole } from '@keimelion/sdk/enums'
 import type {
   AdminUsersCreateRequestParsed,
@@ -117,8 +117,8 @@ export async function resendStaffInvitation(
   logger.warn({ adminId, targetUserId, action: AdminAction.RESEND_STAFF_INVITATION, role: targetUser.role })
   sendStaffInvitationEmail({ email: renewedUser.email, role: targetUser.role }, invitationToken.rawToken)
 
-  const reservationsCount = await countReservationsForUser(targetUserId)
-  const user = toAdminUser({ ...renewedUser, avatarImage: targetUser.avatarImage }, reservationsCount)
+  // An invited account never signed in: it holds no reservation
+  const user = toAdminUser({ ...renewedUser, avatarImage: targetUser.avatarImage }, 0)
 
   return {
     data: { user, ...exposeTokenOutsideProduction(invitationToken.rawToken) },
@@ -169,6 +169,11 @@ export async function updateUser(
   if (!targetUser) {
     return serviceError(ErrorCode.NOT_FOUND)
   }
+
+  // A pending invitation is a staff invitation: it would otherwise stay invited with no way out
+  const isDemotingInvitedStaff =
+    targetUser.userStatus === UserStatuses.INVITED && input.role !== undefined && !isStaffRole(input.role)
+  if (isDemotingInvitedStaff) return serviceError(ErrorCode.INVALID_OPERATION)
 
   const shouldRevoke = input.role !== undefined && input.role !== targetUser.role
 

@@ -1,18 +1,17 @@
 import type { DbTransaction } from '../../../db/client.js'
 import { db } from '../../../db/client.js'
 import { users } from '../../../db/entities/users/users.schema.js'
-import { and, count, eq, inArray, type SQL } from 'drizzle-orm'
+import { and, count, eq, type SQL } from 'drizzle-orm'
 import type { AnyColumn } from 'drizzle-orm'
 import type { ADMIN_USERS_SORT_FIELDS } from '@keimelion/sdk/schemas'
 import { z } from 'zod'
 import { getOffset } from '../../../shared/utils/pagination.js'
-import { STAFF_ROLE_VALUES, USER_ROLE_VALUES, USER_STATUS_VALUES, UserStatuses } from '@keimelion/sdk/enums'
+import { USER_ROLE_VALUES, USER_STATUS_VALUES, UserStatuses } from '@keimelion/sdk/enums'
 import type { UserRole } from '@keimelion/sdk/enums'
 import type { PaginationQueryParsed, SortInput } from '@keimelion/sdk/schemas'
 import { defineEntity, buildSoftDeleteDefault } from '../../../shared/db/entity-descriptor.js'
 import type { User } from '../../../db/entities/users/users.schema.js'
 import type { UserRowWithAvatar } from '../../../shared/types/user.js'
-import { NEW_ACCOUNT_STATUS_FIELDS, computeUserStatus } from '../../../db/entities/users/users.status.js'
 
 import type { FilterInput } from '../../../shared/db/filter-parser.js'
 
@@ -108,8 +107,6 @@ export async function adminUpdateUser(
 }
 
 export async function adminInsertUser(fields: AdminInsertUserFields): Promise<User | undefined> {
-  const now = new Date()
-  const statusFields = { ...NEW_ACCOUNT_STATUS_FIELDS, activatedAt: null, emailVerifiedAt: now, createdAt: now }
   const [user] = await db
     .insert(users)
     .values({
@@ -121,13 +118,13 @@ export async function adminInsertUser(fields: AdminInsertUserFields): Promise<Us
       isCgvAccepted: false,
       cgvAcceptedAt: null,
       isMarketingOptedIn: false,
-      emailVerifiedAt: now,
+      emailVerifiedAt: new Date(),
       emailVerifyToken: null,
       emailVerifyTokenExpiresAt: null,
       passwordResetToken: fields.passwordResetToken,
       passwordResetTokenExpiresAt: fields.passwordResetTokenExpiresAt,
       activatedAt: null,
-      userStatus: computeUserStatus(statusFields, now),
+      userStatus: UserStatuses.INVITED,
     })
     .returning()
 
@@ -141,13 +138,7 @@ export async function renewStaffInvitationToken(
   const [user] = await db
     .update(users)
     .set(fields)
-    .where(
-      and(
-        eq(users.id, id),
-        inArray(users.role, STAFF_ROLE_VALUES),
-        eq(users.userStatus, UserStatuses.INVITED),
-      ),
-    )
+    .where(and(eq(users.id, id), eq(users.userStatus, UserStatuses.INVITED)))
     .returning()
 
   return user

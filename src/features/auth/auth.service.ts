@@ -117,7 +117,7 @@ export async function verifyEmail(input: VerifyEmailRequestParsed): Promise<Serv
     return serviceError(ErrorCode.BAD_REQUEST)
   }
 
-  await markEmailAsVerified(user)
+  await markEmailAsVerified(user.id)
 
   return { data: { message: 'Email verified successfully' }, httpStatus: HttpStatus.OK }
 }
@@ -228,7 +228,7 @@ export async function resetPassword(input: ResetPasswordRequestParsed): Promise<
 
   const newPasswordHash = await hashPassword(input.password)
 
-  await resetUserPassword(user, {
+  await resetUserPassword(user.id, {
     passwordHash: newPasswordHash,
     passwordResetToken: null,
     passwordResetTokenExpiresAt: null,

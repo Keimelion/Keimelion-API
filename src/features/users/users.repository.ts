@@ -1,4 +1,4 @@
-import { and, count, eq, inArray, isNull } from 'drizzle-orm'
+import { and, count, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { db } from '../../db/client.js'
 import { users } from '../../db/entities/users/users.schema.js'
 import { reservations } from '../../db/entities/reservations/reservations.schema.js'
@@ -10,7 +10,7 @@ import {
   type UserReservationsSortField,
 } from '../../db/entities/reservations/reservations.repository.js'
 import { getOffset } from '../../shared/utils/pagination.js'
-import { ListUserRoles } from '@keimelion/sdk/enums'
+import { ListUserRoles, UserStatuses } from '@keimelion/sdk/enums'
 import type { PaginationQueryParsed, SortInput } from '@keimelion/sdk/schemas'
 import { env } from '../../config/env.js'
 import { hashPassword } from '../../shared/utils/hash.js'
@@ -19,11 +19,7 @@ import type { UserRowWithAvatar } from '../../shared/types/user.js'
 import { ONE_HOUR_MS } from '../../shared/utils/time.js'
 import type { RegisterRequestParsed } from '@keimelion/sdk/schemas'
 import type { ReservationProfileRow } from '../reservations/reservations.types.js'
-import {
-  NEW_ACCOUNT_STATUS_FIELDS,
-  computeUserStatus,
-  withUserStatus,
-} from '../../db/entities/users/users.status.js'
+import { buildStatusOnAction } from '../../db/entities/users/users.status.js'
 
 type SetPasswordResetTokenFields = Partial<Pick<typeof users.$inferInsert, 'passwordResetToken' | 'passwordResetTokenExpiresAt'>>
 type ResetPasswordFields = Pick<typeof users.$inferInsert, 'passwordHash' | 'passwordResetToken' | 'passwordResetTokenExpiresAt'>
@@ -48,7 +44,6 @@ export async function insertUser(
   const passwordHash = await hashPassword(input.password)
   const now = new Date()
   const emailVerifyTokenExpiresAt = new Date(now.getTime() + env.EMAIL_VERIFY_TOKEN_TTL_HOURS * ONE_HOUR_MS)
-  const statusFields = { ...NEW_ACCOUNT_STATUS_FIELDS, activatedAt: now, emailVerifiedAt: null, createdAt: now }
 
   const [user] = await db
     .insert(users)
@@ -65,23 +60,25 @@ export async function insertUser(
       emailVerifyToken,
       emailVerifyTokenExpiresAt,
       activatedAt: now,
-      userStatus: computeUserStatus(statusFields, now),
+      userStatus: UserStatuses.UNVERIFIED,
     })
     .returning()
 
   return user
 }
 
-export async function markEmailAsVerified(user: User): Promise<void> {
+export async function markEmailAsVerified(userId: string): Promise<void> {
   const now = new Date()
   await db
     .update(users)
     .set({
-      ...withUserStatus(user, { emailVerifiedAt: now }, now),
+      emailVerifiedAt: now,
+      lastActiveAt: now,
+      userStatus: buildStatusOnAction({ verifiesEmail: true }),
       emailVerifyToken: null,
       emailVerifyTokenExpiresAt: null,
     })
-    .where(eq(users.id, user.id))
+    .where(eq(users.id, userId))
 }
 
 export async function updateUserProfile(
@@ -107,12 +104,17 @@ export async function setPasswordResetToken(userId: string, input: SetPasswordRe
 
 // Setting a password through a reset link activates a pending staff account; an activated account
 // keeps its first activation date.
-export async function resetUserPassword(user: User, input: ResetPasswordFields): Promise<void> {
+export async function resetUserPassword(userId: string, input: ResetPasswordFields): Promise<void> {
   const now = new Date()
   await db
     .update(users)
-    .set({ ...input, ...withUserStatus(user, { activatedAt: user.activatedAt ?? now }, now) })
-    .where(eq(users.id, user.id))
+    .set({
+      ...input,
+      activatedAt: sql`COALESCE(${users.activatedAt}, ${now.toISOString()}::timestamptz)`,
+      lastActiveAt: now,
+      userStatus: buildStatusOnAction({ activatesAccount: true }),
+    })
+    .where(eq(users.id, userId))
 }
 
 const MY_RESERVATIONS_HYDRATION = {

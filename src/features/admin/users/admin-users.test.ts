@@ -657,6 +657,24 @@ describe('PATCH /v1/admin/users/:id', () => {
     expect(body.user.role).toBe('moderator')
   })
 
+  it('returns 400 INVALID_OPERATION when demoting a staff account whose invitation is pending', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    const invitedStaff = { ...TARGET_USER, role: 'moderator' as const, activatedAt: null, userStatus: 'invited' as const }
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(invitedStaff)
+
+    const response = await apiRequest(`/v1/admin/users/${TARGET_USER.id}`, {
+      method: 'PATCH',
+      token,
+      body: { role: 'user' },
+    })
+
+    const body = await response.json() as { code: string }
+    expect(response.status).toBe(400)
+    expect(body.code).toBe('INVALID_OPERATION')
+    expect(db.transaction).not.toHaveBeenCalled()
+  })
+
   it('returns 422 when avatarUrl is sent (avatars are upload-only)', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
@@ -1470,9 +1488,7 @@ describe('POST /v1/admin/users/:id/resend-invitation', () => {
 
   function mockSuccessfulRenewal(): { set: ReturnType<typeof vi.fn>; where: ReturnType<typeof vi.fn> } {
     mockTargetUser(PENDING_STAFF)
-    const renewal = mockTokenRenewal([{ ...PENDING_STAFF, passwordResetToken: 'new-token-hash' }])
-    mockReservationCountForUser()
-    return renewal
+    return mockTokenRenewal([{ ...PENDING_STAFF, passwordResetToken: 'new-token-hash' }])
   }
 
   async function postResend(path = RESEND_PATH): Promise<Response> {
@@ -1520,7 +1536,6 @@ describe('POST /v1/admin/users/:id/resend-invitation', () => {
     await postResend()
 
     const condition = renderQuery(where.mock.calls[0]?.[0] as SQL)
-    expect(condition.sql).toContain('"users"."role" in (')
     expect(condition.sql).toContain('"users"."user_status" = $')
     expect(condition.params).toContain('invited')
   })
