@@ -596,14 +596,14 @@ describe('PATCH /v1/lists/:id', () => {
     expect(response.status).toBe(422)
   })
 
-  it('returns 422 when listStatus is deleted (user cannot set deleted via PATCH)', async () => {
+  it.each(['active', 'archived', 'deleted'])('returns 422 when listStatus is sent (%s)', async (listStatus) => {
     const token = await generateTestToken(AUTH_USER.id)
     mockAuthChain()
 
     const response = await apiRequest(`/v1/lists/${LIST_ID}`, {
       method: 'PATCH',
       token,
-      body: { listStatus: 'deleted' },
+      body: { listStatus },
     })
 
     expect(response.status).toBe(422)
