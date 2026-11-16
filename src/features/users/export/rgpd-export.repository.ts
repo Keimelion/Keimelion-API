@@ -35,12 +35,8 @@ export async function findItemsByCreator(userId: string): Promise<ItemRowWithIma
 }
 
 export async function findItemSourcesByCreator(userId: string): Promise<ItemSource[]> {
-  const userItemIds = db
-    .select({ id: items.id })
-    .from(items)
-    .where(eq(items.createdByUserId, userId))
   return db.query.itemSources.findMany({
-    where: inArray(itemSources.itemId, userItemIds),
+    where: eq(itemSources.createdByUserId, userId),
   })
 }
 

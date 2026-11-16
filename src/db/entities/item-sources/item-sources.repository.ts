@@ -13,6 +13,7 @@ export interface InsertItemSourceInput {
   originalUrl: string | null
   price: string | null
   currency: string
+  createdByUserId: string | null
 }
 
 type UpdateItemSourceFields = Partial<
@@ -51,6 +52,17 @@ export function findItemSourceBySourceUrl(sourceUrl: string): Promise<ItemSource
   return db.query.itemSources.findFirst({
     where: and(eq(sourceUrlHash(itemSources.sourceUrl), sourceUrlHash(sourceUrl)), eq(itemSources.sourceUrl, sourceUrl)),
     with: { shop: true, item: { with: { image: true } } },
+  })
+}
+
+export function findItemSourceByItemAndShop(
+  itemId: string,
+  shopId: string,
+  tx: DbTransaction,
+): Promise<ItemSourceWithShop | undefined> {
+  return tx.query.itemSources.findFirst({
+    where: and(eq(itemSources.itemId, itemId), eq(itemSources.shopId, shopId)),
+    with: { shop: true },
   })
 }
 

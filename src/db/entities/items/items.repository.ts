@@ -1,5 +1,5 @@
 import type { DbTransaction } from '../../client.js'
-import { count, desc, eq } from 'drizzle-orm'
+import { count, desc, eq, sql } from 'drizzle-orm'
 import { db } from '../../client.js'
 import { items } from './items.schema.js'
 import { listItems } from '../list-items/list-items.schema.js'
@@ -18,6 +18,7 @@ export interface InsertItemInput {
 }
 
 type UpdateItemFields = Partial<Pick<typeof items.$inferInsert, 'name' | 'description' | 'gtin' | 'imageId'>>
+export type MissingItemFields = Partial<Record<'description' | 'gtin' | 'imageId', string>>
 
 const ITEM_WITH_SOURCES_WITH = {
   image: true,
@@ -36,8 +37,9 @@ export function findItemById(id: string): Promise<Item | undefined> {
   return db.query.items.findFirst({ where: eq(items.id, id) })
 }
 
-export function findItemByIdWithImage(id: string): Promise<ItemRowWithImage | undefined> {
-  return db.query.items.findFirst({ where: eq(items.id, id), with: { image: true } })
+export function findItemByIdWithImage(id: string, tx?: DbTransaction): Promise<ItemRowWithImage | undefined> {
+  const client = tx ?? db
+  return client.query.items.findFirst({ where: eq(items.id, id), with: { image: true } })
 }
 
 export function findItemByGtinWithImage(gtin: string): Promise<ItemRowWithImage | undefined> {
@@ -59,6 +61,18 @@ export async function updateItem(
   const client = tx ?? db
   const [row] = await client.update(items).set(fields).where(eq(items.id, id)).returning()
   return row
+}
+
+export async function fillMissingItemFields(id: string, fields: MissingItemFields, tx: DbTransaction): Promise<void> {
+  const { description, gtin, imageId } = fields
+  await tx
+    .update(items)
+    .set({
+      ...(description === undefined ? {} : { description: sql`coalesce(${items.description}, ${description})` }),
+      ...(gtin === undefined ? {} : { gtin: sql`coalesce(${items.gtin}, ${gtin})` }),
+      ...(imageId === undefined ? {} : { imageId: sql`coalesce(${items.imageId}, ${imageId}::uuid)` }),
+    })
+    .where(eq(items.id, id))
 }
 
 export async function deleteItem(id: string, tx?: DbTransaction): Promise<Item | undefined> {

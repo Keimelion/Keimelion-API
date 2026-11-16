@@ -52,7 +52,7 @@ export interface UpdateItemInput extends Omit<AdminItemsUpdateRequestParsed, 'cl
 }
 
 type CreateSourceInput = AdminItemsCreateRequestParsed['sources'][number]
-type SourceWrite = Omit<InsertItemSourceInput, 'itemId'>
+type SourceWrite = Omit<InsertItemSourceInput, 'itemId' | 'createdByUserId'>
 type ItemPatch = Partial<Pick<typeof items.$inferInsert, 'name' | 'description' | 'gtin' | 'imageId'>>
 
 const ADMIN_ITEM_CREATE_CONTEXT = 'admin.item.create'
@@ -234,7 +234,7 @@ async function insertSources(
   tx: DbTransaction,
 ): Promise<void> {
   for (const source of sources) {
-    const inserted = await insertItemSource({ itemId, ...source }, tx)
+    const inserted = await insertItemSource({ itemId, ...source, createdByUserId: null }, tx)
     if (!inserted) throw new Error('item_source_insert_failed')
   }
 }

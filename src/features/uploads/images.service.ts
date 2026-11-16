@@ -18,7 +18,7 @@ export async function processOptionalImage(
   return { image: result.image }
 }
 
-async function rollbackImage(imageId: string | null, context: string): Promise<void> {
+export async function rollbackImage(imageId: string | null, context: string): Promise<void> {
   if (!imageId) return
   try {
     await deleteImageById(imageId)

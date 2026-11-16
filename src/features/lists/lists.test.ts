@@ -3,6 +3,7 @@ import { db } from '../../db/client.js'
 import { env } from '../../config/env.js'
 import { images } from '../../db/entities/images/images.schema.js'
 import { ITEM_SOURCES_SOURCE_URL_UNIQUE_INDEX } from '../../db/entities/item-sources/item-sources.schema.js'
+import { ITEMS_GTIN_UNIQUE_INDEX } from '../../db/entities/items/items.schema.js'
 import { apiMultipartRequest, apiRequest } from '../../shared/test/api-request.js'
 import { generateTestToken, makeAccessTokenEntry } from '../../shared/test/auth.js'
 import {
@@ -778,6 +779,7 @@ describe('DELETE /v1/lists/:id', () => {
 describe('POST /v1/lists/:id/items', () => {
   const OTHER_ITEM_ID = '00000000-0000-0000-0000-000000000021'
   const SOURCE_ID = '00000000-0000-0000-0000-000000000050'
+  const OTHER_SOURCE_ID = '00000000-0000-0000-0000-000000000051'
   const SUBMITTED_URL = 'https://amazon.fr/Casque-Audio/dp/B08N5WRWNW/ref=sr_1_1?tag=other-21&utm_source=news'
   const CANONICAL_URL = 'https://www.amazon.fr/dp/B08N5WRWNW'
   const UNKNOWN_SHOP_URL = 'https://tiny-shop.example/product/42'
@@ -805,6 +807,7 @@ describe('POST /v1/lists/:id/items', () => {
     affiliateUrl: null,
     price: null,
     currency: 'EUR',
+    createdByUserId: null,
     createdAt: new Date('2024-01-01'),
     updatedAt: new Date('2024-01-01'),
   }
@@ -842,15 +845,20 @@ describe('POST /v1/lists/:id/items', () => {
     return values
   }
 
+  function mockUpdateOnce(row?: unknown): ReturnType<typeof vi.fn> {
+    const returning = vi.fn().mockResolvedValue(row === undefined ? [] : [row])
+    const where = vi.fn().mockReturnValue({ returning })
+    const set = vi.fn().mockReturnValue({ where })
+    vi.mocked(db.update).mockReturnValueOnce({ set } as never)
+    return set
+  }
+
   function mockKnownShops(rows: unknown[]): void {
     vi.mocked(db.query.shops.findMany).mockResolvedValueOnce(rows as never)
   }
 
-  function uniqueViolation(): Error {
-    return Object.assign(new Error('duplicate key'), {
-      code: '23505',
-      constraint_name: ITEM_SOURCES_SOURCE_URL_UNIQUE_INDEX,
-    })
+  function uniqueViolation(constraintName: string = ITEM_SOURCES_SOURCE_URL_UNIQUE_INDEX): Error {
+    return Object.assign(new Error('duplicate key'), { code: '23505', constraint_name: constraintName })
   }
 
   async function postItem(body: unknown): Promise<Response> {
@@ -913,6 +921,17 @@ describe('POST /v1/lists/:id/items', () => {
       expect(vi.mocked(db.insert)).not.toHaveBeenCalled()
     })
 
+    it('returns 404 before resolving the shop of the submitted URL', async () => {
+      mockAuthChain()
+      mockListAndOwner()
+      vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(undefined)
+
+      const response = await postItem({ itemId: ITEM_ID, sourceUrl: SUBMITTED_URL })
+
+      expect(response.status).toBe(404)
+      expect(vi.mocked(db.query.shops.findMany)).not.toHaveBeenCalled()
+    })
+
     it('attaches a new URL of a known shop as a source of the item, normalized and without price', async () => {
       mockAuthChain()
       mockListAndOwner()
@@ -936,6 +955,7 @@ describe('POST /v1/lists/:id/items', () => {
         affiliateUrl: null,
         price: null,
         currency: 'EUR',
+        createdByUserId: AUTH_USER.id,
       })
     })
 
@@ -988,12 +1008,34 @@ describe('POST /v1/lists/:id/items', () => {
       expect(vi.mocked(db.insert)).toHaveBeenCalledTimes(1)
     })
 
-    it('still returns 201 without a source when the item already has a source on that shop', async () => {
+    it('returns the existing source of the item on that shop without inserting a new one', async () => {
+      const shopSource = { ...SOURCE_ROW, id: OTHER_SOURCE_ID, sourceUrl: 'https://www.amazon.fr/dp/OTHER', shop: SHOP_ROW }
       mockAuthChain()
       mockListAndOwner()
       mockKnownShops([SHOP_ROW])
       vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(MOCK_ITEM)
-      vi.mocked(db.query.itemSources.findFirst).mockResolvedValueOnce(undefined)
+      vi.mocked(db.query.itemSources.findFirst)
+        .mockResolvedValueOnce(undefined)
+        .mockResolvedValueOnce(shopSource)
+      mockInsertOnce(MOCK_LIST_ITEM)
+
+      const response = await postItem({ itemId: ITEM_ID, sourceUrl: SUBMITTED_URL })
+
+      const body = listsAddItemResponseSchema.parse(await response.json())
+      expect(response.status).toBe(201)
+      expect(body.listItem.source?.id).toBe(OTHER_SOURCE_ID)
+      expect(vi.mocked(db.insert)).toHaveBeenCalledTimes(1)
+    })
+
+    it('returns the source written by a concurrent request when the insert conflicts', async () => {
+      mockAuthChain()
+      mockListAndOwner()
+      mockKnownShops([SHOP_ROW])
+      vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(MOCK_ITEM)
+      vi.mocked(db.query.itemSources.findFirst)
+        .mockResolvedValueOnce(undefined)
+        .mockResolvedValueOnce(undefined)
+        .mockResolvedValueOnce({ ...SOURCE_ROW, shop: SHOP_ROW } as never)
       mockInsertOnce(MOCK_LIST_ITEM)
       mockInsertOnce(undefined)
 
@@ -1001,7 +1043,7 @@ describe('POST /v1/lists/:id/items', () => {
 
       const body = listsAddItemResponseSchema.parse(await response.json())
       expect(response.status).toBe(201)
-      expect(body.listItem.source).toBeNull()
+      expect(body.listItem.source?.id).toBe(SOURCE_ID)
     })
 
     it('returns 409 LIST_ITEM_ALREADY_EXISTS with the existing list item id and quantity', async () => {
@@ -1072,19 +1114,30 @@ describe('POST /v1/lists/:id/items', () => {
         affiliateUrl: null,
         price: '19.99',
         currency: 'EUR',
+        createdByUserId: AUTH_USER.id,
       })
     })
 
-    it('reuses the item known by its normalized URL, ignores description and price, stores the name as customName', async () => {
+    it('reuses the item known by its normalized URL, completes its empty fields, updates the price, stores the name as customName', async () => {
       mockAuthChain()
       mockListAndOwner()
       mockKnownShops([SHOP_ROW])
       vi.mocked(db.query.itemSources.findFirst).mockResolvedValueOnce(urlHolder(ITEM_ID) as never)
       const values = mockInsertOnce({ ...MOCK_LIST_ITEM, customName: 'Noise cancelling headset' })
+      const itemSet = mockUpdateOnce()
+      const gtinSet = mockUpdateOnce()
+      const sourceSet = mockUpdateOnce({ ...SOURCE_ROW, price: '1.00' })
+      vi.mocked(db.query.items.findFirst).mockResolvedValueOnce({
+        ...MOCK_ITEM,
+        description: 'Completed',
+        gtin: PADDED_GTIN,
+        image: null,
+      } as never)
 
       const response = await postItem({
         name: 'Noise cancelling headset',
-        description: 'ignored',
+        description: 'Completed',
+        gtin: EAN_13,
         price: '1.00',
         sourceUrl: SUBMITTED_URL,
       })
@@ -1092,9 +1145,66 @@ describe('POST /v1/lists/:id/items', () => {
       const body = listsAddItemResponseSchema.parse(await response.json())
       expect(response.status).toBe(201)
       expect(body.listItem.item.id).toBe(ITEM_ID)
+      expect(body.listItem.item.description).toBe('Completed')
+      expect(body.listItem.item.gtin).toBe(PADDED_GTIN)
       expect(body.listItem.source?.id).toBe(SOURCE_ID)
+      expect(body.listItem.source?.price).toBe('1.00')
       expect(vi.mocked(db.insert)).toHaveBeenCalledTimes(1)
+      expect(itemSet).toHaveBeenCalledWith(expect.objectContaining({ description: expect.anything() as unknown }))
+      expect(gtinSet).toHaveBeenCalledWith(expect.objectContaining({ gtin: expect.anything() as unknown }))
+      expect(sourceSet).toHaveBeenCalledWith({ price: '1.00' })
       expect(values).toHaveBeenCalledWith(expect.objectContaining({ itemId: ITEM_ID, customName: 'Noise cancelling headset' }))
+    })
+
+    it('never overwrites a field the known item already has', async () => {
+      const holder = urlHolder(ITEM_ID) as { item: object }
+      mockAuthChain()
+      mockListAndOwner()
+      mockKnownShops([SHOP_ROW])
+      vi.mocked(db.query.itemSources.findFirst).mockResolvedValueOnce({
+        ...holder,
+        item: { ...holder.item, description: 'Original', gtin: PADDED_GTIN },
+      } as never)
+      mockInsertOnce(MOCK_LIST_ITEM)
+
+      const response = await postItem({ name: MOCK_ITEM.name, description: 'Other', gtin: '5901234123457', sourceUrl: SUBMITTED_URL })
+
+      const body = listsAddItemResponseSchema.parse(await response.json())
+      expect(response.status).toBe(201)
+      expect(body.listItem.item.description).toBe('Original')
+      expect(vi.mocked(db.update)).not.toHaveBeenCalled()
+    })
+
+    it('keeps the GTIN empty when another item already holds it', async () => {
+      mockAuthChain()
+      mockListAndOwner()
+      mockKnownShops([SHOP_ROW])
+      vi.mocked(db.query.itemSources.findFirst).mockResolvedValueOnce(urlHolder(ITEM_ID) as never)
+      mockInsertOnce(MOCK_LIST_ITEM)
+      vi.mocked(db.update).mockImplementationOnce(() => {
+        throw uniqueViolation(ITEMS_GTIN_UNIQUE_INDEX)
+      })
+
+      const response = await postItem({ name: MOCK_ITEM.name, gtin: EAN_13, sourceUrl: SUBMITTED_URL })
+
+      const body = listsAddItemResponseSchema.parse(await response.json())
+      expect(response.status).toBe(201)
+      expect(body.listItem.item.gtin).toBeNull()
+    })
+
+    it('keeps the source price when the submitted currency differs', async () => {
+      mockAuthChain()
+      mockListAndOwner()
+      mockKnownShops([SHOP_ROW])
+      vi.mocked(db.query.itemSources.findFirst).mockResolvedValueOnce(urlHolder(ITEM_ID) as never)
+      mockInsertOnce(MOCK_LIST_ITEM)
+
+      const response = await postItem({ name: MOCK_ITEM.name, price: '25.00', currency: 'USD', sourceUrl: SUBMITTED_URL })
+
+      const body = listsAddItemResponseSchema.parse(await response.json())
+      expect(response.status).toBe(201)
+      expect(body.listItem.source?.price).toBeNull()
+      expect(vi.mocked(db.update)).not.toHaveBeenCalled()
     })
 
     it('stores no customName when the submitted name equals the catalogue name', async () => {
@@ -1132,13 +1242,13 @@ describe('POST /v1/lists/:id/items', () => {
       mockInsertOnce(MOCK_LIST_ITEM)
       const sourceValues = mockInsertOnce(SOURCE_ROW)
 
-      const response = await postItem({ name: MOCK_ITEM.name, gtin: EAN_13, sourceUrl: SUBMITTED_URL })
+      const response = await postItem({ name: MOCK_ITEM.name, gtin: EAN_13, sourceUrl: SUBMITTED_URL, price: '19.99', currency: 'USD' })
 
       const body = listsAddItemResponseSchema.parse(await response.json())
       expect(response.status).toBe(201)
       expect(body.listItem.item.gtin).toBe(PADDED_GTIN)
       expect(body.listItem.source?.shopId).toBe(SHOP_ROW.id)
-      expect(sourceValues).toHaveBeenCalledWith(expect.objectContaining({ itemId: ITEM_ID, price: null }))
+      expect(sourceValues).toHaveBeenCalledWith(expect.objectContaining({ itemId: ITEM_ID, price: '19.99', currency: 'USD', createdByUserId: AUTH_USER.id }))
     })
 
     it('reuses the item created by a concurrent request for the same URL', async () => {
@@ -1158,6 +1268,17 @@ describe('POST /v1/lists/:id/items', () => {
       expect(body.listItem.item.id).toBe(ITEM_ID)
       expect(body.listItem.source?.id).toBe(SOURCE_ID)
       expect(values).toHaveBeenCalledWith(expect.objectContaining({ itemId: ITEM_ID }))
+    })
+
+    it('returns 500 instead of retrying when the unique violation is not on the URL or GTIN', async () => {
+      mockAuthChain()
+      mockListAndOwner()
+      vi.mocked(db.transaction).mockRejectedValueOnce(uniqueViolation('tags_slug_unique'))
+
+      const response = await postItem({ name: 'Board game', tags: ['Gaming'] })
+
+      expect(response.status).toBe(500)
+      expect(vi.mocked(db.query.itemSources.findFirst)).not.toHaveBeenCalled()
     })
 
     it('returns 500 when the item write fails for a reason other than a duplicate', async () => {
@@ -1290,17 +1411,72 @@ describe('POST /v1/lists/:id/items', () => {
       expect(listItemValues).toHaveBeenCalledWith(expect.objectContaining({ quantityDesired: 2 }))
     })
 
-    it('ignores the uploaded image when the product is already known', async () => {
+    it('sets the uploaded image on a known product that has none', async () => {
       mockAuthChain()
       mockListAndOwner()
       mockKnownShops([SHOP_ROW])
       vi.mocked(db.query.itemSources.findFirst).mockResolvedValueOnce(urlHolder(ITEM_ID) as never)
+      mockInsertOnce(MOCK_LIST_ITEM)
+      const itemSet = mockUpdateOnce()
+      vi.mocked(db.query.items.findFirst).mockResolvedValueOnce({
+        ...MOCK_ITEM,
+        imageId: IMAGE_ROW.id,
+        image: IMAGE_ROW,
+      } as never)
+
+      const response = await postMultipart({ name: MOCK_ITEM.name, sourceUrl: SUBMITTED_URL }, IMAGE_BUFFER)
+
+      const body = listsAddItemResponseSchema.parse(await response.json())
+      expect(response.status).toBe(201)
+      expect(body.listItem.item.image?.id).toBe(IMAGE_ROW.id)
+      expect(itemSet).toHaveBeenCalledWith(expect.objectContaining({ imageId: expect.anything() as unknown }))
+      expect(vi.mocked(db.delete)).not.toHaveBeenCalled()
+    })
+
+    it('sets the uploaded image on an item added by id', async () => {
+      mockAuthChain()
+      mockListAndOwner()
+      vi.mocked(db.query.items.findFirst)
+        .mockResolvedValueOnce(MOCK_ITEM)
+        .mockResolvedValueOnce({ ...MOCK_ITEM, imageId: IMAGE_ROW.id, image: IMAGE_ROW } as never)
+      mockInsertOnce(MOCK_LIST_ITEM)
+      mockUpdateOnce()
+
+      const response = await postMultipart({ itemId: ITEM_ID }, IMAGE_BUFFER)
+
+      const body = listsAddItemResponseSchema.parse(await response.json())
+      expect(response.status).toBe(201)
+      expect(body.listItem.item.image?.id).toBe(IMAGE_ROW.id)
+    })
+
+    it('does not process the uploaded image when the known product already has one', async () => {
+      const holder = urlHolder(ITEM_ID) as { item: object }
+      mockAuthChain()
+      mockListAndOwner()
+      mockKnownShops([SHOP_ROW])
+      vi.mocked(db.query.itemSources.findFirst).mockResolvedValueOnce({
+        ...holder,
+        item: { ...holder.item, imageId: IMAGE_ROW.id, image: IMAGE_ROW },
+      } as never)
       mockInsertOnce(MOCK_LIST_ITEM)
 
       const response = await postMultipart({ name: MOCK_ITEM.name, sourceUrl: SUBMITTED_URL }, IMAGE_BUFFER)
 
       expect(response.status).toBe(201)
       expect(mockProcessImage).not.toHaveBeenCalled()
+    })
+
+    it('rolls the uploaded image back when the item is already in the list', async () => {
+      mockAuthChain()
+      mockListAndOwner()
+      vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(MOCK_ITEM)
+      mockInsertOnce(undefined)
+      vi.mocked(db.query.listItems.findFirst).mockResolvedValueOnce(MOCK_LIST_ITEM as never)
+
+      const response = await postMultipart({ itemId: ITEM_ID }, IMAGE_BUFFER)
+
+      expect(response.status).toBe(409)
+      expect(vi.mocked(db.delete)).toHaveBeenCalledTimes(1)
     })
 
     it('rolls the new image row back when the item write fails', async () => {

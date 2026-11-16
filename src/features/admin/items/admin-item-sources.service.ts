@@ -53,6 +53,7 @@ export async function createItemSource(
         ...buildSourceUrlFields(input.sourceUrl, shop?.slug ?? null),
         price: input.price,
         currency: input.currency,
+        createdByUserId: null,
       }),
     SOURCE_WRITE_ERRORS,
   )

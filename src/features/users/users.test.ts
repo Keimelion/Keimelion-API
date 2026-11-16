@@ -655,6 +655,7 @@ describe('GET /v1/users/me/export', () => {
       affiliateUrl: 'https://shop.example/p?id=1&aff=keimelion',
       price: '10.00',
       currency: 'EUR',
+      createdByUserId: SAFE_USER.id,
       createdAt: new Date('2024-01-01'),
       updatedAt: new Date('2024-01-01'),
     }
@@ -678,6 +679,17 @@ describe('GET /v1/users/me/export', () => {
       expect(rows).toHaveLength(1)
       expect(rows?.[0]).toMatchObject({ sourceUrl: ITEM_SOURCE_ROW.sourceUrl, originalUrl: ITEM_SOURCE_ROW.originalUrl })
       expect(rows?.[0]).not.toHaveProperty('affiliateUrl')
+    })
+
+    it('selects the sources the user submitted, whoever created their item', async () => {
+      vi.mocked(db.query.itemSources.findMany).mockResolvedValueOnce([ITEM_SOURCE_ROW] as never)
+
+      await findItemSourcesDescriptor()?.fetchRows(SAFE_USER.id)
+
+      const [query] = vi.mocked(db.query.itemSources.findMany).mock.calls[0] ?? []
+      const where = new PgDialect().sqlToQuery(query?.where as SQL)
+      expect(where.sql).toBe('"item_sources"."created_by_user_id" = $1')
+      expect(where.params).toEqual([SAFE_USER.id])
     })
 
     it('includes originalUrl but not affiliateUrl in the JSON export itemSources', async () => {
