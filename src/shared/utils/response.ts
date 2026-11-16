@@ -26,6 +26,8 @@ import {
   REPORT_NOT_FOUND_MESSAGE,
   WAITLIST_HONEYPOT_TRIGGERED_MESSAGE,
   WAITLIST_CONFIRMATION_TOKEN_INVALID_MESSAGE,
+  STAFF_INVITATION_NOT_STAFF_ACCOUNT_MESSAGE,
+  STAFF_INVITATION_NOT_PENDING_MESSAGE,
 } from '@keimelion/sdk/schemas'
 import type { ServiceResult } from '../types/service.js'
 
@@ -75,6 +77,8 @@ export const errorMap: Record<ErrorCode, { status: ContentfulStatusCode; message
   REPORT_NOT_FOUND:        { status: HttpStatus.NOT_FOUND,             message: REPORT_NOT_FOUND_MESSAGE },
   WAITLIST_HONEYPOT_TRIGGERED: { status: HttpStatus.BAD_REQUEST,       message: WAITLIST_HONEYPOT_TRIGGERED_MESSAGE },
   WAITLIST_CONFIRMATION_TOKEN_INVALID: { status: HttpStatus.BAD_REQUEST, message: WAITLIST_CONFIRMATION_TOKEN_INVALID_MESSAGE },
+  STAFF_INVITATION_NOT_STAFF_ACCOUNT: { status: HttpStatus.UNPROCESSABLE_ENTITY, message: STAFF_INVITATION_NOT_STAFF_ACCOUNT_MESSAGE },
+  STAFF_INVITATION_NOT_PENDING: { status: HttpStatus.CONFLICT,          message: STAFF_INVITATION_NOT_PENDING_MESSAGE },
   INTERNAL_ERROR:          { status: HttpStatus.INTERNAL_SERVER_ERROR, message: 'An unexpected error occurred' },
 }
 

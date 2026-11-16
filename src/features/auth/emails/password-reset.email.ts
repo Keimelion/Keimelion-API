@@ -1,4 +1,3 @@
-import { STAFF_ROLE_VALUES } from '@keimelion/sdk/enums'
 import type { Locale, UserRole } from '@keimelion/sdk/enums'
 import { formatQuantity } from '../../../shared/mail/mail.format.js'
 import {
@@ -10,6 +9,7 @@ import {
 import { renderEmail } from '../../../shared/mail/shell/email-shell.js'
 import type { RenderedEmail } from '../../../shared/mail/shell/email-shell.js'
 import { EmailBannerThemes } from '../../../shared/mail/shell/email-shell.theme.js'
+import { isStaffRole } from '../../../shared/utils/staff-role.js'
 
 export interface PasswordResetEmailInput {
   locale: Locale
@@ -88,7 +88,6 @@ export function buildPasswordResetEmail(input: PasswordResetEmailInput): Rendere
 
 // Staff accounts sign in on the Backoffice, which has its own reset-password page
 function buildResetPasswordUrl(role: UserRole, resetToken: string): string {
-  const isStaff = STAFF_ROLE_VALUES.some((staffRole) => staffRole === role)
-  if (isStaff) return buildBackofficeSetPasswordUrl(resetToken)
+  if (isStaffRole(role)) return buildBackofficeSetPasswordUrl(resetToken)
   return buildWebAppTokenUrl(WebAppPaths.RESET_PASSWORD, resetToken)
 }

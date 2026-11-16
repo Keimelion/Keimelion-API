@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import type { SQL } from 'drizzle-orm'
+import { PgDialect } from 'drizzle-orm/pg-core'
 import { db } from '../../db/client.js'
 import { env } from '../../config/env.js'
 import { ErrorCode } from '@keimelion/sdk/enums'
@@ -42,6 +44,8 @@ const VALID_USER = {
   passwordResetToken: null,
   passwordResetTokenExpiresAt: null,
   lastActiveAt: null,
+  activatedAt: new Date('2024-01-01'),
+  userStatus: 'active' as const,
   deletedAt: null,
   bannedAt: null,
   banReason: null,
@@ -143,6 +147,17 @@ describe('POST /v1/auth/register', () => {
       headers,
     })
   }
+
+  it('activates the account at registration and stores the unverified status', async () => {
+    const valuesSpy = mockRegistrationInserts()
+
+    const response = await postRegister()
+
+    const { activatedAt, userStatus } = valuesSpy.mock.calls[0]?.[0] as { activatedAt: unknown; userStatus: string }
+    expect(response.status).toBe(201)
+    expect(activatedAt).toBeInstanceOf(Date)
+    expect(userStatus).toBe('unverified')
+  })
 
   it('sends a French verification email by default, linking the web app with the stored token', async () => {
     const valuesSpy = mockRegistrationInserts()
@@ -365,6 +380,30 @@ describe('POST /v1/auth/verify-email', () => {
     expect(body.message).toBe('Email verified successfully')
   })
 
+  it('counts the verification as an activity and derives the status from the row at write time', async () => {
+    const validToken = '00000000-0000-0000-0000-000000000099'
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce({
+      ...VALID_USER,
+      emailVerifiedAt: null,
+      userStatus: 'unverified' as const,
+      lastActiveAt: new Date('2020-01-01'),
+      emailVerifyToken: validToken,
+      emailVerifyTokenExpiresAt: new Date(Date.now() + 60 * 60 * 1000),
+    })
+    const setSpy = vi.fn().mockReturnValueOnce({ where: vi.fn().mockResolvedValueOnce(undefined) })
+    vi.mocked(db.update).mockReturnValueOnce({ set: setSpy } as never)
+
+    await apiRequest('/v1/auth/verify-email', { method: 'POST', body: { token: validToken } })
+
+    const stored = setSpy.mock.calls[0]?.[0] as { emailVerifiedAt: Date; lastActiveAt: Date; userStatus: SQL; emailVerifyToken: null }
+    const status = new PgDialect().sqlToQuery(stored.userStatus)
+    expect(stored.emailVerifiedAt).toBeInstanceOf(Date)
+    expect(stored.lastActiveAt).toBe(stored.emailVerifiedAt)
+    expect(stored.emailVerifyToken).toBeNull()
+    expect(status.sql).toContain('"users"."deleted_at" IS NOT NULL')
+    expect(status.params).toEqual(['pending_deletion', 'banned', 'invited', 'active'])
+  })
+
   it('returns 400 when token is invalid', async () => {
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(undefined)
 
@@ -429,6 +468,29 @@ describe('POST /v1/auth/login', () => {
     expect(typeof body.refreshToken).toBe('string')
     expect(body.refreshToken.length).toBeGreaterThan(0)
     expect(body.user.email).toBe('user@example.com')
+  })
+
+  it('bumps lastActiveAt on login and reactivates an inactive account in the same update', async () => {
+    const bcrypt = await import('bcryptjs')
+    const hash = await bcrypt.default.hash('securepassword123', 4)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce({ ...VALID_USER, passwordHash: hash, userStatus: 'inactive' as const })
+    mockInsertNoReturning()
+    const setSpy = vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) })
+    vi.mocked(db.update).mockReturnValue({ set: setSpy } as never)
+
+    const response = await apiRequest('/v1/auth/login', {
+      method: 'POST',
+      body: { email: 'user@example.com', password: 'securepassword123' },
+    })
+
+    const stored = setSpy.mock.calls.map((call) => call[0] as { lastActiveAt?: Date; userStatus?: SQL })
+    const activityWrite = stored.find((fields) => fields.lastActiveAt !== undefined)
+    expect(response.status).toBe(200)
+    expect(activityWrite?.lastActiveAt).toBeInstanceOf(Date)
+    expect(activityWrite?.userStatus && new PgDialect().sqlToQuery(activityWrite.userStatus)).toMatchObject({
+      sql: 'CASE WHEN "users"."user_status" = $1 THEN $2::user_status ELSE "users"."user_status" END',
+      params: ['inactive', 'active'],
+    })
   })
 
   it('returns the uploaded avatar with the user on login', async () => {
@@ -908,6 +970,60 @@ describe('POST /v1/auth/reset-password', () => {
     const body = resetPasswordResponseSchema.parse(await response.json())
     expect(response.status).toBe(200)
     expect(body.message).toBe('Password reset successfully')
+  })
+
+  function mockResetPasswordWrites(): ReturnType<typeof vi.fn> {
+    const setSpy = vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) })
+    vi.mocked(db.update).mockReturnValue({ set: setSpy } as never)
+    vi.mocked(db.delete).mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) } as never)
+    return setSpy
+  }
+
+  function postResetPassword(): Promise<Response> {
+    return apiRequest('/v1/auth/reset-password', {
+      method: 'POST',
+      body: { passwordResetToken: 'valid-raw-token-64-chars-long-at-least-to-pass', password: 'newpassword123' },
+    })
+  }
+
+  it('activates a pending staff account on its first password, as an activity, keeping a concurrent ban', async () => {
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce({
+      ...VALID_USER,
+      role: 'moderator' as const,
+      activatedAt: null,
+      userStatus: 'invited' as const,
+      lastActiveAt: null,
+      createdAt: new Date(),
+      passwordResetToken: 'some-hash',
+      passwordResetTokenExpiresAt: new Date(Date.now() + 30 * 60 * 1000),
+    })
+    const setSpy = mockResetPasswordWrites()
+
+    const response = await postResetPassword()
+
+    const stored = setSpy.mock.calls[0]?.[0] as { activatedAt: SQL; lastActiveAt: Date; userStatus: SQL; passwordResetToken: string | null }
+    const dialect = new PgDialect()
+    const status = dialect.sqlToQuery(stored.userStatus)
+    expect(response.status).toBe(200)
+    expect(stored.passwordResetToken).toBeNull()
+    expect(stored.lastActiveAt).toBeInstanceOf(Date)
+    expect(status.sql).toContain('"users"."banned_at" IS NOT NULL')
+    expect(status.params).toEqual(['pending_deletion', 'banned', 'unverified', 'active'])
+  })
+
+  it('keeps the first activation date of an already activated account', async () => {
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce({
+      ...VALID_USER,
+      activatedAt: new Date('2024-01-01'),
+      passwordResetToken: 'some-hash',
+      passwordResetTokenExpiresAt: new Date(Date.now() + 30 * 60 * 1000),
+    })
+    const setSpy = mockResetPasswordWrites()
+
+    await postResetPassword()
+
+    const stored = setSpy.mock.calls[0]?.[0] as { activatedAt: SQL }
+    expect(new PgDialect().sqlToQuery(stored.activatedAt).sql).toBe('COALESCE("users"."activated_at", $1::timestamptz)')
   })
 
   it('returns 400 when token does not match any user', async () => {

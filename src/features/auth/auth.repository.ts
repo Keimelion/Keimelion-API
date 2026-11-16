@@ -3,6 +3,7 @@ import { db } from '../../db/client.js'
 import { accessTokens } from '../../db/entities/access-tokens/access-tokens.schema.js'
 import { users } from '../../db/entities/users/users.schema.js'
 import { refreshTokens } from '../../db/entities/refresh-tokens/refresh-tokens.schema.js'
+import { buildActivityFields } from '../../db/entities/users/users.repository.js'
 
 interface RotateRefreshTokenInput {
   previousRefreshTokenId: string
@@ -16,7 +17,7 @@ interface RotateRefreshTokenInput {
 export async function storeTokenAndUpdateActivity(tokenId: string, userId: string, expiresAt: Date): Promise<void> {
   await db.transaction(async (tx) => {
     await tx.insert(accessTokens).values({ tokenId, userId, expiresAt })
-    await tx.update(users).set({ lastActiveAt: new Date() }).where(eq(users.id, userId))
+    await tx.update(users).set(buildActivityFields()).where(eq(users.id, userId))
   })
 }
 
@@ -29,7 +30,7 @@ export async function revokeTokenAndUpdateActivity(tokenId: string, userId: stri
         .set({ revokedAt: new Date() })
         .where(and(eq(refreshTokens.tokenHash, refreshTokenHash), eq(refreshTokens.userId, userId)))
     }
-    await tx.update(users).set({ lastActiveAt: new Date() }).where(eq(users.id, userId))
+    await tx.update(users).set(buildActivityFields()).where(eq(users.id, userId))
   })
 }
 
@@ -46,6 +47,6 @@ export async function rotateRefreshTokenAndIssueAccessToken(input: RotateRefresh
       userId: input.userId,
       expiresAt: input.newRefreshTokenExpiresAt,
     })
-    await tx.update(users).set({ lastActiveAt: new Date() }).where(eq(users.id, input.userId))
+    await tx.update(users).set(buildActivityFields()).where(eq(users.id, input.userId))
   })
 }

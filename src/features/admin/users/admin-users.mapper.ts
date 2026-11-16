@@ -13,6 +13,8 @@ export function toAdminUser(
     bannedAt: user.bannedAt ?? null,
     banReason: user.banReason ?? null,
     deletedAt: user.deletedAt ?? null,
+    activatedAt: user.activatedAt ?? null,
+    status: user.userStatus,
     reservationsCount,
   }
 }

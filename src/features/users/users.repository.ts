@@ -1,4 +1,4 @@
-import { and, count, eq, inArray, isNull } from 'drizzle-orm'
+import { and, count, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { db } from '../../db/client.js'
 import { users } from '../../db/entities/users/users.schema.js'
 import { reservations } from '../../db/entities/reservations/reservations.schema.js'
@@ -10,7 +10,7 @@ import {
   type UserReservationsSortField,
 } from '../../db/entities/reservations/reservations.repository.js'
 import { getOffset } from '../../shared/utils/pagination.js'
-import { ListUserRoles } from '@keimelion/sdk/enums'
+import { ListUserRoles, UserStatuses } from '@keimelion/sdk/enums'
 import type { PaginationQueryParsed, SortInput } from '@keimelion/sdk/schemas'
 import { env } from '../../config/env.js'
 import { hashPassword } from '../../shared/utils/hash.js'
@@ -19,6 +19,7 @@ import type { UserRowWithAvatar } from '../../shared/types/user.js'
 import { ONE_HOUR_MS } from '../../shared/utils/time.js'
 import type { RegisterRequestParsed } from '@keimelion/sdk/schemas'
 import type { ReservationProfileRow } from '../reservations/reservations.types.js'
+import { buildStatusOnAction } from '../../db/entities/users/users.status.js'
 
 type SetPasswordResetTokenFields = Partial<Pick<typeof users.$inferInsert, 'passwordResetToken' | 'passwordResetTokenExpiresAt'>>
 type ResetPasswordFields = Pick<typeof users.$inferInsert, 'passwordHash' | 'passwordResetToken' | 'passwordResetTokenExpiresAt'>
@@ -41,7 +42,8 @@ export async function insertUser(
   avatarImageId: string | null = null,
 ): Promise<User | undefined> {
   const passwordHash = await hashPassword(input.password)
-  const emailVerifyTokenExpiresAt = new Date(Date.now() + env.EMAIL_VERIFY_TOKEN_TTL_HOURS * ONE_HOUR_MS)
+  const now = new Date()
+  const emailVerifyTokenExpiresAt = new Date(now.getTime() + env.EMAIL_VERIFY_TOKEN_TTL_HOURS * ONE_HOUR_MS)
 
   const [user] = await db
     .insert(users)
@@ -57,6 +59,8 @@ export async function insertUser(
       ...(avatarImageId !== null && { avatarImageId }),
       emailVerifyToken,
       emailVerifyTokenExpiresAt,
+      activatedAt: now,
+      userStatus: UserStatuses.UNVERIFIED,
     })
     .returning()
 
@@ -64,14 +68,17 @@ export async function insertUser(
 }
 
 export async function markEmailAsVerified(userId: string): Promise<void> {
+  const now = new Date()
   await db
     .update(users)
-    .set({ emailVerifiedAt: new Date(), emailVerifyToken: null, emailVerifyTokenExpiresAt: null })
+    .set({
+      emailVerifiedAt: now,
+      lastActiveAt: now,
+      userStatus: buildStatusOnAction({ verifiesEmail: true }),
+      emailVerifyToken: null,
+      emailVerifyTokenExpiresAt: null,
+    })
     .where(eq(users.id, userId))
-}
-
-export async function updateLastActiveAt(userId: string): Promise<void> {
-  await db.update(users).set({ lastActiveAt: new Date() }).where(eq(users.id, userId))
 }
 
 export async function updateUserProfile(
@@ -95,8 +102,19 @@ export async function setPasswordResetToken(userId: string, input: SetPasswordRe
   await db.update(users).set(input).where(eq(users.id, userId))
 }
 
+// Setting a password through a reset link activates a pending staff account; an activated account
+// keeps its first activation date.
 export async function resetUserPassword(userId: string, input: ResetPasswordFields): Promise<void> {
-  await db.update(users).set(input).where(eq(users.id, userId))
+  const now = new Date()
+  await db
+    .update(users)
+    .set({
+      ...input,
+      activatedAt: sql`COALESCE(${users.activatedAt}, ${now.toISOString()}::timestamptz)`,
+      lastActiveAt: now,
+      userStatus: buildStatusOnAction({ activatesAccount: true }),
+    })
+    .where(eq(users.id, userId))
 }
 
 const MY_RESERVATIONS_HYDRATION = {

@@ -2,11 +2,12 @@ import { randomBytes } from 'crypto'
 import { db } from '../../../db/client.js'
 import { env } from '../../../config/env.js'
 import { buildPaginatedResponse } from '../../../shared/utils/pagination.js'
-import { ErrorCode, HttpStatus } from '@keimelion/sdk/enums'
+import { ErrorCode, HttpStatus, UserStatuses } from '@keimelion/sdk/enums'
 import type { StaffRole } from '@keimelion/sdk/enums'
 import type {
   AdminUsersCreateRequestParsed,
   AdminUsersCreateResponseParsed,
+  AdminUsersResendInvitationResponseParsed,
   AdminUsersUpdateRequestParsed,
   PaginatedResponse,
 } from '@keimelion/sdk/schemas'
@@ -19,7 +20,14 @@ import { ONE_HOUR_MS } from '../../../shared/utils/time.js'
 import { hashPassword, hashSha256Hex } from '../../../shared/utils/hash.js'
 import { pickDefined } from '../../../shared/utils/partial-update.js'
 import { runWrite } from '../../../shared/utils/admin-write.js'
-import { findAllUsers, countUsers, adminUpdateUser, adminInsertUser } from './admin-users.repository.js'
+import { isStaffRole } from '../../../shared/utils/staff-role.js'
+import {
+  findAllUsers,
+  countUsers,
+  adminUpdateUser,
+  adminInsertUser,
+  renewStaffInvitationToken,
+} from './admin-users.repository.js'
 import { findUserById, findUserByIdWithAvatar, softDeleteUser } from '../../../db/entities/users/users.repository.js'
 import { revokeAllUserSessions } from '../../../shared/db/user-sessions.js'
 import { cleanupReplacedImage } from '../../uploads/images.service.js'
@@ -39,16 +47,27 @@ const STAFF_INVITATION_VALIDITY_HOURS = 24
 const PASSWORD_RESET_TOKEN_BYTE_LENGTH = 32
 const STAFF_INVITATION_EMAIL_FAILED_EVENT = 'admin_staff_invitation_email_failed'
 
+interface StaffInvitationToken {
+  rawToken: string
+  hashedToken: string
+  expiresAt: Date
+}
+
+interface StaffInvitationRecipient {
+  email: string
+  role: StaffRole
+}
+
+// Outside production the raw token is returned so the set-password flow can be tested end to end
+interface DevPasswordResetToken {
+  passwordResetToken?: string
+}
+
 export async function createUser(
   adminId: string,
   input: AdminUsersCreateRequestParsed,
-): Promise<ServiceResult<AdminUsersCreateResponseParsed & { passwordResetToken?: string }>> {
-  const rawPasswordResetToken = randomBytes(PASSWORD_RESET_TOKEN_BYTE_LENGTH).toString('hex')
-  const hashedPasswordResetToken = hashSha256Hex(rawPasswordResetToken)
-  const passwordResetTokenExpiresAt = new Date(
-    Date.now() + STAFF_INVITATION_VALIDITY_HOURS * ONE_HOUR_MS,
-  )
-
+): Promise<ServiceResult<AdminUsersCreateResponseParsed & DevPasswordResetToken>> {
+  const invitationToken = generateStaffInvitationToken()
   const rawPassword = randomBytes(PASSWORD_RESET_TOKEN_BYTE_LENGTH).toString('hex')
   const passwordHash = await hashPassword(rawPassword)
 
@@ -59,8 +78,8 @@ export async function createUser(
         username: input.username,
         passwordHash,
         role: input.role,
-        passwordResetToken: hashedPasswordResetToken,
-        passwordResetTokenExpiresAt,
+        passwordResetToken: invitationToken.hashedToken,
+        passwordResetTokenExpiresAt: invitationToken.expiresAt,
       }),
     { fallbackErrorCode: ErrorCode.USER_CREATION_FAILED },
   )
@@ -70,14 +89,40 @@ export async function createUser(
   const createdUser = toAdminUser({ ...outcome.row, avatarImage: null }, 0)
 
   logAdminUserCreation(adminId, createdUser.id, input.role)
-  sendStaffInvitationEmail(input, rawPasswordResetToken)
+  sendStaffInvitationEmail(input, invitationToken.rawToken)
 
   return {
-    data: {
-      user: createdUser,
-      ...(env.NODE_ENV !== NodeEnvs.PRODUCTION ? { passwordResetToken: rawPasswordResetToken } : {}),
-    },
+    data: { user: createdUser, ...exposeTokenOutsideProduction(invitationToken.rawToken) },
     httpStatus: HttpStatus.CREATED,
+  }
+}
+
+export async function resendStaffInvitation(
+  adminId: string,
+  targetUserId: string,
+): Promise<ServiceResult<AdminUsersResendInvitationResponseParsed & DevPasswordResetToken>> {
+  const targetUser = await findUserByIdWithAvatar(targetUserId)
+
+  if (!targetUser) return serviceError(ErrorCode.NOT_FOUND)
+  if (!isStaffRole(targetUser.role)) return serviceError(ErrorCode.STAFF_INVITATION_NOT_STAFF_ACCOUNT)
+
+  const invitationToken = generateStaffInvitationToken()
+  const renewedUser = await renewStaffInvitationToken(targetUserId, {
+    passwordResetToken: invitationToken.hashedToken,
+    passwordResetTokenExpiresAt: invitationToken.expiresAt,
+  })
+
+  if (!renewedUser) return serviceError(ErrorCode.STAFF_INVITATION_NOT_PENDING)
+
+  logger.warn({ adminId, targetUserId, action: AdminAction.RESEND_STAFF_INVITATION, role: targetUser.role })
+  sendStaffInvitationEmail({ email: renewedUser.email, role: targetUser.role }, invitationToken.rawToken)
+
+  // An invited account never signed in: it holds no reservation
+  const user = toAdminUser({ ...renewedUser, avatarImage: targetUser.avatarImage }, 0)
+
+  return {
+    data: { user, ...exposeTokenOutsideProduction(invitationToken.rawToken) },
+    httpStatus: HttpStatus.OK,
   }
 }
 
@@ -124,6 +169,11 @@ export async function updateUser(
   if (!targetUser) {
     return serviceError(ErrorCode.NOT_FOUND)
   }
+
+  // A pending invitation is a staff invitation: it would otherwise stay invited with no way out
+  const isDemotingInvitedStaff =
+    targetUser.userStatus === UserStatuses.INVITED && input.role !== undefined && !isStaffRole(input.role)
+  if (isDemotingInvitedStaff) return serviceError(ErrorCode.INVALID_OPERATION)
 
   const shouldRevoke = input.role !== undefined && input.role !== targetUser.role
 
@@ -185,17 +235,27 @@ function logAdminUserCreation(adminId: string, targetUserId: string, role: Staff
   logger.warn({ adminId, targetUserId, action: AdminAction.CREATE_USER, role })
 }
 
+function generateStaffInvitationToken(): StaffInvitationToken {
+  const rawToken = randomBytes(PASSWORD_RESET_TOKEN_BYTE_LENGTH).toString('hex')
+  return {
+    rawToken,
+    hashedToken: hashSha256Hex(rawToken),
+    expiresAt: new Date(Date.now() + STAFF_INVITATION_VALIDITY_HOURS * ONE_HOUR_MS),
+  }
+}
+
+function exposeTokenOutsideProduction(rawToken: string): DevPasswordResetToken {
+  return env.NODE_ENV === NodeEnvs.PRODUCTION ? {} : { passwordResetToken: rawToken }
+}
+
 // The recipient's language is unknown: the invitation goes out in the default email locale
-function sendStaffInvitationEmail(
-  input: AdminUsersCreateRequestParsed,
-  setPasswordToken: string,
-): void {
+function sendStaffInvitationEmail(recipient: StaffInvitationRecipient, setPasswordToken: string): void {
   sendMailInBackground(STAFF_INVITATION_EMAIL_FAILED_EVENT, () => ({
-    to: input.email,
+    to: recipient.email,
     ...buildStaffInvitationEmail({
       locale: EMAIL_DEFAULT_LOCALE,
-      role: input.role,
-      email: input.email,
+      role: recipient.role,
+      email: recipient.email,
       setPasswordToken,
       validityHours: STAFF_INVITATION_VALIDITY_HOURS,
     }),

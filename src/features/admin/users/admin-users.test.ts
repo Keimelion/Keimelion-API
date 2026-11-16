@@ -1,5 +1,7 @@
 import { createHash } from 'crypto'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import type { SQL } from 'drizzle-orm'
+import { PgDialect } from 'drizzle-orm/pg-core'
 import { ErrorCode } from '@keimelion/sdk/enums'
 import { db } from '../../../db/client.js'
 import { env } from '../../../config/env.js'
@@ -14,6 +16,7 @@ import {
   adminUsersCreateResponseSchema,
   adminUsersGetResponseSchema,
   adminUsersListResponseSchema,
+  adminUsersResendInvitationResponseSchema,
   adminUsersUpdateResponseSchema,
   messageResponseSchema,
 } from '@keimelion/sdk/schemas'
@@ -654,6 +657,24 @@ describe('PATCH /v1/admin/users/:id', () => {
     expect(body.user.role).toBe('moderator')
   })
 
+  it('returns 400 INVALID_OPERATION when demoting a staff account whose invitation is pending', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    const invitedStaff = { ...TARGET_USER, role: 'moderator' as const, activatedAt: null, userStatus: 'invited' as const }
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(invitedStaff)
+
+    const response = await apiRequest(`/v1/admin/users/${TARGET_USER.id}`, {
+      method: 'PATCH',
+      token,
+      body: { role: 'user' },
+    })
+
+    const body = await response.json() as { code: string }
+    expect(response.status).toBe(400)
+    expect(body.code).toBe('INVALID_OPERATION')
+    expect(db.transaction).not.toHaveBeenCalled()
+  })
+
   it('returns 422 when avatarUrl is sent (avatars are upload-only)', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
@@ -920,25 +941,27 @@ describe('DELETE /v1/admin/users/:id', () => {
     vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
   })
 
-  it('returns 200 and soft-deletes the user', async () => {
+  it('returns 200 and soft-deletes the user, storing the pending_deletion status', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     const deletedUser = { ...TARGET_USER, deletedAt: new Date() }
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(TARGET_USER)
-    vi.mocked(db.update).mockReturnValueOnce({
-      set: vi.fn().mockReturnValueOnce({
-        where: vi.fn().mockReturnValueOnce({
-          returning: vi.fn().mockResolvedValueOnce([deletedUser]),
-        }),
+    const setSpy = vi.fn().mockReturnValueOnce({
+      where: vi.fn().mockReturnValueOnce({
+        returning: vi.fn().mockResolvedValueOnce([deletedUser]),
       }),
-    } as never)
+    })
+    vi.mocked(db.update).mockReturnValueOnce({ set: setSpy } as never)
 
     const response = await apiRequest(`/v1/admin/users/${TARGET_USER.id}`, { method: 'DELETE', token })
 
     const body = await response.json() as { message: string }
+    const stored = setSpy.mock.calls[0]?.[0] as { deletedAt: Date; userStatus: string }
     messageResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.message).toBe('User deleted successfully')
+    expect(stored.deletedAt).toBeInstanceOf(Date)
+    expect(stored.userStatus).toBe('pending_deletion')
   })
 
   it('returns 422 when id is not a UUID', async () => {
@@ -1307,6 +1330,8 @@ describe('POST /v1/admin/users', () => {
     expect(insertedFields.authProvider).toBe('email')
     expect(insertedFields.passwordResetToken).toBeDefined()
     expect(insertedFields.passwordResetTokenExpiresAt).toBeInstanceOf(Date)
+    expect(insertedFields.activatedAt).toBeNull()
+    expect(insertedFields.userStatus).toBe('invited')
   })
 
   it('returns 409 when insert hits the unique constraint', async () => {
@@ -1331,5 +1356,295 @@ describe('POST /v1/admin/users', () => {
 
     expect(response.status).toBe(409)
     expect(sendMail).not.toHaveBeenCalled()
+  })
+})
+
+function renderQuery(condition: SQL | undefined): { sql: string; params: unknown[] } {
+  if (!condition) return { sql: '', params: [] }
+  return new PgDialect().sqlToQuery(condition)
+}
+
+function lastFindManyWhere(): SQL {
+  const options = vi.mocked(db.query.users.findMany).mock.calls[0]?.[0] as { where: SQL }
+  return options.where
+}
+
+describe('GET /v1/admin/users — stored status', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
+  })
+
+  function mockEmptyList(): void {
+    mockListUsers([])
+    mockCountChain(0)
+    mockReservationCountsByUserIds()
+  }
+
+  it('exposes activatedAt and the stored status on each user', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    const invitedStaff = makeAdminUser({
+      id: '00000000-0000-0000-0000-000000000003',
+      role: 'moderator',
+      activatedAt: null,
+      userStatus: 'invited',
+    })
+    const bannedUser = { ...TARGET_USER, bannedAt: new Date('2024-06-01'), userStatus: 'banned' as const }
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
+    mockListUsers([invitedStaff, bannedUser, ADMIN_USER])
+    mockCountChain(3)
+    mockReservationCountsByUserIds()
+
+    const response = await apiRequest('/v1/admin/users', { token })
+
+    const body = adminUsersListResponseSchema.parse(await response.json())
+    expect(response.status).toBe(200)
+    expect(body.items.map((user) => user.status)).toEqual(['invited', 'banned', 'active'])
+    expect(body.items[0]?.activatedAt).toBeNull()
+    expect(body.items[2]?.activatedAt).toEqual(new Date('2024-01-01'))
+  })
+
+  it('filters on the stored column with status[eq], without the default soft-delete clause', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
+    mockEmptyList()
+
+    const response = await apiRequest('/v1/admin/users?status[eq]=pending_deletion', { token })
+
+    const where = renderQuery(lastFindManyWhere())
+    expect(response.status).toBe(200)
+    expect(where.sql).toContain('"users"."user_status" = $1')
+    expect(where.sql).not.toContain('"users"."deleted_at" is null')
+    expect(where.params).toEqual(['pending_deletion'])
+  })
+
+  it('filters on several statuses with status[in][]', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
+    mockEmptyList()
+
+    const response = await apiRequest('/v1/admin/users?status[in][]=invited&status[in][]=inactive', { token })
+
+    const where = renderQuery(lastFindManyWhere())
+    expect(response.status).toBe(200)
+    expect(where.sql).toContain('"users"."user_status" in ($1, $2)')
+    expect(where.params).toEqual(['invited', 'inactive'])
+  })
+
+  it('keeps hiding soft-deleted users when no status filter is given', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
+    mockEmptyList()
+
+    await apiRequest('/v1/admin/users?role[eq]=moderator', { token })
+
+    expect(renderQuery(lastFindManyWhere()).sql).toContain('"users"."deleted_at" is null')
+  })
+
+  it('returns 422 when status is not a known status', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
+
+    const response = await apiRequest('/v1/admin/users?status[eq]=deleted', { token })
+
+    expect(response.status).toBe(422)
+    expect(db.query.users.findMany).not.toHaveBeenCalled()
+  })
+})
+
+describe('POST /v1/admin/users/:id/resend-invitation', () => {
+  const PENDING_STAFF = {
+    ...makeAdminUser({
+      id: '00000000-0000-0000-0000-000000000003',
+      email: 'staff@example.com',
+      username: 'pendingstaff',
+      role: 'moderator',
+      activatedAt: null,
+      userStatus: 'invited',
+      passwordResetToken: 'previous-token-hash',
+      passwordResetTokenExpiresAt: new Date('2024-01-02'),
+    }),
+    avatarImage: null,
+  }
+  const RESEND_PATH = `/v1/admin/users/${PENDING_STAFF.id}/resend-invitation`
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
+    vi.mocked(sendMail).mockResolvedValue({ isSuccess: true, messageId: 'message-1' })
+  })
+
+  function mockTargetUser(target: unknown): void {
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(target as never)
+  }
+
+  function mockTokenRenewal(renewedRows: unknown[]): { set: ReturnType<typeof vi.fn>; where: ReturnType<typeof vi.fn> } {
+    const where = vi.fn().mockReturnValueOnce({ returning: vi.fn().mockResolvedValueOnce(renewedRows) })
+    const set = vi.fn().mockReturnValueOnce({ where })
+    vi.mocked(db.update).mockReturnValueOnce({ set } as never)
+    return { set, where }
+  }
+
+  function mockSuccessfulRenewal(): { set: ReturnType<typeof vi.fn>; where: ReturnType<typeof vi.fn> } {
+    mockTargetUser(PENDING_STAFF)
+    return mockTokenRenewal([{ ...PENDING_STAFF, passwordResetToken: 'new-token-hash' }])
+  }
+
+  async function postResend(path = RESEND_PATH): Promise<Response> {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    return apiRequest(path, { method: 'POST', token })
+  }
+
+  it('returns 200 with the invited user and sends the staff invitation with a new Backoffice link', async () => {
+    mockSuccessfulRenewal()
+
+    const response = await postResend()
+
+    const rawBody = await response.json() as { passwordResetToken: string }
+    const body = adminUsersResendInvitationResponseSchema.parse(rawBody)
+    const mail = await waitForSentMail()
+    const setPasswordUrl = `${BACKOFFICE_URL}/reset-password?token=${rawBody.passwordResetToken}`
+    expect(response.status).toBe(200)
+    expect(body.user.id).toBe(PENDING_STAFF.id)
+    expect(body.user.status).toBe('invited')
+    expect(body.user.activatedAt).toBeNull()
+    expect(mail.to).toBe('staff@example.com')
+    expect(mail.subject).toBe('Votre accès au Backoffice Keimêlion')
+    expect(mail.html).toContain('<strong>modérateur</strong>')
+    expect(mail.html).toContain(`href="${setPasswordUrl}"`)
+    expect(mail.text).toContain("Ce lien est valable 24 heures et ne fonctionne qu'une seule fois.")
+  })
+
+  it('replaces the stored token with the hash of the emailed one, valid 24 hours', async () => {
+    const { set } = mockSuccessfulRenewal()
+
+    const before = Date.now()
+    await postResend()
+
+    const emailedToken = /\?token=([a-f0-9]+)/.exec((await waitForSentMail()).text)?.[1] ?? ''
+    const stored = set.mock.calls[0]?.[0] as { passwordResetToken: string; passwordResetTokenExpiresAt: Date }
+    expect(stored.passwordResetToken).toBe(createHash('sha256').update(emailedToken).digest('hex'))
+    expect(stored.passwordResetToken).not.toBe(PENDING_STAFF.passwordResetToken)
+    expect(stored.passwordResetTokenExpiresAt.getTime() - before).toBeGreaterThanOrEqual(TWENTY_FOUR_HOURS_MS)
+    expect(stored.passwordResetTokenExpiresAt.getTime() - before).toBeLessThan(TWENTY_FOUR_HOURS_MS + ONE_MINUTE_MS)
+  })
+
+  it('renews the token only while the staff invitation is still pending', async () => {
+    const { where } = mockSuccessfulRenewal()
+
+    await postResend()
+
+    const condition = renderQuery(where.mock.calls[0]?.[0] as SQL)
+    expect(condition.sql).toContain('"users"."user_status" = $')
+    expect(condition.params).toContain('invited')
+  })
+
+  it('logs the resend at warn level without the recipient or the link', async () => {
+    mockSuccessfulRenewal()
+
+    await postResend()
+
+    const emailedToken = /\?token=([a-f0-9]+)/.exec((await waitForSentMail()).text)?.[1] ?? ''
+    const logs = JSON.stringify(vi.mocked(logger.warn).mock.calls)
+    expect(logger.warn).toHaveBeenCalledWith({
+      adminId: ADMIN_USER.id,
+      targetUserId: PENDING_STAFF.id,
+      action: 'admin_resend_staff_invitation',
+      role: 'moderator',
+    })
+    expect(logs).not.toContain(emailedToken)
+    expect(logs).not.toContain('staff@example.com')
+  })
+
+  it('still returns 200 when the provider fails, logging neither recipient nor link', async () => {
+    mockSuccessfulRenewal()
+    vi.mocked(sendMail).mockResolvedValueOnce({ isSuccess: false, reason: 'provider_error' })
+
+    const response = await postResend()
+
+    expect(response.status).toBe(200)
+    await vi.waitFor(() => {
+      expect(logger.warn).toHaveBeenCalledWith({
+        event: 'admin_staff_invitation_email_failed',
+        reason: 'provider_error',
+      })
+    })
+  })
+
+  it('does not return the token in production', async () => {
+    const originalNodeEnv = env.NODE_ENV
+    env.NODE_ENV = NodeEnvs.PRODUCTION
+    try {
+      mockSuccessfulRenewal()
+
+      const response = await postResend()
+
+      const body = await response.json() as { passwordResetToken?: string }
+      expect(response.status).toBe(200)
+      expect(body.passwordResetToken).toBeUndefined()
+      await waitForSentMail()
+    } finally {
+      env.NODE_ENV = originalNodeEnv
+    }
+  })
+
+  it('returns 409 STAFF_INVITATION_NOT_PENDING when the account is already activated', async () => {
+    mockTargetUser({ ...PENDING_STAFF, activatedAt: new Date('2024-01-03'), userStatus: 'active' })
+    mockTokenRenewal([])
+
+    const response = await postResend()
+
+    const body = await response.json() as { code: string }
+    expect(response.status).toBe(409)
+    expect(body.code).toBe(ErrorCode.STAFF_INVITATION_NOT_PENDING)
+    expect(sendMail).not.toHaveBeenCalled()
+  })
+
+  it('returns 422 STAFF_INVITATION_NOT_STAFF_ACCOUNT for a regular user, without touching the token', async () => {
+    mockTargetUser({ ...TARGET_USER, avatarImage: null })
+
+    const response = await postResend(`/v1/admin/users/${TARGET_USER.id}/resend-invitation`)
+
+    const body = await response.json() as { code: string }
+    expect(response.status).toBe(422)
+    expect(body.code).toBe(ErrorCode.STAFF_INVITATION_NOT_STAFF_ACCOUNT)
+    expect(db.update).not.toHaveBeenCalled()
+    expect(sendMail).not.toHaveBeenCalled()
+  })
+
+  it('returns 404 when the user does not exist', async () => {
+    mockTargetUser(undefined)
+
+    const response = await postResend()
+
+    const body = await response.json() as { code: string }
+    expect(response.status).toBe(404)
+    expect(body.code).toBe(ErrorCode.NOT_FOUND)
+    expect(sendMail).not.toHaveBeenCalled()
+  })
+
+  it('returns 422 when id is not a UUID', async () => {
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(ADMIN_USER)
+
+    const response = await postResend('/v1/admin/users/not-a-uuid/resend-invitation')
+
+    expect(response.status).toBe(422)
+  })
+
+  it('returns 403 when the caller is not an admin', async () => {
+    const token = await generateTestToken(TARGET_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(TARGET_USER)
+
+    const response = await apiRequest(RESEND_PATH, { method: 'POST', token })
+
+    expect(response.status).toBe(403)
+    expect(db.update).not.toHaveBeenCalled()
+  })
+
+  it('returns 401 when no authorization header is provided', async () => {
+    const response = await apiRequest(RESEND_PATH, { method: 'POST' })
+
+    expect(response.status).toBe(401)
   })
 })

@@ -1,12 +1,13 @@
-import { boolean, char, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid, varchar } from 'drizzle-orm/pg-core'
+import { boolean, char, index, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid, varchar } from 'drizzle-orm/pg-core'
 import type { AnyPgColumn } from 'drizzle-orm/pg-core'
-import { AUTH_PROVIDER_VALUES, SupportedCurrencies, USER_ROLE_VALUES } from '@keimelion/sdk/enums'
+import { AUTH_PROVIDER_VALUES, SupportedCurrencies, USER_ROLE_VALUES, USER_STATUS_VALUES } from '@keimelion/sdk/enums'
 import { timestamps, uuidPrimaryKey } from '../../../shared/db/columns.js'
 import { currencies } from '../currencies/currencies.schema.js'
 import { images } from '../images/images.schema.js'
 
 export const userRoleEnum = pgEnum('user_role', USER_ROLE_VALUES)
 export const authProviderEnum = pgEnum('auth_provider', AUTH_PROVIDER_VALUES)
+export const userStatusEnum = pgEnum('user_status', USER_STATUS_VALUES)
 
 export const users = pgTable('users', {
   id: uuidPrimaryKey(),
@@ -15,6 +16,7 @@ export const users = pgTable('users', {
   passwordHash: text('password_hash'),
   authProvider: authProviderEnum('auth_provider').notNull(),
   role: userRoleEnum('role').notNull().default('user'),
+  userStatus: userStatusEnum('user_status').notNull(),
   avatarImageId: uuid('avatar_image_id').references((): AnyPgColumn => images.id, { onDelete: 'set null' }),
   isCgvAccepted: boolean('is_cgv_accepted').notNull().default(false),
   cgvAcceptedAt: timestamp('cgv_accepted_at', { withTimezone: true }),
@@ -29,12 +31,16 @@ export const users = pgTable('users', {
   passwordResetToken: text('password_reset_token'),
   passwordResetTokenExpiresAt: timestamp('password_reset_token_expires_at', { withTimezone: true }),
   lastActiveAt: timestamp('last_active_at', { withTimezone: true }),
+  activatedAt: timestamp('activated_at', { withTimezone: true }),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
   bannedAt: timestamp('banned_at', { withTimezone: true }),
   banReason: text('ban_reason'),
   ...timestamps(),
 },
-(table) => [uniqueIndex('users_password_reset_token_idx').on(table.passwordResetToken)]
+(table) => [
+  uniqueIndex('users_password_reset_token_idx').on(table.passwordResetToken),
+  index('users_user_status_idx').on(table.userStatus),
+]
 )
 
 export type User = typeof users.$inferSelect

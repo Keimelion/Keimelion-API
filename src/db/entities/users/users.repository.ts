@@ -1,13 +1,19 @@
 import type { DbTransaction } from '../../client.js'
 import { and, eq, isNotNull, isNull, sql } from 'drizzle-orm'
+import type { SQL } from 'drizzle-orm'
 import { db } from '../../../db/client.js'
 import { users } from './users.schema.js'
 import type { User } from './users.schema.js'
 import { userDeletionAudit } from '../user-deletion-audit/user-deletion-audit.schema.js'
-import type { DeletionReason } from '@keimelion/sdk/enums'
+import { UserStatuses } from '@keimelion/sdk/enums'
+import type { DeletionReason, UserStatus } from '@keimelion/sdk/enums'
 import type { UserRowWithAvatar } from '../../../shared/types/user.js'
+import { buildStatusAfterActivity } from './users.status.js'
 
 const HARD_DELETE_BATCH_SIZE = 100
+
+// deletedAt ranks first in the status precedence: a soft delete needs no other field to set it
+const SOFT_DELETED_STATUS = UserStatuses.PENDING_DELETION
 
 interface EligibleUser {
   user: User
@@ -40,7 +46,14 @@ export function findUserByUsername(username: string): Promise<User | undefined> 
 export async function anonymizeUser(tx: DbTransaction, userId: string, anonymizedEmail: string): Promise<User | undefined> {
   const [user] = await tx
     .update(users)
-    .set({ email: anonymizedEmail, username: null, avatarImageId: null, passwordHash: null, deletedAt: new Date() })
+    .set({
+      email: anonymizedEmail,
+      username: null,
+      avatarImageId: null,
+      passwordHash: null,
+      deletedAt: new Date(),
+      userStatus: SOFT_DELETED_STATUS,
+    })
     .where(eq(users.id, userId))
     .returning()
   return user
@@ -49,7 +62,7 @@ export async function anonymizeUser(tx: DbTransaction, userId: string, anonymize
 export async function softDeleteUser(userId: string): Promise<User | undefined> {
   const [user] = await db
     .update(users)
-    .set({ deletedAt: new Date() })
+    .set({ deletedAt: new Date(), userStatus: SOFT_DELETED_STATUS })
     .where(eq(users.id, userId))
     .returning()
 
@@ -104,8 +117,26 @@ export async function insertDeletionAudit(
 
 export async function updateLastActiveAt(userId: string): Promise<void> {
   await db.execute(
-    sql`UPDATE users SET last_active_at = now() WHERE id = ${userId} AND (last_active_at IS NULL OR last_active_at < now() - interval '1 hour')`,
+    sql`UPDATE users SET last_active_at = now(), user_status = ${buildStatusAfterActivity()} WHERE id = ${userId} AND (last_active_at IS NULL OR last_active_at < now() - interval '1 hour')`,
   )
+}
+
+export function buildActivityFields(): { lastActiveAt: Date; userStatus: SQL<UserStatus> } {
+  return { lastActiveAt: new Date(), userStatus: buildStatusAfterActivity() }
+}
+
+export async function markInactiveUsers(inactiveBefore: Date): Promise<number> {
+  const updated = await db
+    .update(users)
+    .set({ userStatus: UserStatuses.INACTIVE })
+    .where(
+      and(
+        eq(users.userStatus, UserStatuses.ACTIVE),
+        sql`COALESCE(${users.lastActiveAt}, ${users.createdAt}) < ${inactiveBefore.toISOString()}::timestamptz`,
+      ),
+    )
+    .returning({ id: users.id })
+  return updated.length
 }
 
 export async function updatePasswordHash(userId: string, hash: string, tx?: DbTransaction): Promise<void> {

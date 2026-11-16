@@ -32,6 +32,8 @@ const SAFE_USER = {
   passwordResetToken: null,
   passwordResetTokenExpiresAt: null,
   lastActiveAt: null,
+  activatedAt: new Date('2024-01-01'),
+  userStatus: 'active' as const,
   deletedAt: null,
   bannedAt: null,
   banReason: null,
@@ -64,6 +66,26 @@ describe('GET /v1/users/me', () => {
   it('returns 401 when no authorization header is provided', async () => {
     const response = await apiRequest('/v1/users/me')
     expect(response.status).toBe(401)
+  })
+
+  it('bumps lastActiveAt after the request, throttled to once an hour, and reactivates an inactive account', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    const inactiveUser = { ...SAFE_USER, userStatus: 'inactive' as const }
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(inactiveUser)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(inactiveUser)
+    vi.mocked(db.execute).mockResolvedValueOnce([] as never)
+
+    const response = await apiRequest('/v1/users/me', { token })
+
+    await vi.waitFor(() => {
+      expect(db.execute).toHaveBeenCalledOnce()
+    })
+    const bump = new PgDialect().sqlToQuery(vi.mocked(db.execute).mock.calls[0]?.[0] as SQL)
+    expect(response.status).toBe(200)
+    expect(bump.sql).toBe(
+      'UPDATE users SET last_active_at = now(), user_status = CASE WHEN "users"."user_status" = $1 THEN $2::user_status ELSE "users"."user_status" END WHERE id = $3 AND (last_active_at IS NULL OR last_active_at < now() - interval \'1 hour\')',
+    )
+    expect(bump.params).toEqual(['inactive', 'active', SAFE_USER.id])
   })
 
   it('returns 401 when JWT is expired or invalid', async () => {
@@ -444,6 +466,7 @@ describe('DELETE /v1/users/me', () => {
     expect(setArgs.avatarImageId).toBeNull()
     expect(setArgs.passwordHash).toBeNull()
     expect(setArgs.deletedAt).toBeInstanceOf(Date)
+    expect(setArgs.userStatus).toBe('pending_deletion')
 
     const insertResult = tx.insert.mock.results[0]
     expect(insertResult).toBeDefined()
