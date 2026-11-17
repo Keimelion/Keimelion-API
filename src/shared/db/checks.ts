@@ -70,3 +70,14 @@ export const nonNegativeCheck = (
 
 export const positiveCheck = (column: AnyPgColumn, constraintName?: string): CheckBuilder =>
   check(constraintName ?? `${column.name}_positive_check`, sql`${column} >= 1`)
+
+export interface DateRange {
+  readonly min: string
+  readonly max: string
+}
+
+export const dateRangeCheck = (column: AnyPgColumn, range: DateRange): CheckBuilder =>
+  check(
+    `${column.name}_range_check`,
+    sql`${column} BETWEEN ${sql.raw(`'${range.min}'`)} AND ${sql.raw(`'${range.max}'`)}`,
+  )

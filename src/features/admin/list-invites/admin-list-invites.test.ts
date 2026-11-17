@@ -22,6 +22,7 @@ const INVITE_ID = '00000000-0000-0000-0000-00000000d001'
 const INVITE_LIST = {
   id: LIST_ID,
   occasionTypeId: null,
+  eventDate: null,
   title: 'Birthday',
   slug: 'birthday-abc',
   description: null,

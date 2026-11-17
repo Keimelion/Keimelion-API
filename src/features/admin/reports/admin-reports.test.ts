@@ -118,7 +118,10 @@ describe('GET /v1/admin/reports', () => {
     })
     const query = vi.mocked(db.query.reports.findMany).mock.calls[0]?.[0]
     const orderBy = (query?.orderBy ?? []) as SQL[]
-    expect(orderBy.map((clause) => renderWhere(clause).sql)).toEqual(['"reports"."created_at" desc'])
+    expect(orderBy.map((clause) => renderWhere(clause).sql)).toEqual([
+      '"reports"."created_at" desc nulls last',
+      '"reports"."id" asc',
+    ])
   })
 
   it('filters by status, targetType and targetId', async () => {

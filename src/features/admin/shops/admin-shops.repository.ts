@@ -12,6 +12,7 @@ import type { FilterInput } from '../../../shared/db/filter-parser.js'
 import type { ItemSourceWithItem } from './admin-shops.mapper.js'
 
 export const shopsEntity = defineEntity({
+  idColumn: shops.id,
   sortable: {
     name:      shops.name,
     slug:      shops.slug,

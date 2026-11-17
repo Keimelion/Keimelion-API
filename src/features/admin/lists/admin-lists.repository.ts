@@ -26,6 +26,7 @@ const listStatusSchema = z.enum(LIST_STATUS_VALUES)
 const occasionTypeIdSchema = z.guid()
 
 export const listsEntity = defineEntity({
+  idColumn: lists.id,
   sortable: LIST_SORTABLE_FIELDS,
   defaultSort: LIST_DEFAULT_SORT,
   filterable: {

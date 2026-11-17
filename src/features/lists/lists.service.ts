@@ -198,6 +198,7 @@ function buildCreatePayload(input: ListsCreateRequestParsed, slug: string): Inse
     slug,
     description: input.description ?? null,
     occasionTypeId: input.occasionTypeId ?? null,
+    eventDate: input.eventDate ?? null,
     listStatus: ListStatuses.ACTIVE,
   }
 }

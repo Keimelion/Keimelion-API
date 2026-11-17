@@ -31,6 +31,7 @@ export const LIST_SORTABLE_FIELDS = {
   updatedAt:  lists.updatedAt,
   title:      lists.title,
   listStatus: lists.listStatus,
+  eventDate:  lists.eventDate,
 } as const satisfies Record<(typeof LIST_SORT_FIELDS)[number], AnyColumn>
 
 export const LIST_DEFAULT_SORT = [{ field: 'createdAt' as const, direction: 'desc' as const }]
@@ -96,13 +97,13 @@ export function findListBySlug(
 
 export type InsertList = Pick<
   typeof lists.$inferInsert,
-  'title' | 'slug' | 'description' | 'listStatus' | 'occasionTypeId'
+  'title' | 'slug' | 'description' | 'listStatus' | 'occasionTypeId' | 'eventDate'
 >
 
 export type UpdateListFields = Partial<
   Pick<
     typeof lists.$inferInsert,
-    'title' | 'description' | 'listStatus' | 'occasionTypeId'
+    'title' | 'description' | 'listStatus' | 'occasionTypeId' | 'eventDate'
   >
 >
 
@@ -110,6 +111,7 @@ interface ListUpdateInputFields {
   title?: string | undefined
   description?: string | null | undefined
   occasionTypeId?: string | null | undefined
+  eventDate?: string | null | undefined
   listStatus?: ListStatus | undefined
 }
 
@@ -118,6 +120,7 @@ export function buildListUpdatePatch(input: ListUpdateInputFields): UpdateListFi
     title: input.title,
     description: input.description,
     occasionTypeId: input.occasionTypeId,
+    eventDate: input.eventDate,
     listStatus: input.listStatus,
   })
 }

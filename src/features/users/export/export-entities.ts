@@ -240,6 +240,7 @@ const listsEntityDescriptor: ExportEntityDescriptor = {
     'description',
     'listStatus',
     'occasionTypeId',
+    'eventDate',
     'createdAt',
     'updatedAt',
     'deletedAt',

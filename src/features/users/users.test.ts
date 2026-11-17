@@ -743,6 +743,7 @@ describe('GET /v1/users/me/export', () => {
       'description',
       'listStatus',
       'occasionTypeId',
+      'eventDate',
       'createdAt',
       'updatedAt',
       'deletedAt',
@@ -756,6 +757,7 @@ describe('GET /v1/users/me/export', () => {
     const activeList = {
       id: '00000000-0000-0000-0000-0000000000a1',
       occasionTypeId: null,
+      eventDate: '2026-12-25',
       title: 'Active',
       slug: 'active-a1',
       description: null,
@@ -778,6 +780,9 @@ describe('GET /v1/users/me/export', () => {
     const deletedRow = rows.find((row) => (row as { id: string }).id === deletedList.id)
     expect(deletedRow).toBeDefined()
     expect((deletedRow as { deletedAt: Date | null }).deletedAt).not.toBeNull()
+    const activeRow = rows.find((row) => (row as { id: string }).id === activeList.id)
+    expect((activeRow as { eventDate: string | null }).eventDate).toBe('2026-12-25')
+    expect((deletedRow as { eventDate: string | null }).eventDate).toBe('2026-12-25')
   })
 
   it('returns an empty lists.csv row set when the user owns no lists', async () => {
@@ -808,6 +813,34 @@ describe('GET /v1/users/me/export', () => {
     const body = await response.json() as { lists: unknown[] }
     expect(body).toHaveProperty('lists')
     expect(Array.isArray(body.lists)).toBe(true)
+  })
+
+  it('includes eventDate on each list of the JSON export payload', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    const listWithEventDate = {
+      id: '00000000-0000-0000-0000-0000000000a3',
+      occasionTypeId: null,
+      eventDate: '2026-12-25',
+      title: 'Christmas',
+      slug: 'christmas-a3',
+      description: null,
+      listStatus: 'active' as const,
+      deletedAt: null,
+      createdAt: new Date('2024-01-01'),
+      updatedAt: new Date('2024-01-01'),
+    }
+    vi.mocked(db.query.lists.findMany).mockResolvedValueOnce([
+      listWithEventDate,
+      { ...listWithEventDate, id: '00000000-0000-0000-0000-0000000000a4', slug: 'none-a4', eventDate: null },
+    ] as never)
+
+    const response = await apiRequest('/v1/users/me/export?format=json', { token })
+
+    expect(response.status).toBe(200)
+    const body = await response.json() as { lists: { id: string; eventDate: string | null }[] }
+    expect(body.lists.map((list) => list.eventDate)).toEqual(['2026-12-25', null])
   })
 
   it('excludes catalog items (createdByUserId=null) from JSON export — findItemsByCreator scopes by userId', async () => {
@@ -1616,6 +1649,7 @@ const RESERVATION_PROFILE_ROW = {
     list: {
       id: RESERVATION_LIST_ID,
       occasionTypeId: null,
+      eventDate: null,
       title: 'Birthday',
       slug: 'birthday',
       description: null,

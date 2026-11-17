@@ -80,6 +80,7 @@ const LIST_ID = '00000000-0000-0000-0000-000000000010'
 const MOCK_LIST = {
   id: LIST_ID,
   occasionTypeId: null,
+  eventDate: null,
   title: 'Birthday wishlist',
   slug: 'birthday-abc',
   description: null,

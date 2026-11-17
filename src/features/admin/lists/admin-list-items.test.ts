@@ -21,6 +21,7 @@ const NON_ADMIN_USER = makeAdminUser({
 const LIST_ROW = {
   id: '00000000-0000-0000-0000-000000000010',
   occasionTypeId: null,
+  eventDate: null,
   title: 'Birthday wishlist',
   slug: 'birthday-wishlist',
   description: null,

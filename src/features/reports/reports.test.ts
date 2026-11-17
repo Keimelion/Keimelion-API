@@ -85,6 +85,7 @@ function buildListRow(overrides: Record<string, unknown> = {}): Record<string, u
     description: null,
     listStatus: 'active',
     occasionTypeId: null,
+    eventDate: null,
     deletedAt: null,
     createdAt: new Date('2024-01-01'),
     updatedAt: new Date('2024-01-01'),
