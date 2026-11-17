@@ -19,6 +19,7 @@ import {
   findUserByPasswordResetToken,
   insertUser,
   markEmailAsVerified,
+  renewEmailVerifyToken,
   setPasswordResetToken,
   resetUserPassword,
   updateUserProfile,
@@ -44,6 +45,8 @@ import type {
   RefreshResponseParsed,
   RegisterRequestParsed,
   RegisterResponseParsed,
+  ResendVerificationRequestParsed,
+  ResendVerificationResponseParsed,
   ResetPasswordRequestParsed,
   ResetPasswordResponseParsed,
   VerifyEmailRequestParsed,
@@ -54,7 +57,11 @@ import type { ServiceResult } from '../../shared/types/service.js'
 const PASSWORD_RESET_TOKEN_TTL_HOURS = 1
 const REFRESH_TOKEN_BYTE_LENGTH = 32
 const PASSWORD_RESET_GENERIC_MESSAGE = 'If this email is registered, a reset link has been sent'
+const VERIFICATION_RESEND_GENERIC_MESSAGE =
+  'If this email belongs to an account awaiting verification, a new verification link has been sent'
+const VERIFICATION_RESEND_COOLDOWN_MS = 60 * 1000
 const VERIFICATION_EMAIL_FAILED_EVENT = 'auth_verification_email_failed'
+const VERIFICATION_RESEND_FAILED_EVENT = 'auth_verification_resend_failed'
 const PASSWORD_RESET_EMAIL_FAILED_EVENT = 'auth_password_reset_email_failed'
 const PASSWORD_RESET_FAILED_EVENT = 'auth_password_reset_failed'
 
@@ -122,6 +129,27 @@ export async function verifyEmail(input: VerifyEmailRequestParsed): Promise<Serv
   return { data: { message: 'Email verified successfully' }, httpStatus: HttpStatus.OK }
 }
 
+export async function resendVerificationEmail(
+  input: ResendVerificationRequestParsed,
+  emailLocale: Locale,
+): Promise<ServiceResult<ResendVerificationResponseParsed & { emailVerifyToken?: string }>> {
+  const rawToken = randomUUID()
+  const verificationResend = issueVerificationResend(input.email, rawToken, emailLocale)
+
+  if (env.NODE_ENV === NodeEnvs.PRODUCTION) {
+    return { data: { message: VERIFICATION_RESEND_GENERIC_MESSAGE }, httpStatus: HttpStatus.OK }
+  }
+
+  // Outside production the token is returned: it must be stored before the client can use it
+  if (!(await verificationResend)) {
+    return { data: { message: VERIFICATION_RESEND_GENERIC_MESSAGE }, httpStatus: HttpStatus.OK }
+  }
+  return {
+    data: { message: VERIFICATION_RESEND_GENERIC_MESSAGE, emailVerifyToken: rawToken },
+    httpStatus: HttpStatus.OK,
+  }
+}
+
 export async function loginUser(input: LoginRequestParsed): Promise<ServiceResult<LoginResponseParsed>> {
   const user = await findUserByEmail(input.email)
 
@@ -159,8 +187,9 @@ export async function refreshAccessToken(rawToken: string): Promise<ServiceResul
     return serviceError(ErrorCode.INVALID_REFRESH_TOKEN)
   }
 
-  if (user.bannedAt) {
-    return serviceError(ErrorCode.ACCOUNT_BANNED)
+  const refreshDenial = resolveRefreshDenial(user)
+  if (refreshDenial) {
+    return serviceError(refreshDenial)
   }
 
   const { token, tokenId, expiresAt } = await signJwt(user.id, user.role)
@@ -256,6 +285,27 @@ function sendVerificationEmail(email: string, verifyToken: string, locale: Local
       validityHours: env.EMAIL_VERIFY_TOKEN_TTL_HOURS,
     }),
   }))
+}
+
+// Never rejects. In production it runs after the response is sent: an account awaiting verification
+// answers as fast as an unknown, verified or cooling-down one. Resolves whether a link was sent.
+async function issueVerificationResend(email: string, rawToken: string, locale: Locale): Promise<boolean> {
+  try {
+    const lastIssuedBefore = new Date(Date.now() - VERIFICATION_RESEND_COOLDOWN_MS)
+    const isRenewed = await renewEmailVerifyToken(email, rawToken, lastIssuedBefore)
+    if (isRenewed) sendVerificationEmail(email, rawToken, locale)
+    return isRenewed
+  } catch (error) {
+    logger.error({ event: VERIFICATION_RESEND_FAILED_EVENT, errorName: readErrorName(error) })
+    return false
+  }
+}
+
+// Same precedence as the account status: a banned account is reported as banned even unverified.
+function resolveRefreshDenial(user: User): ErrorCode | null {
+  if (user.bannedAt) return ErrorCode.ACCOUNT_BANNED
+  if (!user.emailVerifiedAt) return ErrorCode.EMAIL_NOT_VERIFIED
+  return null
 }
 
 // Never rejects. In production it runs after the response is sent: an existing account answers as

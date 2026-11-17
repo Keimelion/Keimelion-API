@@ -1,4 +1,4 @@
-import { and, count, eq, inArray, isNull, sql } from 'drizzle-orm'
+import { and, count, eq, inArray, isNull, lt, or, sql } from 'drizzle-orm'
 import { db } from '../../db/client.js'
 import { users } from '../../db/entities/users/users.schema.js'
 import { reservations } from '../../db/entities/reservations/reservations.schema.js'
@@ -13,7 +13,7 @@ import { getOffset } from '../../shared/utils/pagination.js'
 import { ListUserRoles, UserStatuses } from '@keimelion/sdk/enums'
 import type { PaginationQueryParsed, SortInput } from '@keimelion/sdk/schemas'
 import { env } from '../../config/env.js'
-import { hashPassword } from '../../shared/utils/hash.js'
+import { hashPassword, hashSha256Hex } from '../../shared/utils/hash.js'
 import type { User } from '../../db/entities/users/users.schema.js'
 import type { UserRowWithAvatar } from '../../shared/types/user.js'
 import { ONE_HOUR_MS } from '../../shared/utils/time.js'
@@ -33,7 +33,7 @@ export function findUserByEmail(email: string): Promise<UserRowWithAvatar | unde
 }
 
 export function findUserByEmailVerifyToken(token: string): Promise<User | undefined> {
-  return db.query.users.findFirst({ where: eq(users.emailVerifyToken, token) })
+  return db.query.users.findFirst({ where: eq(users.emailVerifyToken, hashSha256Hex(token)) })
 }
 
 export async function insertUser(
@@ -43,7 +43,6 @@ export async function insertUser(
 ): Promise<User | undefined> {
   const passwordHash = await hashPassword(input.password)
   const now = new Date()
-  const emailVerifyTokenExpiresAt = new Date(now.getTime() + env.EMAIL_VERIFY_TOKEN_TTL_HOURS * ONE_HOUR_MS)
 
   const [user] = await db
     .insert(users)
@@ -57,14 +56,45 @@ export async function insertUser(
       isMarketingOptedIn: input.isMarketingOptedIn,
       ...(input.defaultCurrency !== undefined && { defaultCurrencyCode: input.defaultCurrency }),
       ...(avatarImageId !== null && { avatarImageId }),
-      emailVerifyToken,
-      emailVerifyTokenExpiresAt,
+      emailVerifyToken: hashSha256Hex(emailVerifyToken),
+      emailVerifyTokenExpiresAt: computeEmailVerifyTokenExpiresAt(now),
       activatedAt: now,
       userStatus: UserStatuses.UNVERIFIED,
     })
     .returning()
 
   return user
+}
+
+// One atomic statement: only an active, unverified account whose current token was issued before
+// `lastIssuedBefore` gets the new token, which invalidates the previous link. The issue date is
+// derived from the expiry (expiresAt - TTL), so no extra column tracks it.
+export async function renewEmailVerifyToken(
+  email: string,
+  emailVerifyToken: string,
+  lastIssuedBefore: Date,
+): Promise<boolean> {
+  const now = new Date()
+  const renewedRows = await db
+    .update(users)
+    .set({
+      emailVerifyToken: hashSha256Hex(emailVerifyToken),
+      emailVerifyTokenExpiresAt: computeEmailVerifyTokenExpiresAt(now),
+    })
+    .where(
+      and(
+        eq(users.email, email),
+        isNull(users.emailVerifiedAt),
+        isNull(users.deletedAt),
+        isNull(users.bannedAt),
+        or(
+          isNull(users.emailVerifyTokenExpiresAt),
+          lt(users.emailVerifyTokenExpiresAt, computeEmailVerifyTokenExpiresAt(lastIssuedBefore)),
+        ),
+      ),
+    )
+    .returning({ id: users.id })
+  return renewedRows.length > 0
 }
 
 export async function markEmailAsVerified(userId: string): Promise<void> {
@@ -168,4 +198,8 @@ export async function countMyReservations(userId: string): Promise<number> {
     .from(reservations)
     .where(myReservationsWhere(userId))
   return row?.count ?? 0
+}
+
+function computeEmailVerifyTokenExpiresAt(issuedAt: Date): Date {
+  return new Date(issuedAt.getTime() + env.EMAIL_VERIFY_TOKEN_TTL_HOURS * ONE_HOUR_MS)
 }
