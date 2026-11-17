@@ -1,4 +1,4 @@
-import { asc, desc, isNull, type AnyColumn, type SQL } from 'drizzle-orm'
+import { asc, isNull, sql, type AnyColumn, type SQL } from 'drizzle-orm'
 import { buildGenericWhere } from './filter-where.js'
 import { makeFilterValidator } from './filter-validator.js'
 import type { SortDirection } from '@keimelion/sdk/schemas'
@@ -27,6 +27,7 @@ export function defineEntity<
   TFilterFields extends Readonly<Record<string, FilterFieldConfig>>,
 >(
   options: {
+    idColumn: AnyColumn
     sortable: TSortFields
     filterable: TFilterFields
     defaultSort: readonly SortSpec<keyof TSortFields & string>[]
@@ -44,18 +45,29 @@ export function defineEntity<
     filterable,
     defaultSort: options.defaultSort,
     buildWhere: (filters) => buildGenericWhere(filterable, filters),
-    buildOrderBy: (sort) => buildOrderBySql(sortable, options.defaultSort, sort),
+    buildOrderBy: (sort) =>
+      buildOrderBySql({ sortable, defaultSort: options.defaultSort, idColumn: options.idColumn }, sort),
     validateFilters: (url) => validator(url),
   }
 }
 
+interface OrderByConfig<TSortField extends string> {
+  sortable: Readonly<Record<TSortField, AnyColumn>>
+  defaultSort: readonly SortSpec<TSortField>[]
+  idColumn: AnyColumn
+}
+
 function buildOrderBySql<TSortField extends string>(
-  sortable: Readonly<Record<TSortField, AnyColumn>>,
-  defaultSort: readonly SortSpec<TSortField>[],
+  config: OrderByConfig<TSortField>,
   sort: SortSpec<TSortField> | undefined,
 ): SQL[] {
-  const specs = sort !== undefined ? [sort] : defaultSort
-  return specs.map((spec) => (spec.direction === 'asc' ? asc : desc)(sortable[spec.field]))
+  const specs = sort !== undefined ? [sort] : config.defaultSort
+  const sortClauses = specs.map((spec) => orderNullsLast(config.sortable[spec.field], spec.direction))
+  return [...sortClauses, asc(config.idColumn)]
+}
+
+function orderNullsLast(column: AnyColumn, direction: SortDirection): SQL {
+  return direction === 'asc' ? sql`${column} asc nulls last` : sql`${column} desc nulls last`
 }
 
 export function buildSoftDeleteDefault(

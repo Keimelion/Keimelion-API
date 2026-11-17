@@ -44,7 +44,7 @@ import type { AdminListItemResponse } from './admin-list-items.mapper.js'
 import type { ServiceResult } from '../../../shared/types/service.js'
 import type { ListListsInput } from './endpoints/list.js'
 
-const FREE_TEXT_FIELDS = new Set(['title', 'description'])
+const REDACTED_LOG_FIELDS = new Set(['title', 'description', 'eventDate'])
 
 export async function listLists(
   input: ListListsInput,
@@ -239,7 +239,7 @@ async function buildListItemAverageMap(
 
 function logChanges(adminId: string, listId: string, existingRow: List, fieldPatch: UpdateListFields): void {
   const changes = buildChanges(existingRow, fieldPatch, {
-    redactFields: FREE_TEXT_FIELDS,
+    redactFields: REDACTED_LOG_FIELDS,
     redactedValue: '<redacted>',
   })
   logger.info({ adminId, action: AdminAction.UPDATE_LIST, listId, changes })

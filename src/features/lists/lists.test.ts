@@ -1,4 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import type { Mock } from 'vitest'
+import { PgDialect } from 'drizzle-orm/pg-core'
+import type { SQL } from 'drizzle-orm'
 import { db } from '../../db/client.js'
 import { env } from '../../config/env.js'
 import { images } from '../../db/entities/images/images.schema.js'
@@ -16,6 +19,8 @@ import {
   listsUpdateResponseSchema,
   MAX_CUSTOM_NAME_LENGTH,
 } from '@keimelion/sdk/schemas'
+import { ListUserRoles } from '@keimelion/sdk/enums'
+import type { ListUserRole } from '@keimelion/sdk/enums'
 
 const { mockProcessImage } = vi.hoisted(() => ({ mockProcessImage: vi.fn() }))
 
@@ -55,6 +60,7 @@ const LIST_ITEM_ID = '00000000-0000-0000-0000-000000000030'
 const MOCK_LIST = {
   id: LIST_ID,
   occasionTypeId: null,
+  eventDate: null,
   title: 'My Wishlist',
   slug: 'my-wishlist-abc123',
   description: null,
@@ -65,6 +71,17 @@ const MOCK_LIST = {
 }
 
 const DELETED_LIST = { ...MOCK_LIST, deletedAt: new Date('2024-06-01') }
+
+const EVENT_DATE = '2026-12-25'
+
+const INVALID_EVENT_DATES = [
+  'abc',
+  '2026-13-40',
+  '2026-02-30',
+  '2026-12-25T00:00:00Z',
+  '1999-12-31',
+  '2101-01-01',
+]
 
 const MOCK_COLLABORATOR = {
   id: '00000000-0000-0000-0000-000000000040',
@@ -121,19 +138,16 @@ function mockListAndOwner(list: unknown = MOCK_LIST, owner: unknown = AUTH_USER)
   )
 }
 
-function mockTransactionInserts(rows: unknown[]): void {
+function mockTransactionInserts(rows: unknown[]): Mock {
   const queue = [...rows]
+  const values = vi.fn(() => ({
+    returning: vi.fn().mockResolvedValue(queue.length ? [queue.shift()] : []),
+  }))
   vi.mocked(db.transaction).mockImplementationOnce(async (callback) => {
-    const insertResults = queue
-    const tx = {
-      insert: vi.fn(() => ({
-        values: vi.fn(() => ({
-          returning: vi.fn().mockResolvedValue(insertResults.length ? [insertResults.shift()] : []),
-        })),
-      })),
-    }
+    const tx = { insert: vi.fn(() => ({ values })) }
     return (callback as (tx: unknown) => Promise<unknown>)(tx)
   })
+  return values
 }
 
 function mockOwnedListsSubquery(listIds: string[]): void {
@@ -162,14 +176,26 @@ function rowWithOwner(row: object, owner: unknown): object {
   return { ...row, listUsers: [{ userId: ownerId, role: "owner" as const, user: owner }], listTags: [] }
 }
 
-function mockUpdateList(returnRow: unknown): void {
-  vi.mocked(db.update).mockReturnValueOnce({
-    set: vi.fn().mockReturnValueOnce({
-      where: vi.fn().mockReturnValueOnce({
-        returning: vi.fn().mockResolvedValueOnce([returnRow]),
-      }),
+function rowWithMember(row: object, role: ListUserRole): object {
+  const otherOwner = { ...AUTH_USER, id: '00000000-0000-0000-0000-000000000002', email: 'owner@example.com' }
+  return {
+    ...row,
+    listUsers: [
+      { userId: otherOwner.id, role: ListUserRoles.OWNER, user: otherOwner },
+      { userId: AUTH_USER.id, role, user: AUTH_USER },
+    ],
+    listTags: [],
+  }
+}
+
+function mockUpdateList(returnRow: unknown): Mock {
+  const set = vi.fn().mockReturnValueOnce({
+    where: vi.fn().mockReturnValueOnce({
+      returning: vi.fn().mockResolvedValueOnce([returnRow]),
     }),
-  } as never)
+  })
+  vi.mocked(db.update).mockReturnValueOnce({ set } as never)
+  return set
 }
 
 function mockUpdateListRejects(error: unknown): void {
@@ -356,6 +382,68 @@ describe('POST /v1/lists', () => {
     expect(response.status).toBe(500)
   })
 
+  it('persists and returns eventDate when a valid date is sent', async () => {
+    const token = await generateTestToken(AUTH_USER.id)
+    mockAuthChain()
+    const insertedValues = mockTransactionInserts([{ ...MOCK_LIST, eventDate: EVENT_DATE }, MOCK_COLLABORATOR])
+
+    const response = await apiRequest('/v1/lists', {
+      method: 'POST',
+      token,
+      body: { title: 'My Wishlist', eventDate: EVENT_DATE },
+    })
+
+    expect(response.status).toBe(201)
+    const body = listsCreateResponseSchema.parse(await response.json())
+    expect(body.list.eventDate).toBe(EVENT_DATE)
+    expect(insertedValues.mock.calls[0]?.[0]).toMatchObject({ eventDate: EVENT_DATE })
+  })
+
+  it('stores and returns a null eventDate when the field is omitted', async () => {
+    const token = await generateTestToken(AUTH_USER.id)
+    mockAuthChain()
+    const insertedValues = mockTransactionInserts([MOCK_LIST, MOCK_COLLABORATOR])
+
+    const response = await apiRequest('/v1/lists', {
+      method: 'POST',
+      token,
+      body: { title: 'My Wishlist' },
+    })
+
+    expect(response.status).toBe(201)
+    const body = listsCreateResponseSchema.parse(await response.json())
+    expect(body.list.eventDate).toBeNull()
+    expect(insertedValues.mock.calls[0]?.[0]).toMatchObject({ eventDate: null })
+  })
+
+  it('accepts a past eventDate within bounds', async () => {
+    const token = await generateTestToken(AUTH_USER.id)
+    mockAuthChain()
+    mockTransactionInserts([{ ...MOCK_LIST, eventDate: '2001-05-04' }, MOCK_COLLABORATOR])
+
+    const response = await apiRequest('/v1/lists', {
+      method: 'POST',
+      token,
+      body: { title: 'My Wishlist', eventDate: '2001-05-04' },
+    })
+
+    expect(response.status).toBe(201)
+  })
+
+  it.each(INVALID_EVENT_DATES)('returns 422 when eventDate is %s', async (eventDate) => {
+    const token = await generateTestToken(AUTH_USER.id)
+    mockAuthChain()
+
+    const response = await apiRequest('/v1/lists', {
+      method: 'POST',
+      token,
+      body: { title: 'My Wishlist', eventDate },
+    })
+
+    expect(response.status).toBe(422)
+    expect(db.transaction).not.toHaveBeenCalled()
+  })
+
   it('returns 422 when title is missing', async () => {
     const token = await generateTestToken(AUTH_USER.id)
     mockAuthChain()
@@ -468,6 +556,29 @@ describe('GET /v1/lists', () => {
     expect(body.pagination.total).toBe(0)
   })
 
+  it.each(['asc', 'desc'])('sorts by eventDate %s with nulls last and an id tiebreaker', async (direction) => {
+    const token = await generateTestToken(AUTH_USER.id)
+    mockAuthChain()
+    mockOwnedListsSubquery([LIST_ID])
+    vi.mocked(db.query.lists.findMany).mockResolvedValueOnce([
+      rowWithOwner({ ...MOCK_LIST, eventDate: EVENT_DATE }, AUTH_USER),
+    ] as never)
+    mockCountChain(1)
+    mockOwnedListsSubquery([LIST_ID])
+
+    const response = await apiRequest(`/v1/lists?sort=eventDate:${direction}`, { token })
+
+    expect(response.status).toBe(200)
+    const body = listsListResponseSchema.parse(await response.json())
+    expect(body.items[0]?.eventDate).toBe(EVENT_DATE)
+    const orderBy = (vi.mocked(db.query.lists.findMany).mock.calls[0]?.[0]?.orderBy ?? []) as SQL[]
+    const dialect = new PgDialect()
+    expect(orderBy.map((clause) => dialect.sqlToQuery(clause).sql)).toEqual([
+      `"lists"."event_date" ${direction} nulls last`,
+      '"lists"."id" asc',
+    ])
+  })
+
   it('returns 422 when sort field is invalid', async () => {
     const token = await generateTestToken(AUTH_USER.id)
     mockAuthChain()
@@ -567,6 +678,109 @@ describe('PATCH /v1/lists/:id', () => {
     listsUpdateResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.list.title).toBe('Updated')
+  })
+
+  it('sets eventDate and leaves the other fields untouched', async () => {
+    const token = await generateTestToken(AUTH_USER.id)
+    mockAuthChain()
+    mockListAndOwner()
+    const set = mockUpdateList({ ...MOCK_LIST, eventDate: EVENT_DATE })
+
+    const response = await apiRequest(`/v1/lists/${LIST_ID}`, {
+      method: 'PATCH',
+      token,
+      body: { eventDate: EVENT_DATE },
+    })
+
+    expect(response.status).toBe(200)
+    const body = listsUpdateResponseSchema.parse(await response.json())
+    expect(body.list.eventDate).toBe(EVENT_DATE)
+    expect(set).toHaveBeenCalledWith({ eventDate: EVENT_DATE })
+  })
+
+  it('clears eventDate when null is sent', async () => {
+    const token = await generateTestToken(AUTH_USER.id)
+    mockAuthChain()
+    mockListAndOwner({ ...MOCK_LIST, eventDate: EVENT_DATE })
+    const set = mockUpdateList(MOCK_LIST)
+
+    const response = await apiRequest(`/v1/lists/${LIST_ID}`, {
+      method: 'PATCH',
+      token,
+      body: { eventDate: null },
+    })
+
+    expect(response.status).toBe(200)
+    const body = listsUpdateResponseSchema.parse(await response.json())
+    expect(body.list.eventDate).toBeNull()
+    expect(set).toHaveBeenCalledWith({ eventDate: null })
+  })
+
+  it('keeps eventDate unchanged when the field is omitted', async () => {
+    const token = await generateTestToken(AUTH_USER.id)
+    mockAuthChain()
+    mockListAndOwner({ ...MOCK_LIST, eventDate: EVENT_DATE })
+    const set = mockUpdateList({ ...MOCK_LIST, eventDate: EVENT_DATE, title: 'Updated' })
+
+    const response = await apiRequest(`/v1/lists/${LIST_ID}`, {
+      method: 'PATCH',
+      token,
+      body: { title: 'Updated' },
+    })
+
+    expect(response.status).toBe(200)
+    const body = listsUpdateResponseSchema.parse(await response.json())
+    expect(body.list.eventDate).toBe(EVENT_DATE)
+    expect(set).toHaveBeenCalledWith({ title: 'Updated' })
+  })
+
+  it('lets an editor clear eventDate', async () => {
+    const token = await generateTestToken(AUTH_USER.id)
+    mockAuthChain()
+    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(
+      rowWithMember({ ...MOCK_LIST, eventDate: EVENT_DATE }, ListUserRoles.EDITOR) as never,
+    )
+    const set = mockUpdateList(MOCK_LIST)
+
+    const response = await apiRequest(`/v1/lists/${LIST_ID}`, {
+      method: 'PATCH',
+      token,
+      body: { eventDate: null },
+    })
+
+    expect(response.status).toBe(200)
+    expect(set).toHaveBeenCalledWith({ eventDate: null })
+  })
+
+  it('returns 403 when a viewer sends eventDate', async () => {
+    const token = await generateTestToken(AUTH_USER.id)
+    mockAuthChain()
+    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(
+      rowWithMember(MOCK_LIST, ListUserRoles.VIEWER) as never,
+    )
+
+    const response = await apiRequest(`/v1/lists/${LIST_ID}`, {
+      method: 'PATCH',
+      token,
+      body: { eventDate: EVENT_DATE },
+    })
+
+    expect(response.status).toBe(403)
+    expect(db.update).not.toHaveBeenCalled()
+  })
+
+  it.each(INVALID_EVENT_DATES)('returns 422 when eventDate is %s', async (eventDate) => {
+    const token = await generateTestToken(AUTH_USER.id)
+    mockAuthChain()
+
+    const response = await apiRequest(`/v1/lists/${LIST_ID}`, {
+      method: 'PATCH',
+      token,
+      body: { eventDate },
+    })
+
+    expect(response.status).toBe(422)
+    expect(db.update).not.toHaveBeenCalled()
   })
 
   it('returns 422 when body is empty', async () => {

@@ -23,6 +23,7 @@ export const RESERVATION_SORTABLE_FIELDS = {
 export const RESERVATION_DEFAULT_SORT = [{ field: 'createdAt' as const, direction: 'desc' as const }]
 
 export const userReservationsEntity = defineEntity({
+  idColumn: reservations.id,
   sortable: RESERVATION_SORTABLE_FIELDS,
   defaultSort: RESERVATION_DEFAULT_SORT,
   filterable: {},

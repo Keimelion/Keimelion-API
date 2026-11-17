@@ -19,6 +19,7 @@ const roleSchema = z.enum(USER_ROLE_VALUES)
 const statusSchema = z.enum(USER_STATUS_VALUES)
 
 export const usersEntity = defineEntity({
+  idColumn: users.id,
   sortable: {
     createdAt:   users.createdAt,
     email:       users.email,

@@ -14,6 +14,7 @@ import { defineEntity } from '../../shared/db/entity-descriptor.js'
 import type { ListRowWithOwner } from '../../shared/types/list.js'
 
 export const userListsEntity = defineEntity({
+  idColumn: lists.id,
   sortable: LIST_SORTABLE_FIELDS,
   defaultSort: LIST_DEFAULT_SORT,
   filterable: {},

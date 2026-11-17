@@ -98,6 +98,7 @@ const PROXY_RESERVATION: Reservation = {
 const MOCK_LIST = {
   id: LIST_ID,
   occasionTypeId: null,
+  eventDate: null,
   title: 'My Wishlist',
   slug: 'my-wishlist',
   description: null,

@@ -42,6 +42,7 @@ const LIST_ITEM_ID = '00000000-0000-0000-0000-000000000030'
 const MOCK_LIST = {
   id: LIST_ID,
   occasionTypeId: null,
+  eventDate: null,
   title: 'My Wishlist',
   description: null,
   listStatus: 'active' as const,

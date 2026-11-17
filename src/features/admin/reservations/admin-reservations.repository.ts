@@ -13,6 +13,7 @@ import type { PaginationQueryParsed, SortInput } from '@keimelion/sdk/schemas'
 import type { AdminReservationRow } from './admin-reservations.mapper.js'
 
 export const adminReservationsEntity = defineEntity({
+  idColumn: reservations.id,
   sortable: RESERVATION_SORTABLE_FIELDS,
   defaultSort: RESERVATION_DEFAULT_SORT,
   filterable: {},

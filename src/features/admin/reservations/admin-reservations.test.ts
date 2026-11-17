@@ -77,6 +77,7 @@ const RESERVATION_ROW = {
     list: {
       id: LIST_ID,
       occasionTypeId: null,
+      eventDate: null,
       title: 'Wishlist',
       slug: 'wishlist',
       description: null,

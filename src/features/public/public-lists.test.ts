@@ -39,6 +39,7 @@ const LIST_SLUG = 'my-shared-wishlist'
 const PUBLIC_LIST_ROW = {
   id: LIST_ID,
   occasionTypeId: null,
+  eventDate: null,
   title: 'My Shared Wishlist',
   slug: LIST_SLUG,
   description: 'A list to share',
@@ -126,6 +127,19 @@ describe('GET /v1/public/lists/:slug', () => {
     expect(body.list.items).toHaveLength(1)
     expect(body.list.items[0]?.itemStatus).toBe('available')
     expect(body.list.items[0]?.item.name).toBe('A nice item')
+  })
+
+  it('exposes the list eventDate, null when unset', async () => {
+    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce({ ...PUBLIC_LIST_ROW, eventDate: '2026-12-25' })
+
+    const response = await apiRequest(`/v1/public/lists/${LIST_SLUG}`)
+
+    expect(response.status).toBe(200)
+    expect(publicListsGetResponseSchema.parse(await response.json()).list.eventDate).toBe('2026-12-25')
+
+    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(PUBLIC_LIST_ROW)
+    const unsetResponse = await apiRequest(`/v1/public/lists/${LIST_SLUG}`)
+    expect(publicListsGetResponseSchema.parse(await unsetResponse.json()).list.eventDate).toBeNull()
   })
 
   it('resolves the list item name to the catalogue item name when no customName is set', async () => {

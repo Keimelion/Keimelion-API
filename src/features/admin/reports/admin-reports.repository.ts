@@ -18,6 +18,7 @@ const uuidSchema = z.guid()
 const REPORTER_COLUMNS = { columns: { id: true, username: true } } as const
 
 export const reportEntity = defineEntity({
+  idColumn: reports.id,
   sortable: {
     createdAt: reports.createdAt,
     updatedAt: reports.updatedAt,

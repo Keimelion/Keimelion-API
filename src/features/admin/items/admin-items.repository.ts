@@ -10,6 +10,7 @@ import type { PaginationQueryParsed, SortInput } from '@keimelion/sdk/schemas'
 import type { FilterInput } from '../../../shared/db/filter-parser.js'
 
 export const itemsEntity = defineEntity({
+  idColumn: items.id,
   sortable: {
     name:      items.name,
     createdAt: items.createdAt,

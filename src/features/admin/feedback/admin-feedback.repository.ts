@@ -17,6 +17,7 @@ const feedbackStatusSchema = z.enum(FEEDBACK_STATUS_VALUES)
 const userIdSchema = z.guid()
 
 export const feedbackEntity = defineEntity({
+  idColumn: feedback.id,
   sortable: {
     createdAt: feedback.createdAt,
     updatedAt: feedback.updatedAt,

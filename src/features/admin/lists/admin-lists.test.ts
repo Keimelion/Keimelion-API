@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import type { Mock } from 'vitest'
 import { db } from '../../../db/client.js'
 import { apiRequest } from '../../../shared/test/api-request.js'
 import { generateTestToken, makeAccessTokenEntry } from '../../../shared/test/auth.js'
@@ -48,6 +49,7 @@ const OWNER_USER = makeAdminUser({
 const LIST_ROW = {
   id: '00000000-0000-0000-0000-000000000010',
   occasionTypeId: null,
+  eventDate: null,
   title: 'Birthday wishlist',
   slug: 'birthday-list-abc123',
   description: 'Things I want',
@@ -135,14 +137,14 @@ function mockListAggregates(rows: AggregateRawRow[]): void {
   vi.mocked(db.execute).mockResolvedValueOnce(rows as never)
 }
 
-function mockUpdateList(returnRow: unknown): void {
-  vi.mocked(db.update).mockReturnValueOnce({
-    set: vi.fn().mockReturnValueOnce({
-      where: vi.fn().mockReturnValueOnce({
-        returning: vi.fn().mockResolvedValueOnce([returnRow]),
-      }),
+function mockUpdateList(returnRow: unknown): Mock {
+  const set = vi.fn().mockReturnValueOnce({
+    where: vi.fn().mockReturnValueOnce({
+      returning: vi.fn().mockResolvedValueOnce([returnRow]),
     }),
-  } as never)
+  })
+  vi.mocked(db.update).mockReturnValueOnce({ set } as never)
+  return set
 }
 
 describe('GET /v1/admin/lists', () => {
@@ -490,6 +492,18 @@ describe('GET /v1/admin/lists/:id', () => {
     expect(body.list.owner.id).toBe(OWNER_USER.id)
   })
 
+  it('returns the list eventDate', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindListByIdWithOwner({ ...LIST_ROW, eventDate: '2026-12-25' }, OWNER_USER)
+
+    const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}`, { token })
+
+    expect(response.status).toBe(200)
+    const body = adminListsGetResponseSchema.parse(await response.json())
+    expect(body.list.eventDate).toBe('2026-12-25')
+  })
+
   it('returns itemCount and a USD scalar totalEstimatedPrice by default', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
@@ -660,6 +674,61 @@ describe('PATCH /v1/admin/lists/:id', () => {
         },
       }),
     )
+  })
+
+  it('sets eventDate and redacts its value in the audit log', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindListByIdWithOwner(LIST_ROW, OWNER_USER)
+    const set = mockUpdateList({ ...LIST_ROW, eventDate: '2026-12-25' })
+
+    const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}`, {
+      method: 'PATCH',
+      token,
+      body: { eventDate: '2026-12-25' },
+    })
+
+    expect(response.status).toBe(200)
+    const body = adminListsUpdateResponseSchema.parse(await response.json())
+    expect(body.list.eventDate).toBe('2026-12-25')
+    expect(set).toHaveBeenCalledWith({ eventDate: '2026-12-25' })
+    expect(vi.mocked(logger.info)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        changes: { eventDate: { from: '<redacted>', to: '<redacted>' } },
+      }),
+    )
+  })
+
+  it('clears eventDate when null is sent', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindListByIdWithOwner({ ...LIST_ROW, eventDate: '2026-12-25' }, OWNER_USER)
+    const set = mockUpdateList(LIST_ROW)
+
+    const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}`, {
+      method: 'PATCH',
+      token,
+      body: { eventDate: null },
+    })
+
+    expect(response.status).toBe(200)
+    const body = adminListsUpdateResponseSchema.parse(await response.json())
+    expect(body.list.eventDate).toBeNull()
+    expect(set).toHaveBeenCalledWith({ eventDate: null })
+  })
+
+  it.each(['2026-02-30', '1999-12-31', '2101-01-01'])('returns 422 when eventDate is %s', async (eventDate) => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+
+    const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}`, {
+      method: 'PATCH',
+      token,
+      body: { eventDate },
+    })
+
+    expect(response.status).toBe(422)
+    expect(db.update).not.toHaveBeenCalled()
   })
 
   it('returns 422 when body is empty (no fields)', async () => {

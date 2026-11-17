@@ -1,0 +1,2 @@
+ALTER TABLE "lists" ADD COLUMN "event_date" date;--> statement-breakpoint
+ALTER TABLE "lists" ADD CONSTRAINT "event_date_range_check" CHECK ("lists"."event_date" BETWEEN '2000-01-01' AND '2100-12-31');
