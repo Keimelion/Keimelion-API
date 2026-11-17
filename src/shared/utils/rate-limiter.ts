@@ -29,7 +29,8 @@ export function createRateLimiter(limit: number, windowMs: number = ONE_MINUTE_M
 
 // STRICT — hot credential paths: brute-force surface (login, logout, change-password).
 // STANDARD — normal writes: signup and admin-triggered mutations.
-// SENSITIVE — side-effect-heavy or brute-force-resistant paths: password reset flow, token refresh.
+// SENSITIVE — side-effect-heavy or brute-force-resistant paths: password reset and email verification
+// flows, token refresh.
 // UPLOAD — image uploads: expensive (sharp decode + webp encode × 3) and disk-bound; tighter than STANDARD.
 // PUBLIC — unauthenticated reads (shared wishlists by slug). Tighter than STANDARD because the
 // anonymous surface is a scraping target; still high enough for a human browsing one list.

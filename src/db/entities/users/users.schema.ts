@@ -25,7 +25,7 @@ export const users = pgTable('users', {
     .notNull()
     .default(SupportedCurrencies.EUR)
     .references(() => currencies.code, { onDelete: 'restrict', onUpdate: 'cascade' }),
-  emailVerifyToken: uuid('email_verify_token').unique(),
+  emailVerifyToken: text('email_verify_token').unique(),
   emailVerifyTokenExpiresAt: timestamp('email_verify_token_expires_at', { withTimezone: true }),
   emailVerifiedAt: timestamp('email_verified_at', { withTimezone: true }),
   passwordResetToken: text('password_reset_token'),

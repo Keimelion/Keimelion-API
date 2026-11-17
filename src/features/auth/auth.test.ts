@@ -11,6 +11,7 @@ import {
   logoutResponseSchema,
   refreshResponseSchema,
   registerResponseSchema,
+  resendVerificationResponseSchema,
   resetPasswordResponseSchema,
   validationErrorMetadataSchema,
   verifyEmailResponseSchema,
@@ -69,12 +70,18 @@ const BACKOFFICE_URL = 'https://backoffice.keimelion.test'
 const ONE_HOUR_MS = 60 * 60 * 1000
 const ONE_MINUTE_MS = 60 * 1000
 const MAIL_SENT = { isSuccess: true, messageId: 'message-1' } as const
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 
 interface SentMail {
   to: string
   subject: string
   html: string
   text: string
+}
+
+interface EmailVerifyTokenFields {
+  emailVerifyToken: string
+  emailVerifyTokenExpiresAt: Date
 }
 
 interface PasswordResetUpdate {
@@ -124,6 +131,21 @@ function mockInsertNoReturning(): void {
   } as never)
 }
 
+function readEmailedVerifyToken(mail: SentMail): string {
+  return /verify-email#token=([0-9a-f-]+)/.exec(mail.text)?.[1] ?? ''
+}
+
+function expectExpiresInVerifyTtl(expiresAt: Date, before: number): void {
+  const verifyTtlMs = env.EMAIL_VERIFY_TOKEN_TTL_HOURS * ONE_HOUR_MS
+  expect(expiresAt.getTime() - before).toBeGreaterThanOrEqual(verifyTtlMs)
+  expect(expiresAt.getTime() - before).toBeLessThan(verifyTtlMs + ONE_MINUTE_MS)
+}
+
+function renderUsersLookup(): ReturnType<PgDialect['sqlToQuery']> {
+  const { where } = vi.mocked(db.query.users.findFirst).mock.calls[0]?.[0] as { where: SQL }
+  return new PgDialect().sqlToQuery(where)
+}
+
 describe('POST /v1/auth/register', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -165,9 +187,12 @@ describe('POST /v1/auth/register', () => {
     const response = await postRegister()
 
     const mail = await waitForSentMail()
+    const emailedToken = readEmailedVerifyToken(mail)
     const { emailVerifyToken } = valuesSpy.mock.calls[0]?.[0] as { emailVerifyToken: string }
-    const verifyUrl = `${WEB_APP_URL}/auth/verify-email#token=${emailVerifyToken}`
+    const verifyUrl = `${WEB_APP_URL}/auth/verify-email#token=${emailedToken}`
     expect(response.status).toBe(201)
+    expect(emailedToken).toMatch(UUID_REGEX)
+    expect(emailVerifyToken).toBe(hashSha256Hex(emailedToken))
     expect(mail.to).toBe('user@example.com')
     expect(mail.subject).toBe('Confirmez votre adresse e-mail')
     expect(mail.html).toContain('<html lang="fr">')
@@ -176,6 +201,18 @@ describe('POST /v1/auth/register', () => {
     expect(mail.text).toContain(`Confirmer mon adresse :\n${verifyUrl}`)
     expect(mail.text).toContain('Ce lien est valable 24 heures. Passé ce délai, il ne fonctionnera plus.')
     expect(mail.text).not.toContain('en demander un nouveau')
+  })
+
+  it('stores only the sha256 hash of the emailed token, valid for EMAIL_VERIFY_TOKEN_TTL_HOURS', async () => {
+    const valuesSpy = mockRegistrationInserts()
+
+    const before = Date.now()
+    await postRegister()
+
+    const emailedToken = readEmailedVerifyToken(await waitForSentMail())
+    const stored = valuesSpy.mock.calls[0]?.[0] as EmailVerifyTokenFields
+    expect(stored.emailVerifyToken).toBe(hashSha256Hex(emailedToken))
+    expectExpiresInVerifyTtl(stored.emailVerifyTokenExpiresAt, before)
   })
 
   it('sends the verification email in the language of the request', async () => {
@@ -404,6 +441,17 @@ describe('POST /v1/auth/verify-email', () => {
     expect(status.params).toEqual(['pending_deletion', 'banned', 'invited', 'active'])
   })
 
+  it('looks the account up by the sha256 hash of the submitted token, never the raw token', async () => {
+    const rawToken = '00000000-0000-4000-8000-000000000099'
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(undefined)
+
+    await apiRequest('/v1/auth/verify-email', { method: 'POST', body: { token: rawToken } })
+
+    const lookup = renderUsersLookup()
+    expect(lookup.sql).toContain('"users"."email_verify_token" = $1')
+    expect(lookup.params).toEqual([hashSha256Hex(rawToken)])
+  })
+
   it('returns 400 when token is invalid', async () => {
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(undefined)
 
@@ -440,6 +488,164 @@ describe('POST /v1/auth/verify-email', () => {
     })
 
     expect(response.status).toBe(422)
+  })
+})
+
+describe('POST /v1/auth/resend-verification', () => {
+  const GENERIC_BODY = {
+    message: 'If this email belongs to an account awaiting verification, a new verification link has been sent',
+  }
+  const RESEND_COOLDOWN_MS = 60 * 1000
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(sendMail).mockResolvedValue(MAIL_SENT)
+  })
+
+  function mockVerifyTokenRenewal(renewedRows: unknown[]): { setSpy: ReturnType<typeof vi.fn>; whereSpy: ReturnType<typeof vi.fn> } {
+    const whereSpy = vi.fn().mockReturnValueOnce({ returning: vi.fn().mockResolvedValueOnce(renewedRows) })
+    const setSpy = vi.fn().mockReturnValueOnce({ where: whereSpy })
+    vi.mocked(db.update).mockReturnValueOnce({ set: setSpy } as never)
+    return { setSpy, whereSpy }
+  }
+
+  function postResendVerification(body: unknown, headers: Record<string, string> = {}): Promise<Response> {
+    return apiRequest('/v1/auth/resend-verification', { method: 'POST', body, headers })
+  }
+
+  it('stores the hash of a fresh token for the full TTL and emails its link in French by default', async () => {
+    const { setSpy } = mockVerifyTokenRenewal([{ id: VALID_USER.id }])
+
+    const before = Date.now()
+    const response = await postResendVerification({ email: 'User@Example.com' })
+
+    const body = (await response.json()) as { message: string; emailVerifyToken: string }
+    const mail = await waitForSentMail()
+    const stored = setSpy.mock.calls[0]?.[0] as EmailVerifyTokenFields
+    expect(response.status).toBe(200)
+    expect(resendVerificationResponseSchema.parse(body)).toEqual(GENERIC_BODY)
+    expect(body.emailVerifyToken).toMatch(UUID_REGEX)
+    expect(stored.emailVerifyToken).toBe(hashSha256Hex(body.emailVerifyToken))
+    expectExpiresInVerifyTtl(stored.emailVerifyTokenExpiresAt, before)
+    expect(mail.to).toBe('user@example.com')
+    expect(mail.subject).toBe('Confirmez votre adresse e-mail')
+    expect(mail.html).toContain(`href="${WEB_APP_URL}/auth/verify-email#token=${body.emailVerifyToken}"`)
+  })
+
+  it('sends the email in the language of the request', async () => {
+    mockVerifyTokenRenewal([{ id: VALID_USER.id }])
+
+    await postResendVerification({ email: 'user@example.com' }, { 'Accept-Language': 'en-US,en;q=0.9' })
+
+    const mail = await waitForSentMail()
+    expect(mail.subject).toBe('Confirm your email address')
+    expect(mail.text).toContain('This link is valid for 24 hours.')
+  })
+
+  it('renews in one statement guarded on an active unverified account outside the 60 s cooldown', async () => {
+    const { whereSpy } = mockVerifyTokenRenewal([{ id: VALID_USER.id }])
+
+    const before = Date.now()
+    await postResendVerification({ email: 'user@example.com' })
+
+    const where = new PgDialect().sqlToQuery(whereSpy.mock.calls[0]?.[0] as SQL)
+    const [email, issuedBeforeThreshold] = where.params as [string, string]
+    const verifyTtlMs = env.EMAIL_VERIFY_TOKEN_TTL_HOURS * ONE_HOUR_MS
+    const thresholdOffsetMs = new Date(issuedBeforeThreshold).getTime() - before
+    expect(where.sql).toBe(
+      '("users"."email" = $1 and "users"."email_verified_at" is null and "users"."deleted_at" is null '
+        + 'and "users"."banned_at" is null and ("users"."email_verify_token_expires_at" is null '
+        + 'or "users"."email_verify_token_expires_at" < $2))',
+    )
+    expect(email).toBe('user@example.com')
+    expect(thresholdOffsetMs).toBeGreaterThanOrEqual(verifyTtlMs - RESEND_COOLDOWN_MS)
+    expect(thresholdOffsetMs).toBeLessThan(verifyTtlMs - RESEND_COOLDOWN_MS + ONE_MINUTE_MS)
+    expect(db.query.users.findFirst).not.toHaveBeenCalled()
+  })
+
+  it('answers the same body without token nor email when no account is renewed (unknown, verified, banned, deleted, cooldown)', async () => {
+    mockVerifyTokenRenewal([])
+
+    const response = await postResendVerification({ email: 'unknown@example.com' })
+
+    await flushBackgroundWork()
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual(GENERIC_BODY)
+    expect(db.update).toHaveBeenCalledOnce()
+    expect(sendMail).not.toHaveBeenCalled()
+  })
+
+  it('answers the same in production whether or not a link is sent, never echoing the token', async () => {
+    const originalEnv = env.NODE_ENV
+    env.NODE_ENV = NodeEnvs.PRODUCTION
+    const readLogs = spyOnAllLogLevels()
+    try {
+      const { setSpy } = mockVerifyTokenRenewal([{ id: VALID_USER.id }])
+      const renewed = await postResendVerification({ email: 'user@example.com' })
+      mockVerifyTokenRenewal([])
+      const skipped = await postResendVerification({ email: 'unknown@example.com' })
+
+      const emailedToken = readEmailedVerifyToken(await waitForSentMail())
+      const stored = setSpy.mock.calls[0]?.[0] as EmailVerifyTokenFields
+      expect(renewed.status).toBe(skipped.status)
+      expect(await renewed.json()).toEqual(GENERIC_BODY)
+      expect(await skipped.json()).toEqual(GENERIC_BODY)
+      expect(stored.emailVerifyToken).toBe(hashSha256Hex(emailedToken))
+      expect(readLogs()).not.toContain(emailedToken)
+      expect(readLogs()).not.toContain('user@example.com')
+    } finally {
+      env.NODE_ENV = originalEnv
+    }
+  })
+
+  it('still answers 200 when storing the token fails, sending no link and logging no detail', async () => {
+    vi.mocked(db.update).mockReturnValueOnce({
+      set: vi.fn().mockReturnValueOnce({
+        where: vi.fn().mockReturnValueOnce({
+          returning: vi.fn().mockRejectedValueOnce(new Error('connection lost')),
+        }),
+      }),
+    } as never)
+    const readLogs = spyOnAllLogLevels()
+
+    const response = await postResendVerification({ email: 'user@example.com' })
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual(GENERIC_BODY)
+    expect(logger.error).toHaveBeenCalledWith({ event: 'auth_verification_resend_failed', errorName: 'Error' })
+    expect(sendMail).not.toHaveBeenCalled()
+    expect(readLogs()).not.toContain('connection lost')
+    expect(readLogs()).not.toContain('user@example.com')
+  })
+
+  it('invalidates the previous link: only the token of the latest resend matches the stored hash', async () => {
+    const previousToken = '00000000-0000-4000-8000-000000000099'
+    const { setSpy } = mockVerifyTokenRenewal([{ id: VALID_USER.id }])
+    const resendBody = (await (await postResendVerification({ email: 'user@example.com' })).json()) as { emailVerifyToken: string }
+    const { emailVerifyToken: storedHash } = setSpy.mock.calls[0]?.[0] as EmailVerifyTokenFields
+
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(undefined)
+    const previousAttempt = await apiRequest('/v1/auth/verify-email', { method: 'POST', body: { token: previousToken } })
+    const previousLookup = renderUsersLookup()
+
+    expect(previousAttempt.status).toBe(400)
+    expect(previousLookup.params).toEqual([hashSha256Hex(previousToken)])
+    expect(previousLookup.params).not.toEqual([storedHash])
+    expect(hashSha256Hex(resendBody.emailVerifyToken)).toBe(storedHash)
+  })
+
+  it.each([
+    ['malformed', { email: 'not-an-email' }],
+    ['missing', {}],
+  ])('returns 422 with the validation envelope when the email is %s, touching nothing', async (_case, body) => {
+    const response = await postResendVerification(body)
+
+    const errorBody = apiErrorBodySchema.parse(await response.json())
+    const { issues } = validationErrorMetadataSchema.parse(errorBody.metadata)
+    expect(response.status).toBe(422)
+    expect(errorBody.code).toBe(ErrorCode.UNPROCESSABLE_ENTITY)
+    expect(issues.map((issue) => issue.path)).toEqual(['email'])
+    expect(db.update).not.toHaveBeenCalled()
   })
 })
 
@@ -1174,6 +1380,60 @@ describe('POST /v1/auth/refresh', () => {
     })
 
     expect(response.status).toBe(403)
+  })
+
+  it('returns 403 EMAIL_NOT_VERIFIED for an unverified account, without rotating nor revoking the token', async () => {
+    vi.mocked(db.query.refreshTokens.findFirst).mockResolvedValueOnce(VALID_REFRESH_TOKEN_ROW)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce({ ...VALID_USER, emailVerifiedAt: null, userStatus: 'unverified' as const })
+
+    const response = await apiRequest('/v1/auth/refresh', {
+      method: 'POST',
+      body: { refreshToken: 'register-refresh-token' },
+    })
+
+    const body = apiErrorBodySchema.parse(await response.json())
+    expect(response.status).toBe(403)
+    expect(body.code).toBe(ErrorCode.EMAIL_NOT_VERIFIED)
+    expect(db.transaction).not.toHaveBeenCalled()
+    expect(db.update).not.toHaveBeenCalled()
+    expect(db.insert).not.toHaveBeenCalled()
+  })
+
+  it('accepts the same refresh token once the email is verified', async () => {
+    vi.mocked(db.query.refreshTokens.findFirst)
+      .mockResolvedValueOnce(VALID_REFRESH_TOKEN_ROW)
+      .mockResolvedValueOnce(VALID_REFRESH_TOKEN_ROW)
+    vi.mocked(db.query.users.findFirst)
+      .mockResolvedValueOnce({ ...VALID_USER, emailVerifiedAt: null, userStatus: 'unverified' as const })
+      .mockResolvedValueOnce(VALID_USER)
+    const request = { method: 'POST', body: { refreshToken: 'register-refresh-token' } } as const
+
+    const beforeVerification = await apiRequest('/v1/auth/refresh', request)
+    const afterVerification = await apiRequest('/v1/auth/refresh', request)
+
+    const body = refreshResponseSchema.parse(await afterVerification.json())
+    expect(beforeVerification.status).toBe(403)
+    expect(afterVerification.status).toBe(200)
+    expect(body.refreshToken).toMatch(/^[a-f0-9]{64}$/)
+    expect(db.transaction).toHaveBeenCalledOnce()
+  })
+
+  it('reports a banned unverified account as banned', async () => {
+    vi.mocked(db.query.refreshTokens.findFirst).mockResolvedValueOnce(VALID_REFRESH_TOKEN_ROW)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce({
+      ...VALID_USER,
+      emailVerifiedAt: null,
+      bannedAt: new Date('2024-01-01'),
+    })
+
+    const response = await apiRequest('/v1/auth/refresh', {
+      method: 'POST',
+      body: { refreshToken: 'some-token' },
+    })
+
+    const body = apiErrorBodySchema.parse(await response.json())
+    expect(response.status).toBe(403)
+    expect(body.code).toBe(ErrorCode.ACCOUNT_BANNED)
   })
 
   it('returns 422 when refreshToken field is missing', async () => {
