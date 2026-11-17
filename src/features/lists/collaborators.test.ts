@@ -10,6 +10,7 @@ import { logger } from '../../shared/utils/logger.js'
 import {
   collaboratorsAcceptInviteResponseSchema,
   collaboratorsCreateInviteResponseSchema,
+  listsGetResponseSchema,
 } from '@keimelion/sdk/schemas'
 
 vi.mock('../../shared/mail/mail.sender.js', () => ({ sendMail: vi.fn() }))
@@ -131,6 +132,44 @@ function mockPurgeExpiredInvites(): void {
 
 function mockInviteListExists(): void {
   vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(MOCK_LIST)
+}
+
+const EDITOR_MEMBERSHIP = {
+  id: '00000000-0000-0000-0000-00000000d100',
+  listId: LIST_ID,
+  userId: INVITEE_USER.id,
+  role: 'editor' as const,
+  createdAt: new Date('2024-01-02'),
+  updatedAt: new Date('2024-01-02'),
+}
+
+function mockListWithOwnerAndEditor(): void {
+  vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce({
+    ...MOCK_LIST,
+    listUsers: [
+      { userId: OWNER_USER.id, role: 'owner' as const, createdAt: new Date('2024-01-01'), user: OWNER_USER },
+      { userId: INVITEE_USER.id, role: 'editor' as const, createdAt: new Date('2024-01-02'), user: INVITEE_USER },
+    ],
+    listTags: [],
+  } as never)
+}
+
+function mockInviteUpdate(returnRows: unknown[]): ReturnType<typeof vi.fn> {
+  const setSpy = vi.fn().mockReturnValueOnce({
+    where: vi.fn().mockReturnValueOnce({
+      returning: vi.fn().mockResolvedValueOnce(returnRows),
+    }),
+  })
+  vi.mocked(db.update).mockReturnValueOnce({ set: setSpy } as never)
+  return setSpy
+}
+
+function mockMembershipDelete(returnRows: unknown[]): void {
+  vi.mocked(db.delete).mockReturnValueOnce({
+    where: vi.fn().mockReturnValueOnce({
+      returning: vi.fn().mockResolvedValueOnce(returnRows),
+    }),
+  } as never)
 }
 
 function sha256Hex(value: string): string {
@@ -530,6 +569,26 @@ describe('POST /v1/collaborators/invites/accept', () => {
     expect(body.code).toBe('COLLAB_INVITE_ALREADY_RESOLVED')
   })
 
+  it.each(['declined', 'revoked'] as const)(
+    'returns 409 COLLAB_INVITE_ALREADY_RESOLVED when the invite was %s',
+    async (inviteStatus) => {
+      const token = await generateTestToken(INVITEE_USER.id)
+      mockInviteeAuth()
+      vi.mocked(db.query.listInvites.findFirst).mockResolvedValueOnce({ ...BASE_INVITE_ROW, inviteStatus })
+
+      const response = await apiRequest('/v1/collaborators/invites/accept', {
+        method: 'POST',
+        token,
+        body: { token: RAW_TOKEN },
+      })
+
+      const body = await response.json() as { code: string }
+      expect(response.status).toBe(409)
+      expect(body.code).toBe('COLLAB_INVITE_ALREADY_RESOLVED')
+      expect(vi.mocked(db.insert)).not.toHaveBeenCalled()
+    },
+  )
+
   it('returns 410 COLLAB_INVITE_EXPIRED when the invite TTL has passed', async () => {
     const token = await generateTestToken(INVITEE_USER.id)
     mockInviteeAuth()
@@ -691,6 +750,7 @@ describe('GET /v1/lists/:id — embeds collaborators for owner', () => {
     const body = await response.json() as {
       list: {
         collaborators: {
+          inviteId: string | null
           user: { id: string } | null
           invitedEmail: string | null
           status: string
@@ -698,7 +758,10 @@ describe('GET /v1/lists/:id — embeds collaborators for owner', () => {
         }[]
       }
     }
+    listsGetResponseSchema.parse(body)
     expect(response.status).toBe(200)
+    expect(body.list.collaborators[0]?.inviteId).toBeNull()
+    expect(body.list.collaborators[1]?.inviteId).toBe('00000000-0000-0000-0000-00000000d101')
     expect(body.list.collaborators).toHaveLength(2)
     expect(body.list.collaborators[0]?.role).toBe('owner')
     expect(body.list.collaborators[0]?.user?.id).toBe(OWNER_USER.id)
@@ -726,16 +789,370 @@ describe('GET /v1/lists/:id — embeds collaborators for owner', () => {
     const body = await response.json() as {
       list: {
         owner: Record<string, unknown> | null
-        collaborators: { user: Record<string, unknown> | null; role: string }[]
+        collaborators: { inviteId: string | null; user: Record<string, unknown> | null; role: string }[]
       }
     }
     expect(response.status).toBe(200)
     expect(body.list.collaborators.map((entry) => entry.role)).toEqual(['owner', 'editor'])
+    expect(body.list.collaborators.map((entry) => entry.inviteId)).toEqual([null, null])
     expect(Object.keys(body.list.owner ?? {}).sort()).toEqual(['avatar', 'email', 'id', 'username'])
     for (const entry of body.list.collaborators) {
       expect(entry.user).not.toHaveProperty('isMarketingOptedIn')
       expect(entry.user).not.toHaveProperty('role')
       expect(entry.user).not.toHaveProperty('cgvAcceptedAt')
     }
+  })
+})
+
+describe('GET /v1/lists/:id — after the editor was removed or left', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('returns 403 to the former editor once their membership is gone', async () => {
+    const token = await generateTestToken(INVITEE_USER.id)
+    mockInviteeAuth()
+    mockListWithOwner()
+
+    const response = await apiRequest(`/v1/lists/${LIST_ID}`, { token })
+
+    expect(response.status).toBe(403)
+  })
+})
+
+describe('POST /v1/collaborators/invites/decline', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  function postDecline(options: { token?: string; body?: unknown } = {}): Promise<Response> {
+    return apiRequest('/v1/collaborators/invites/decline', {
+      method: 'POST',
+      body: options.body ?? { token: RAW_TOKEN },
+      ...(options.token === undefined ? {} : { token: options.token }),
+    })
+  }
+
+  it('returns 204 without auth, marks the invite declined and creates no membership', async () => {
+    const readLogs = spyOnAllLogLevels()
+    vi.mocked(db.query.listInvites.findFirst).mockResolvedValueOnce(BASE_INVITE_ROW)
+    const setSpy = mockInviteUpdate([{ ...BASE_INVITE_ROW, inviteStatus: 'declined' }])
+
+    const response = await postDecline()
+
+    expect(response.status).toBe(204)
+    expect(await response.text()).toBe('')
+    expect(setSpy).toHaveBeenCalledExactlyOnceWith({ inviteStatus: 'declined' })
+    expect(vi.mocked(db.insert)).not.toHaveBeenCalled()
+    expect(vi.mocked(db.query.listInvites.findFirst)).toHaveBeenCalledOnce()
+    expect(logger.info).toHaveBeenCalledWith(
+      { listId: LIST_ID, inviteId: BASE_INVITE_ROW.id },
+      'Collaborator invite declined',
+    )
+    expect(readLogs()).not.toContain(RAW_TOKEN)
+    expect(readLogs()).not.toContain('invitee@example.com')
+  })
+
+  it('applies no email-match and no verified-email check for a logged-in caller', async () => {
+    const token = await generateTestToken(UNVERIFIED_USER.id)
+    vi.mocked(db.query.listInvites.findFirst).mockResolvedValueOnce({
+      ...BASE_INVITE_ROW,
+      invitedEmail: 'someone-else@example.com',
+    })
+    mockInviteUpdate([{ ...BASE_INVITE_ROW, inviteStatus: 'declined' }])
+
+    const response = await postDecline({ token })
+
+    expect(response.status).toBe(204)
+    expect(vi.mocked(db.query.accessTokens.findFirst)).not.toHaveBeenCalled()
+  })
+
+  it('returns 404 COLLAB_INVITE_NOT_FOUND for an unknown token', async () => {
+    vi.mocked(db.query.listInvites.findFirst).mockResolvedValueOnce(undefined)
+
+    const response = await postDecline()
+
+    const body = await response.json() as { code: string }
+    expect(response.status).toBe(404)
+    expect(body.code).toBe('COLLAB_INVITE_NOT_FOUND')
+    expect(vi.mocked(db.update)).not.toHaveBeenCalled()
+  })
+
+  it('returns 410 COLLAB_INVITE_EXPIRED for an expired pending invite', async () => {
+    vi.mocked(db.query.listInvites.findFirst).mockResolvedValueOnce({
+      ...BASE_INVITE_ROW,
+      inviteTokenExpiresAt: new Date(Date.now() - 60_000),
+    })
+
+    const response = await postDecline()
+
+    const body = await response.json() as { code: string }
+    expect(response.status).toBe(410)
+    expect(body.code).toBe('COLLAB_INVITE_EXPIRED')
+    expect(vi.mocked(db.update)).not.toHaveBeenCalled()
+  })
+
+  it.each(['accepted', 'declined', 'revoked'] as const)(
+    'returns 409 COLLAB_INVITE_ALREADY_RESOLVED when the invite is already %s',
+    async (inviteStatus) => {
+      vi.mocked(db.query.listInvites.findFirst).mockResolvedValueOnce({ ...BASE_INVITE_ROW, inviteStatus })
+
+      const response = await postDecline()
+
+      const body = await response.json() as { code: string }
+      expect(response.status).toBe(409)
+      expect(body.code).toBe('COLLAB_INVITE_ALREADY_RESOLVED')
+      expect(vi.mocked(db.update)).not.toHaveBeenCalled()
+    },
+  )
+
+  it('returns 409 COLLAB_INVITE_ALREADY_RESOLVED when an accept wins the race (conditional update returns no row)', async () => {
+    vi.mocked(db.query.listInvites.findFirst).mockResolvedValueOnce(BASE_INVITE_ROW)
+    mockInviteUpdate([])
+
+    const response = await postDecline()
+
+    const body = await response.json() as { code: string }
+    expect(response.status).toBe(409)
+    expect(body.code).toBe('COLLAB_INVITE_ALREADY_RESOLVED')
+  })
+
+  it.each([
+    ['missing', {}],
+    ['empty', { token: '' }],
+  ])('returns 422 when the token is %s', async (_label, body) => {
+    const response = await postDecline({ body })
+
+    const responseBody = await response.json() as { code: string }
+    expect(response.status).toBe(422)
+    expect(responseBody.code).toBe('UNPROCESSABLE_ENTITY')
+    expect(vi.mocked(db.query.listInvites.findFirst)).not.toHaveBeenCalled()
+  })
+})
+
+describe('DELETE /v1/lists/:id/collaborators/invites/:inviteId', () => {
+  const REVOKE_PATH = `/v1/lists/${LIST_ID}/collaborators/invites/${BASE_INVITE_ROW.id}`
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('returns 204 and marks the pending invite revoked', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+    mockListWithOwner()
+    const setSpy = mockInviteUpdate([{ ...BASE_INVITE_ROW, inviteStatus: 'revoked' }])
+
+    const response = await apiRequest(REVOKE_PATH, { method: 'DELETE', token })
+
+    expect(response.status).toBe(204)
+    expect(setSpy).toHaveBeenCalledExactlyOnceWith({ inviteStatus: 'revoked' })
+    expect(logger.info).toHaveBeenCalledWith(
+      { ownerId: OWNER_USER.id, listId: LIST_ID, inviteId: BASE_INVITE_ROW.id },
+      'Collaborator invite revoked',
+    )
+  })
+
+  it('returns 404 COLLAB_INVITE_NOT_FOUND when the invite does not exist on this list', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+    mockListWithOwner()
+    mockInviteUpdate([])
+    vi.mocked(db.query.listInvites.findFirst).mockResolvedValueOnce(undefined)
+
+    const response = await apiRequest(REVOKE_PATH, { method: 'DELETE', token })
+
+    const body = await response.json() as { code: string }
+    expect(response.status).toBe(404)
+    expect(body.code).toBe('COLLAB_INVITE_NOT_FOUND')
+  })
+
+  it.each(['accepted', 'declined', 'revoked'] as const)(
+    'returns 409 COLLAB_INVITE_ALREADY_RESOLVED when the invite is %s (including an accept winning the race)',
+    async (inviteStatus) => {
+      const token = await generateTestToken(OWNER_USER.id)
+      mockOwnerAuth()
+      mockListWithOwner()
+      mockInviteUpdate([])
+      vi.mocked(db.query.listInvites.findFirst).mockResolvedValueOnce({ ...BASE_INVITE_ROW, inviteStatus })
+
+      const response = await apiRequest(REVOKE_PATH, { method: 'DELETE', token })
+
+      const body = await response.json() as { code: string }
+      expect(response.status).toBe(409)
+      expect(body.code).toBe('COLLAB_INVITE_ALREADY_RESOLVED')
+    },
+  )
+
+  it('returns 403 when the editor calls revoke', async () => {
+    const token = await generateTestToken(INVITEE_USER.id)
+    mockInviteeAuth()
+    mockListWithOwnerAndEditor()
+
+    const response = await apiRequest(REVOKE_PATH, { method: 'DELETE', token })
+
+    expect(response.status).toBe(403)
+    expect(vi.mocked(db.update)).not.toHaveBeenCalled()
+  })
+
+  it('returns 403 when a non-member calls revoke', async () => {
+    const token = await generateTestToken(INVITEE_USER.id)
+    mockInviteeAuth()
+    mockListWithOwner()
+
+    const response = await apiRequest(REVOKE_PATH, { method: 'DELETE', token })
+
+    expect(response.status).toBe(403)
+  })
+
+  it('returns 401 without auth', async () => {
+    const response = await apiRequest(REVOKE_PATH, { method: 'DELETE' })
+
+    expect(response.status).toBe(401)
+  })
+
+  it('returns 422 when the inviteId is not a uuid', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+
+    const response = await apiRequest(`/v1/lists/${LIST_ID}/collaborators/invites/not-a-uuid`, {
+      method: 'DELETE',
+      token,
+    })
+
+    expect(response.status).toBe(422)
+  })
+})
+
+describe('DELETE /v1/lists/:id/collaborators/:userId', () => {
+  const REMOVE_PATH = `/v1/lists/${LIST_ID}/collaborators/${INVITEE_USER.id}`
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('returns 204, deletes the editor membership and never touches the invite row', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+    mockListWithOwnerAndEditor()
+    mockMembershipDelete([EDITOR_MEMBERSHIP])
+
+    const response = await apiRequest(REMOVE_PATH, { method: 'DELETE', token })
+
+    expect(response.status).toBe(204)
+    expect(vi.mocked(db.delete)).toHaveBeenCalledOnce()
+    expect(vi.mocked(db.update)).not.toHaveBeenCalled()
+    expect(logger.info).toHaveBeenCalledWith(
+      { ownerId: OWNER_USER.id, listId: LIST_ID, editorId: INVITEE_USER.id },
+      'Collaborator removed from list',
+    )
+  })
+
+  it.each([
+    ['an unknown user or non-member', '00000000-0000-0000-0000-00000000ffff'],
+    ["the owner's own id", OWNER_USER.id],
+  ])('returns 404 COLLAB_MEMBER_NOT_FOUND for %s', async (_label, userId) => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+    mockListWithOwner()
+    mockMembershipDelete([])
+
+    const response = await apiRequest(`/v1/lists/${LIST_ID}/collaborators/${userId}`, { method: 'DELETE', token })
+
+    const body = await response.json() as { code: string }
+    expect(response.status).toBe(404)
+    expect(body.code).toBe('COLLAB_MEMBER_NOT_FOUND')
+  })
+
+  it('returns 403 when the editor calls remove', async () => {
+    const token = await generateTestToken(INVITEE_USER.id)
+    mockInviteeAuth()
+    mockListWithOwnerAndEditor()
+
+    const response = await apiRequest(REMOVE_PATH, { method: 'DELETE', token })
+
+    expect(response.status).toBe(403)
+    expect(vi.mocked(db.delete)).not.toHaveBeenCalled()
+  })
+
+  it('returns 401 without auth', async () => {
+    const response = await apiRequest(REMOVE_PATH, { method: 'DELETE' })
+
+    expect(response.status).toBe(401)
+  })
+
+  it('returns 422 when the userId is not a uuid', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+
+    const response = await apiRequest(`/v1/lists/${LIST_ID}/collaborators/not-a-uuid`, { method: 'DELETE', token })
+
+    expect(response.status).toBe(422)
+  })
+})
+
+describe('DELETE /v1/lists/:id/collaborators/me', () => {
+  const LEAVE_PATH = `/v1/lists/${LIST_ID}/collaborators/me`
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('returns 204 and deletes the editor membership (the /me route is not captured by /:userId)', async () => {
+    const token = await generateTestToken(INVITEE_USER.id)
+    mockInviteeAuth()
+    mockListWithOwnerAndEditor()
+    mockMembershipDelete([EDITOR_MEMBERSHIP])
+
+    const response = await apiRequest(LEAVE_PATH, { method: 'DELETE', token })
+
+    expect(response.status).toBe(204)
+    expect(vi.mocked(db.delete)).toHaveBeenCalledOnce()
+    expect(vi.mocked(db.update)).not.toHaveBeenCalled()
+    expect(logger.info).toHaveBeenCalledWith(
+      { editorId: INVITEE_USER.id, listId: LIST_ID },
+      'Collaborator left list',
+    )
+  })
+
+  it('returns 422 COLLAB_OWNER_CANNOT_LEAVE for the owner and deletes nothing', async () => {
+    const token = await generateTestToken(OWNER_USER.id)
+    mockOwnerAuth()
+    mockListWithOwnerAndEditor()
+
+    const response = await apiRequest(LEAVE_PATH, { method: 'DELETE', token })
+
+    const body = await response.json() as { code: string }
+    expect(response.status).toBe(422)
+    expect(body.code).toBe('COLLAB_OWNER_CANNOT_LEAVE')
+    expect(vi.mocked(db.delete)).not.toHaveBeenCalled()
+  })
+
+  it('returns 403 for a user who is not a contributor (e.g. a second leave call)', async () => {
+    const token = await generateTestToken(INVITEE_USER.id)
+    mockInviteeAuth()
+    mockListWithOwner()
+
+    const response = await apiRequest(LEAVE_PATH, { method: 'DELETE', token })
+
+    expect(response.status).toBe(403)
+    expect(vi.mocked(db.delete)).not.toHaveBeenCalled()
+  })
+
+  it('returns 403 when a concurrent remove already deleted the membership', async () => {
+    const token = await generateTestToken(INVITEE_USER.id)
+    mockInviteeAuth()
+    mockListWithOwnerAndEditor()
+    mockMembershipDelete([])
+
+    const response = await apiRequest(LEAVE_PATH, { method: 'DELETE', token })
+
+    expect(response.status).toBe(403)
+  })
+
+  it('returns 401 without auth', async () => {
+    const response = await apiRequest(LEAVE_PATH, { method: 'DELETE' })
+
+    expect(response.status).toBe(401)
   })
 })
