@@ -222,6 +222,7 @@ const listItemsEntityDescriptor: ExportEntityDescriptor = {
     'sortOrder',
     'creatorNote',
     'customName',
+    'customUrl',
     'createdAt',
     'updatedAt',
   ],

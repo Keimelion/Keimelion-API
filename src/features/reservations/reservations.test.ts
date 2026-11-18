@@ -127,6 +127,7 @@ const MOCK_LIST_ITEM: ListItem = {
   sortOrder: null,
   creatorNote: null,
   customName: null,
+  customUrl: null,
   createdAt: new Date('2024-01-01'),
   updatedAt: new Date('2024-01-01'),
 }

@@ -1,6 +1,7 @@
 import { pgEnum, pgTable, text, unique, uuid } from 'drizzle-orm/pg-core'
 import { timestamps, uuidPrimaryKey } from '../../../shared/db/columns.js'
 import {
+  httpsUrlCheck,
   nonEmptyCheck,
   nonEmptyVarchar,
   nonNegativeCheck,
@@ -8,7 +9,7 @@ import {
   nonNegativeSmallInt,
 } from '../../../shared/db/checks.js'
 import { ITEM_STATUS_VALUES, ItemStatuses } from '@keimelion/sdk/enums'
-import { MAX_CUSTOM_NAME_LENGTH } from '@keimelion/sdk/schemas'
+import { MAX_CUSTOM_NAME_LENGTH, MAX_SOURCE_URL_LENGTH } from '@keimelion/sdk/schemas'
 import { lists } from '../lists/lists.schema.js'
 import { items } from '../items/items.schema.js'
 
@@ -26,6 +27,7 @@ export const listItems = pgTable(
     sortOrder: nonNegativeInt('sort_order'),
     creatorNote: text('creator_note'),
     customName: nonEmptyVarchar('custom_name', MAX_CUSTOM_NAME_LENGTH),
+    customUrl: nonEmptyVarchar('custom_url', MAX_SOURCE_URL_LENGTH),
     ...timestamps(),
   },
   (table) => [
@@ -34,6 +36,8 @@ export const listItems = pgTable(
     nonNegativeCheck(table.quantityReservedTotal),
     nonNegativeCheck(table.sortOrder, { nullable: true }),
     nonEmptyCheck(table.customName),
+    nonEmptyCheck(table.customUrl),
+    httpsUrlCheck(table.customUrl),
   ],
 )
 

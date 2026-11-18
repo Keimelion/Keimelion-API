@@ -18,6 +18,7 @@ import {
   listsListResponseSchema,
   listsUpdateResponseSchema,
   MAX_CUSTOM_NAME_LENGTH,
+  MAX_SOURCE_URL_LENGTH,
 } from '@keimelion/sdk/schemas'
 import { ListUserRoles } from '@keimelion/sdk/enums'
 import type { ListUserRole } from '@keimelion/sdk/enums'
@@ -119,6 +120,7 @@ const MOCK_LIST_ITEM = {
   sortOrder: null,
   creatorNote: null,
   customName: null,
+  customUrl: null,
   createdAt: new Date('2024-01-01'),
   updatedAt: new Date('2024-01-01'),
 }
@@ -1106,8 +1108,11 @@ describe('POST /v1/lists/:id/items', () => {
         quantityDesired: 1,
         creatorNote: null,
         customName: null,
+        customUrl: null,
         itemStatus: 'available',
       })
+      expect(body.listItem.customUrl).toBeNull()
+      expect(vi.mocked(db.update)).not.toHaveBeenCalled()
     })
 
     it('returns 201 with the customName while keeping the catalogue item name', async () => {
@@ -1163,6 +1168,8 @@ describe('POST /v1/lists/:id/items', () => {
       expect(response.status).toBe(201)
       expect(body.listItem.source?.sourceUrl).toBe(CANONICAL_URL)
       expect(body.listItem.source?.shop?.slug).toBe('amazon')
+      expect(body.listItem.customUrl).toBeNull()
+      expect(vi.mocked(db.update)).not.toHaveBeenCalled()
       expect(sourceValues).toHaveBeenCalledWith({
         itemId: ITEM_ID,
         shopId: SHOP_ROW.id,
@@ -1175,21 +1182,25 @@ describe('POST /v1/lists/:id/items', () => {
       })
     })
 
-    it('attaches nothing when the URL is held by another item, and still returns 201', async () => {
+    it('keeps the URL held by another item as the customUrl, leaving that source untouched', async () => {
       mockAuthChain()
       mockListAndOwner()
       mockKnownShops([SHOP_ROW])
       vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(MOCK_ITEM)
       vi.mocked(db.query.itemSources.findFirst).mockResolvedValueOnce(urlHolder(OTHER_ITEM_ID) as never)
       mockInsertOnce(MOCK_LIST_ITEM)
+      const listItemSet = mockUpdateOnce({ ...MOCK_LIST_ITEM, customUrl: SUBMITTED_URL })
 
-      const response = await postItem({ itemId: ITEM_ID, sourceUrl: SUBMITTED_URL })
+      const response = await postItem({ itemId: ITEM_ID, sourceUrl: ` ${SUBMITTED_URL} ` })
 
       const body = listsAddItemResponseSchema.parse(await response.json())
       expect(response.status).toBe(201)
       expect(body.listItem.item.id).toBe(ITEM_ID)
       expect(body.listItem.source).toBeNull()
+      expect(body.listItem.customUrl).toBe(SUBMITTED_URL)
       expect(vi.mocked(db.insert)).toHaveBeenCalledTimes(1)
+      expect(vi.mocked(db.update)).toHaveBeenCalledTimes(1)
+      expect(listItemSet).toHaveBeenCalledWith({ customUrl: SUBMITTED_URL })
     })
 
     it('returns the existing source when the URL is already held by this item', async () => {
@@ -1205,23 +1216,28 @@ describe('POST /v1/lists/:id/items', () => {
       const body = listsAddItemResponseSchema.parse(await response.json())
       expect(response.status).toBe(201)
       expect(body.listItem.source?.id).toBe(SOURCE_ID)
+      expect(body.listItem.customUrl).toBeNull()
       expect(vi.mocked(db.insert)).toHaveBeenCalledTimes(1)
+      expect(vi.mocked(db.update)).not.toHaveBeenCalled()
     })
 
-    it('attaches nothing when the URL resolves to no known shop', async () => {
+    it('keeps a URL of no known shop as the customUrl without creating a source', async () => {
       mockAuthChain()
       mockListAndOwner()
       mockKnownShops([])
       vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(MOCK_ITEM)
       vi.mocked(db.query.itemSources.findFirst).mockResolvedValueOnce(undefined)
       mockInsertOnce(MOCK_LIST_ITEM)
+      const listItemSet = mockUpdateOnce({ ...MOCK_LIST_ITEM, customUrl: UNKNOWN_SHOP_URL })
 
       const response = await postItem({ itemId: ITEM_ID, sourceUrl: UNKNOWN_SHOP_URL })
 
       const body = listsAddItemResponseSchema.parse(await response.json())
       expect(response.status).toBe(201)
       expect(body.listItem.source).toBeNull()
+      expect(body.listItem.customUrl).toBe(UNKNOWN_SHOP_URL)
       expect(vi.mocked(db.insert)).toHaveBeenCalledTimes(1)
+      expect(listItemSet).toHaveBeenCalledWith({ customUrl: UNKNOWN_SHOP_URL })
     })
 
     it('returns the existing source of the item on that shop without inserting a new one', async () => {
@@ -1234,13 +1250,16 @@ describe('POST /v1/lists/:id/items', () => {
         .mockResolvedValueOnce(undefined)
         .mockResolvedValueOnce(shopSource)
       mockInsertOnce(MOCK_LIST_ITEM)
+      const listItemSet = mockUpdateOnce({ ...MOCK_LIST_ITEM, customUrl: SUBMITTED_URL })
 
       const response = await postItem({ itemId: ITEM_ID, sourceUrl: SUBMITTED_URL })
 
       const body = listsAddItemResponseSchema.parse(await response.json())
       expect(response.status).toBe(201)
       expect(body.listItem.source?.id).toBe(OTHER_SOURCE_ID)
+      expect(body.listItem.customUrl).toBe(SUBMITTED_URL)
       expect(vi.mocked(db.insert)).toHaveBeenCalledTimes(1)
+      expect(listItemSet).toHaveBeenCalledWith({ customUrl: SUBMITTED_URL })
     })
 
     it('returns the source written by a concurrent request when the insert conflicts', async () => {
@@ -1260,6 +1279,80 @@ describe('POST /v1/lists/:id/items', () => {
       const body = listsAddItemResponseSchema.parse(await response.json())
       expect(response.status).toBe(201)
       expect(body.listItem.source?.id).toBe(SOURCE_ID)
+      expect(body.listItem.customUrl).toBeNull()
+    })
+
+    it('stores an explicit customUrl over the derived one, without any list item update', async () => {
+      const customUrl = 'https://my-blog.example/gift-ideas#headset'
+      mockAuthChain()
+      mockListAndOwner()
+      mockKnownShops([])
+      vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(MOCK_ITEM)
+      vi.mocked(db.query.itemSources.findFirst).mockResolvedValueOnce(undefined)
+      const values = mockInsertOnce({ ...MOCK_LIST_ITEM, customUrl })
+
+      const response = await postItem({ itemId: ITEM_ID, sourceUrl: UNKNOWN_SHOP_URL, customUrl })
+
+      const body = listsAddItemResponseSchema.parse(await response.json())
+      expect(response.status).toBe(201)
+      expect(body.listItem.customUrl).toBe(customUrl)
+      expect(values).toHaveBeenCalledWith(expect.objectContaining({ customUrl }))
+      expect(vi.mocked(db.update)).not.toHaveBeenCalled()
+    })
+
+    it('still attaches the sourceUrl as a source when an explicit customUrl is sent', async () => {
+      const customUrl = 'https://my-blog.example/gift-ideas'
+      mockAuthChain()
+      mockListAndOwner()
+      mockKnownShops([SHOP_ROW])
+      vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(MOCK_ITEM)
+      vi.mocked(db.query.itemSources.findFirst).mockResolvedValueOnce(undefined)
+      const values = mockInsertOnce({ ...MOCK_LIST_ITEM, customUrl })
+      const sourceValues = mockInsertOnce(SOURCE_ROW)
+
+      const response = await postItem({ itemId: ITEM_ID, sourceUrl: SUBMITTED_URL, customUrl })
+
+      const body = listsAddItemResponseSchema.parse(await response.json())
+      expect(response.status).toBe(201)
+      expect(body.listItem.source?.sourceUrl).toBe(CANONICAL_URL)
+      expect(body.listItem.customUrl).toBe(customUrl)
+      expect(values).toHaveBeenCalledWith(expect.objectContaining({ customUrl }))
+      expect(sourceValues).toHaveBeenCalledWith(expect.objectContaining({ sourceUrl: CANONICAL_URL }))
+    })
+
+    it.each([null, '   '])('suppresses the derived customUrl when customUrl is %j', async (customUrl) => {
+      mockAuthChain()
+      mockListAndOwner()
+      mockKnownShops([])
+      vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(MOCK_ITEM)
+      vi.mocked(db.query.itemSources.findFirst).mockResolvedValueOnce(undefined)
+      const values = mockInsertOnce(MOCK_LIST_ITEM)
+
+      const response = await postItem({ itemId: ITEM_ID, sourceUrl: UNKNOWN_SHOP_URL, customUrl })
+
+      const body = listsAddItemResponseSchema.parse(await response.json())
+      expect(response.status).toBe(201)
+      expect(body.listItem.customUrl).toBeNull()
+      expect(values).toHaveBeenCalledWith(expect.objectContaining({ customUrl: null }))
+      expect(vi.mocked(db.update)).not.toHaveBeenCalled()
+    })
+
+    it('returns 409 without writing a source or a customUrl when the item is already on the list', async () => {
+      mockAuthChain()
+      mockListAndOwner()
+      mockKnownShops([])
+      vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(MOCK_ITEM)
+      vi.mocked(db.query.itemSources.findFirst).mockResolvedValueOnce(undefined)
+      mockInsertOnce(undefined)
+      vi.mocked(db.query.listItems.findFirst).mockResolvedValueOnce(MOCK_LIST_ITEM as never)
+
+      const response = await postItem({ itemId: ITEM_ID, sourceUrl: UNKNOWN_SHOP_URL })
+
+      const body = await response.json() as ErrorBody
+      expect(response.status).toBe(409)
+      expect(body.code).toBe('LIST_ITEM_ALREADY_EXISTS')
+      expect(vi.mocked(db.insert)).toHaveBeenCalledTimes(1)
+      expect(vi.mocked(db.update)).not.toHaveBeenCalled()
     })
 
     it('returns 409 LIST_ITEM_ALREADY_EXISTS with the existing list item id and quantity', async () => {
@@ -1321,6 +1414,8 @@ describe('POST /v1/lists/:id/items', () => {
       expect(response.status).toBe(201)
       expect(body.listItem.item.gtin).toBe(PADDED_GTIN)
       expect(body.listItem.source?.price).toBe('19.99')
+      expect(body.listItem.customUrl).toBeNull()
+      expect(vi.mocked(db.update)).not.toHaveBeenCalled()
       expect(itemValues).toHaveBeenCalledWith(expect.objectContaining({ gtin: PADDED_GTIN }))
       expect(sourceValues).toHaveBeenCalledWith({
         itemId: ITEM_ID,
@@ -1369,6 +1464,8 @@ describe('POST /v1/lists/:id/items', () => {
       expect(itemSet).toHaveBeenCalledWith(expect.objectContaining({ description: expect.anything() as unknown }))
       expect(gtinSet).toHaveBeenCalledWith(expect.objectContaining({ gtin: expect.anything() as unknown }))
       expect(sourceSet).toHaveBeenCalledWith({ price: '1.00' })
+      expect(vi.mocked(db.update)).toHaveBeenCalledTimes(3)
+      expect(body.listItem.customUrl).toBeNull()
       expect(values).toHaveBeenCalledWith(expect.objectContaining({ itemId: ITEM_ID, customName: 'Noise cancelling headset' }))
     })
 
@@ -1464,7 +1561,43 @@ describe('POST /v1/lists/:id/items', () => {
       expect(response.status).toBe(201)
       expect(body.listItem.item.gtin).toBe(PADDED_GTIN)
       expect(body.listItem.source?.shopId).toBe(SHOP_ROW.id)
+      expect(body.listItem.customUrl).toBeNull()
       expect(sourceValues).toHaveBeenCalledWith(expect.objectContaining({ itemId: ITEM_ID, price: '19.99', currency: 'USD', createdByUserId: AUTH_USER.id }))
+    })
+
+    it('keeps the URL of no known shop as the customUrl of the item matched by GTIN', async () => {
+      mockAuthChain()
+      mockListAndOwner()
+      mockKnownShops([])
+      vi.mocked(db.query.itemSources.findFirst).mockResolvedValueOnce(undefined)
+      vi.mocked(db.query.items.findFirst).mockResolvedValueOnce({ ...MOCK_ITEM, gtin: PADDED_GTIN, image: null } as never)
+      mockInsertOnce(MOCK_LIST_ITEM)
+      const listItemSet = mockUpdateOnce({ ...MOCK_LIST_ITEM, customUrl: UNKNOWN_SHOP_URL })
+
+      const response = await postItem({ name: MOCK_ITEM.name, gtin: EAN_13, sourceUrl: UNKNOWN_SHOP_URL })
+
+      const body = listsAddItemResponseSchema.parse(await response.json())
+      expect(response.status).toBe(201)
+      expect(body.listItem.source).toBeNull()
+      expect(body.listItem.customUrl).toBe(UNKNOWN_SHOP_URL)
+      expect(vi.mocked(db.insert)).toHaveBeenCalledTimes(1)
+      expect(listItemSet).toHaveBeenCalledWith({ customUrl: UNKNOWN_SHOP_URL })
+    })
+
+    it('stores an explicit customUrl on a newly created product', async () => {
+      const customUrl = 'https://my-blog.example/board-game'
+      mockAuthChain()
+      mockListAndOwner()
+      mockInsertOnce({ ...MOCK_ITEM, name: 'Board game' })
+      const listItemValues = mockInsertOnce({ ...MOCK_LIST_ITEM, customUrl })
+
+      const response = await postItem({ name: 'Board game', customUrl })
+
+      const body = listsAddItemResponseSchema.parse(await response.json())
+      expect(response.status).toBe(201)
+      expect(body.listItem.customUrl).toBe(customUrl)
+      expect(listItemValues).toHaveBeenCalledWith(expect.objectContaining({ customUrl }))
+      expect(vi.mocked(db.update)).not.toHaveBeenCalled()
     })
 
     it('reuses the item created by a concurrent request for the same URL', async () => {
@@ -1544,6 +1677,31 @@ describe('POST /v1/lists/:id/items', () => {
       expect(body.metadata.issues?.[0]?.message).toBe(
         `customName must be at most ${String(MAX_CUSTOM_NAME_LENGTH)} characters`,
       )
+    })
+
+    it('returns 422 when customUrl is not HTTPS', async () => {
+      mockAuthChain()
+      mockListAndOwner()
+
+      const response = await postItem({ itemId: ITEM_ID, customUrl: 'http://shop.example.com/p/1' })
+
+      const body = await response.json() as ErrorBody
+      expect(response.status).toBe(422)
+      expect(body.metadata.issues?.[0]?.path).toBe('customUrl')
+      expect(body.metadata.issues?.[0]?.message).toBe('customUrl must use HTTPS')
+      expect(vi.mocked(db.insert)).not.toHaveBeenCalled()
+    })
+
+    it('returns 422 when customUrl exceeds the maximum length', async () => {
+      mockAuthChain()
+      mockListAndOwner()
+
+      const response = await postItem({ itemId: ITEM_ID, customUrl: `https://shop.example.com/${'a'.repeat(MAX_SOURCE_URL_LENGTH)}` })
+
+      const body = await response.json() as ErrorBody
+      expect(response.status).toBe(422)
+      expect(body.metadata.issues?.[0]?.path).toBe('customUrl')
+      expect(vi.mocked(db.insert)).not.toHaveBeenCalled()
     })
 
     it('returns 400 on a malformed JSON body', async () => {

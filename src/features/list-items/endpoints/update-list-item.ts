@@ -35,6 +35,7 @@ export function mountUpdateListItem(router: FeatureRouter): void {
           quantityDesired: input.quantityDesired,
           creatorNote: input.creatorNote,
           customName: input.customName,
+          customUrl: input.customUrl,
           sortOrder: input.sortOrder,
         }),
       )

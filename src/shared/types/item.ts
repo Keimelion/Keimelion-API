@@ -59,6 +59,7 @@ export interface ListItemWrite {
   quantityDesired: number
   creatorNote: string | null
   customName: string | null
+  customUrl: string | null
   sortOrder: number | null
 }
 
@@ -128,6 +129,7 @@ export function toListItemDetail(listItem: ListItem): ListItemDetail {
     sortOrder: listItem.sortOrder ?? null,
     creatorNote: listItem.creatorNote ?? null,
     customName: listItem.customName ?? null,
+    customUrl: listItem.customUrl ?? null,
     createdAt: listItem.createdAt,
     updatedAt: listItem.updatedAt,
   }

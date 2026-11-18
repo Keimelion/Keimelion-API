@@ -1320,8 +1320,9 @@ describe('GET /v1/users/me/export', () => {
     expect(imagesDescriptor?.columns).not.toContain('urls')
   })
 
-  describe('list item customName', () => {
+  describe('list item customName and customUrl', () => {
     const CUSTOM_NAME = 'Grandma birthday gift'
+    const CUSTOM_URL = 'https://tiny-shop.example/product/42?ref=newsletter'
     const LIST_ITEM_ROW = {
       id: '00000000-0000-0000-0000-00000000e001',
       listId: '00000000-0000-0000-0000-00000000e101',
@@ -1332,6 +1333,7 @@ describe('GET /v1/users/me/export', () => {
       sortOrder: null,
       creatorNote: null,
       customName: CUSTOM_NAME,
+      customUrl: CUSTOM_URL,
       createdAt: new Date('2024-01-01'),
       updatedAt: new Date('2024-01-01'),
     }
@@ -1345,6 +1347,7 @@ describe('GET /v1/users/me/export', () => {
       'sortOrder',
       'creatorNote',
       'customName',
+      'customUrl',
       'createdAt',
       'updatedAt',
     ]
@@ -1364,7 +1367,7 @@ describe('GET /v1/users/me/export', () => {
       }
     }
 
-    it('registers list-items.csv with the exact allow-list, including customName', () => {
+    it('registers list-items.csv with the exact allow-list, including customName and customUrl', () => {
       expect(findDescriptor('list-items.csv')?.columns).toEqual(LIST_ITEM_EXPORT_KEYS)
     })
 
@@ -1380,13 +1383,13 @@ describe('GET /v1/users/me/export', () => {
       ])
     })
 
-    it('maps customName into list-items.csv rows without any extra column', async () => {
+    it('maps customName and customUrl into list-items.csv rows without any extra column', async () => {
       vi.mocked(db.query.listItems.findMany).mockResolvedValueOnce([LIST_ITEM_ROW] as never)
 
       const rows = await findDescriptor('list-items.csv')?.fetchRows(SAFE_USER.id)
 
       expect(rows).toHaveLength(1)
-      expect(rows?.[0]).toMatchObject({ id: LIST_ITEM_ROW.id, customName: CUSTOM_NAME })
+      expect(rows?.[0]).toMatchObject({ id: LIST_ITEM_ROW.id, customName: CUSTOM_NAME, customUrl: CUSTOM_URL })
       expect(Object.keys(rows?.[0] ?? {}).sort()).toEqual([...LIST_ITEM_EXPORT_KEYS].sort())
     })
 
@@ -1402,6 +1405,20 @@ describe('GET /v1/users/me/export', () => {
       const body = await response.json() as { listItems: Record<string, unknown>[] }
       expect(body.listItems.map((listItem) => listItem.customName)).toEqual([CUSTOM_NAME, null])
       expect(Object.keys(body.listItems[0] ?? {}).sort()).toEqual([...LIST_ITEM_EXPORT_KEYS].sort())
+    })
+
+    it('includes customUrl in the JSON export listItems', async () => {
+      const token = await generateTestToken(SAFE_USER.id)
+      vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+      vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+      vi.mocked(db.query.listItems.findMany).mockResolvedValueOnce([LIST_ITEM_ROW, { ...LIST_ITEM_ROW, customUrl: null }] as never)
+
+      const response = await apiRequest('/v1/users/me/export?format=json', { token })
+
+      expect(response.status).toBe(200)
+      const body = await response.json() as { listItems: Record<string, unknown>[] }
+      expect(body.listItems.map((listItem) => listItem.customUrl)).toEqual([CUSTOM_URL, null])
+      expect(Object.keys(body.listItems[1] ?? {}).sort()).toEqual([...LIST_ITEM_EXPORT_KEYS].sort())
     })
 
     it.each([
@@ -1635,6 +1652,7 @@ const RESERVATION_PROFILE_ROW = {
     sortOrder: null,
     creatorNote: null,
     customName: null,
+    customUrl: null,
     createdAt: new Date('2024-04-01'),
     updatedAt: new Date('2024-04-01'),
     item: {

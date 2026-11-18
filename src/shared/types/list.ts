@@ -134,6 +134,7 @@ function toPublicListItem(row: PublicListItemRow, locale: Locale): PublicListIte
     sortOrder: row.sortOrder ?? null,
     creatorNote: row.creatorNote ?? null,
     customName: row.customName ?? null,
+    customUrl: row.customUrl ?? null,
     name: resolveListItemName(row),
     item: toPublicItemDetail(row.item, locale),
     createdAt: row.createdAt,

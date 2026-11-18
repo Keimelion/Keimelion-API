@@ -34,6 +34,7 @@ const OWNER_USER = {
 const LIST_ID = '00000000-0000-0000-0000-000000000010'
 const ITEM_ID = '00000000-0000-0000-0000-000000000020'
 const LIST_ITEM_ID = '00000000-0000-0000-0000-000000000030'
+const OTHER_LIST_ITEM_ID = '00000000-0000-0000-0000-000000000031'
 const LIST_SLUG = 'my-shared-wishlist'
 
 const PUBLIC_LIST_ROW = {
@@ -75,6 +76,7 @@ const PUBLIC_LIST_ROW = {
       sortOrder: null,
       creatorNote: null,
       customName: null,
+      customUrl: null,
       createdAt: new Date('2024-01-01'),
       updatedAt: new Date('2024-01-01'),
       item: {
@@ -168,6 +170,22 @@ describe('GET /v1/public/lists/:slug', () => {
     expect(body.list.items[0]?.customName).toBe(customName)
     expect(body.list.items[0]?.name).toBe(customName)
     expect(body.list.items[0]?.item.name).toBe('A nice item')
+  })
+
+  it('exposes the personal customUrl of each list item, null when unset', async () => {
+    const customUrl = 'https://tiny-shop.example/product/42?ref=newsletter'
+    const customUrlRow = {
+      ...PUBLIC_LIST_ROW,
+      listItems: [{ ...PUBLIC_LIST_ROW.listItems[0], customUrl }, { ...PUBLIC_LIST_ROW.listItems[0], id: OTHER_LIST_ITEM_ID }],
+    }
+    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(customUrlRow)
+
+    const response = await apiRequest(`/v1/public/lists/${LIST_SLUG}`)
+    const body = publicListsGetResponseSchema.parse(await response.json())
+
+    expect(response.status).toBe(200)
+    expect(body.list.items.map((listItem) => listItem.customUrl)).toEqual([customUrl, null])
+    expect(body.list.items[0]?.item.sources).toEqual([])
   })
 
   it('surfaces the stored itemStatus so reserved items appear as reserved', async () => {
