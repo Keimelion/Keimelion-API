@@ -62,29 +62,43 @@ export async function insertListInvite(
   return row
 }
 
-// Atomic claim: the WHERE narrows to "still pending AND not expired" so a concurrent
-// accept / revoke / expiry loses the race and returns undefined. Callers must treat
-// `undefined` as "the invite was resolved or expired between read and write" rather
-// than a generic failure.
-export async function markInviteAccepted(
+export function findInviteByIdForList(
   inviteId: string,
-  acceptedByUserId: string,
-  acceptedAt: Date,
-  tx?: DbOrTx,
+  listId: string,
 ): Promise<ListInvite | undefined> {
-  const executor = tx ?? db
+  return db.query.listInvites.findFirst({
+    where: and(eq(listInvites.id, inviteId), eq(listInvites.listId, listId)),
+  })
+}
+
+type PendingInviteTransition = Partial<
+  Pick<typeof listInvites.$inferInsert, 'inviteStatus' | 'acceptedByUserId' | 'acceptedAt'>
+>
+
+interface PendingInviteTransitionOptions {
+  listId?: string
+  unexpiredAt?: Date
+  tx?: DbOrTx
+}
+
+// Atomic claim: the WHERE narrows to "still pending" (optionally scoped to a list and still
+// unexpired at `unexpiredAt`), so a concurrent accept / decline / revoke / expiry loses the race
+// and returns undefined. Callers treat `undefined` as "resolved between read and write".
+export async function transitionPendingInvite(
+  inviteId: string,
+  set: PendingInviteTransition,
+  options: PendingInviteTransitionOptions = {},
+): Promise<ListInvite | undefined> {
+  const executor = options.tx ?? db
   const [row] = await executor
     .update(listInvites)
-    .set({
-      inviteStatus: InviteStatuses.ACCEPTED,
-      acceptedByUserId,
-      acceptedAt,
-    })
+    .set(set)
     .where(
       and(
         eq(listInvites.id, inviteId),
         eq(listInvites.inviteStatus, InviteStatuses.PENDING),
-        gt(listInvites.inviteTokenExpiresAt, acceptedAt),
+        options.listId === undefined ? undefined : eq(listInvites.listId, options.listId),
+        options.unexpiredAt === undefined ? undefined : gt(listInvites.inviteTokenExpiresAt, options.unexpiredAt),
       ),
     )
     .returning()
@@ -138,6 +152,41 @@ export async function deleteExpiredPendingListInvites(
     )
     .returning({ id: listInvites.id })
   return deleted.length
+}
+
+// Declined and revoked rows carry the invitee's email with no further purpose: purged once
+// their resolution (updatedAt) is older than the caller's cutoff. Accepted rows go with the
+// membership (see deleteAcceptedListInvitesForUser).
+export async function deleteResolvedListInvitesOlderThan(cutoff: Date): Promise<number> {
+  const deleted = await db
+    .delete(listInvites)
+    .where(
+      and(
+        inArray(listInvites.inviteStatus, [InviteStatuses.DECLINED, InviteStatuses.REVOKED]),
+        lte(listInvites.updatedAt, cutoff),
+      ),
+    )
+    .returning({ id: listInvites.id })
+  return deleted.length
+}
+
+// Once the membership is gone (removed or left), the accepted invite only retains the
+// invitee's email: deleted alongside the list_users row.
+export async function deleteAcceptedListInvitesForUser(
+  listId: string,
+  userId: string,
+  tx?: DbOrTx,
+): Promise<void> {
+  const executor = tx ?? db
+  await executor
+    .delete(listInvites)
+    .where(
+      and(
+        eq(listInvites.listId, listId),
+        eq(listInvites.acceptedByUserId, userId),
+        eq(listInvites.inviteStatus, InviteStatuses.ACCEPTED),
+      ),
+    )
 }
 
 function buildInviteWhere(filters: ListInviteFilters): SQL | undefined {

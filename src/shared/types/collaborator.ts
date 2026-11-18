@@ -25,6 +25,7 @@ export function toListMemberUser(user: UserRowWithAvatar): ListMemberUser {
 
 export function toMemberSummary(row: ListUserWithUser): CollaboratorSummary {
   return {
+    inviteId: null,
     user: row.user ? toListMemberUser(row.user) : null,
     invitedEmail: null,
     status: InviteStatuses.ACCEPTED,
@@ -34,6 +35,7 @@ export function toMemberSummary(row: ListUserWithUser): CollaboratorSummary {
 
 export function toPendingInviteSummary(row: ListInvite): CollaboratorSummary {
   return {
+    inviteId: row.id,
     user: null,
     invitedEmail: row.invitedEmail,
     status: row.inviteStatus,
