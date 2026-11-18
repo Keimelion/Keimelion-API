@@ -11,11 +11,12 @@ interface ListItemFixture {
   quantityDesired: number
   creatorNote: string | null
   customName: string | null
+  customUrl: string | null
   sortOrder: number | null
 }
 
 const LIST_ITEM_FIXTURES: readonly ListItemFixture[] = [
-  // Mon anniversaire — covers quantity default, quantity>1, creator_note, custom_name, sortOrder
+  // Mon anniversaire — covers quantity default, quantity>1, creator_note, custom_name, custom_url, sortOrder
   {
     id: '7d3f0b40-0005-4b60-8000-000000000001',
     listId: LIST_IDS.BIRTHDAY,
@@ -23,6 +24,7 @@ const LIST_ITEM_FIXTURES: readonly ListItemFixture[] = [
     quantityDesired: 1,
     creatorNote: null,
     customName: null,
+    customUrl: null,
     sortOrder: null,
   },
   {
@@ -32,6 +34,7 @@ const LIST_ITEM_FIXTURES: readonly ListItemFixture[] = [
     quantityDesired: 2,
     creatorNote: null,
     customName: null,
+    customUrl: null,
     sortOrder: null,
   },
   {
@@ -41,6 +44,7 @@ const LIST_ITEM_FIXTURES: readonly ListItemFixture[] = [
     quantityDesired: 1,
     creatorNote: 'Taille moyenne, dans un pot blanc si possible.',
     customName: null,
+    customUrl: null,
     sortOrder: null,
   },
   {
@@ -50,6 +54,7 @@ const LIST_ITEM_FIXTURES: readonly ListItemFixture[] = [
     quantityDesired: 1,
     creatorNote: null,
     customName: 'Trail running shoes, size 42',
+    customUrl: 'https://www.example.com/trail-running-shoes?size=42',
     sortOrder: 10,
   },
   // Crémaillère
@@ -60,6 +65,7 @@ const LIST_ITEM_FIXTURES: readonly ListItemFixture[] = [
     quantityDesired: 1,
     creatorNote: null,
     customName: null,
+    customUrl: null,
     sortOrder: null,
   },
   {
@@ -69,6 +75,7 @@ const LIST_ITEM_FIXTURES: readonly ListItemFixture[] = [
     quantityDesired: 1,
     creatorNote: null,
     customName: null,
+    customUrl: null,
     sortOrder: null,
   },
   // Liste de mariage — 5 items
@@ -79,6 +86,7 @@ const LIST_ITEM_FIXTURES: readonly ListItemFixture[] = [
     quantityDesired: 1,
     creatorNote: null,
     customName: null,
+    customUrl: null,
     sortOrder: null,
   },
   {
@@ -88,6 +96,7 @@ const LIST_ITEM_FIXTURES: readonly ListItemFixture[] = [
     quantityDesired: 1,
     creatorNote: null,
     customName: null,
+    customUrl: null,
     sortOrder: null,
   },
   {
@@ -97,6 +106,7 @@ const LIST_ITEM_FIXTURES: readonly ListItemFixture[] = [
     quantityDesired: 3,
     creatorNote: 'Idéalement en deux ou trois exemplaires.',
     customName: null,
+    customUrl: null,
     sortOrder: null,
   },
   {
@@ -106,6 +116,7 @@ const LIST_ITEM_FIXTURES: readonly ListItemFixture[] = [
     quantityDesired: 1,
     creatorNote: null,
     customName: null,
+    customUrl: null,
     sortOrder: null,
   },
   {
@@ -115,6 +126,7 @@ const LIST_ITEM_FIXTURES: readonly ListItemFixture[] = [
     quantityDesired: 1,
     creatorNote: null,
     customName: null,
+    customUrl: null,
     sortOrder: 20,
   },
   // Soft-deleted list — items still linked, useful for RGPD export tests.
@@ -125,6 +137,7 @@ const LIST_ITEM_FIXTURES: readonly ListItemFixture[] = [
     quantityDesired: 1,
     creatorNote: null,
     customName: null,
+    customUrl: null,
     sortOrder: null,
   },
 ]
@@ -137,6 +150,7 @@ export async function seedListItems(db: typeof Db): Promise<void> {
     quantityDesired: fixture.quantityDesired,
     creatorNote: fixture.creatorNote,
     customName: fixture.customName,
+    customUrl: fixture.customUrl,
     sortOrder: fixture.sortOrder,
     itemStatus: ItemStatuses.AVAILABLE,
   }))

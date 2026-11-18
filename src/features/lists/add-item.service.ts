@@ -3,6 +3,7 @@ import { db } from '../../db/client.js'
 import { ErrorCode, HttpStatus, ItemStatuses } from '@keimelion/sdk/enums'
 import { DEFAULT_SOURCE_CURRENCY } from '@keimelion/sdk/schemas'
 import type {
+  CustomUrlParsed,
   ListItemAlreadyExistsMetadataParsed,
   ListsAddItemByIdRequestParsed,
   ListsAddItemRequestParsed,
@@ -30,6 +31,7 @@ import {
 import {
   findListItemByListAndItem,
   insertListItemIfAbsent,
+  updateListItem,
 } from '../../db/entities/list-items/list-items.repository.js'
 import { toItemDetail, toItemSourceDetail, toListItemDetail } from '../../shared/types/item.js'
 import { buildSourceUrlFields } from '../affiliate/affiliate.service.js'
@@ -72,6 +74,7 @@ interface ItemCompletion {
 interface KnownItemLink {
   item: ItemRowWithImage
   customName: string | null
+  explicitCustomUrl: CustomUrlParsed | undefined
   offer: SourceOffer
   urlHolder: ItemSourceWithShop | null
   completion: ItemCompletion
@@ -86,6 +89,8 @@ interface WrittenListItem {
   listItem: ListItem
   source: ItemSourceWithShop | null
 }
+
+type ListItemPersonalFields = Pick<Parameters<typeof insertListItemIfAbsent>[0], 'customName' | 'customUrl'>
 
 type KnownItemOutcome = { duplicate: ListItem | undefined } | { written: WrittenListItem; item: ItemRowWithImage }
 
@@ -118,6 +123,7 @@ async function addItemById(input: AddItemToListInput, request: ListsAddItemByIdR
   return linkKnownItem(input, {
     item,
     customName: request.customName ?? null,
+    explicitCustomUrl: request.customUrl,
     offer: { url: sourceUrl, price: null, currency: DEFAULT_SOURCE_CURRENCY },
     urlHolder: await findUrlHolder(sourceUrl),
     completion: { description: null, gtin: null },
@@ -160,6 +166,7 @@ function linkKnownProduct(input: AddItemToListInput, link: KnownProductLink): Pr
   return linkKnownItem(input, {
     item: known.item,
     customName: resolveKnownProductCustomName(product, known.item),
+    explicitCustomUrl: product.customUrl,
     offer: { url: sourceUrl, price: product.price ?? null, currency: product.currency },
     urlHolder: known.urlHolder,
     completion: { description: product.description ?? null, gtin: product.gtin ?? null },
@@ -192,12 +199,14 @@ async function writeKnownItemLink(
   image: Image | null,
   tx: DbTransaction,
 ): Promise<KnownItemOutcome> {
-  const listItem = await insertListItemIfAbsent(buildListItemValues(input, link.item.id, link.customName), tx)
+  const personalFields = { customName: link.customName, customUrl: link.explicitCustomUrl ?? null }
+  const listItem = await insertListItemIfAbsent(buildListItemValues(input, link.item.id, personalFields), tx)
   if (!listItem) return { duplicate: await findListItemByListAndItem(input.listId, link.item.id, tx) }
 
   const item = await completeItem(link.item, { ...link.completion, imageId: image?.id ?? null }, tx)
   const source = await writeSourceOffer(input.userId, item.id, link, tx)
-  return { written: { listItem, source }, item }
+  const linkedListItem = await keepUnattachedUrlAsCustomUrl(listItem, link, source, tx)
+  return { written: { listItem: linkedListItem, source }, item }
 }
 
 async function discardUnusedImage(image: Image | null, outcome: KnownItemOutcome): Promise<void> {
@@ -268,6 +277,26 @@ async function writeSourceOffer(
   )
   if (inserted) return { ...inserted, shop }
   return (await findItemSourceByItemAndShop(itemId, shop.id, tx)) ?? null
+}
+
+async function keepUnattachedUrlAsCustomUrl(
+  listItem: ListItem,
+  link: KnownItemLink,
+  source: ItemSourceWithShop | null,
+  tx: DbTransaction,
+): Promise<ListItem> {
+  if (link.explicitCustomUrl !== undefined) return listItem
+  const customUrl = deriveCustomUrl(link.offer.url, source)
+  if (customUrl === null) return listItem
+
+  const updated = await updateListItem(listItem.id, { customUrl }, tx)
+  if (!updated) throw new Error('list_item_custom_url_update_failed')
+  return updated
+}
+
+function deriveCustomUrl(sourceUrl: ResolvedSourceUrl | null, source: ItemSourceWithShop | null): string | null {
+  if (sourceUrl === null) return null
+  return source?.sourceUrl === sourceUrl.urlFields.sourceUrl ? null : sourceUrl.urlFields.originalUrl
 }
 
 async function updateSourcePrice(
@@ -346,7 +375,8 @@ async function insertProduct(
 
   const source = await insertProductSource(item.id, newProduct, tx)
   await writeItemRelations({ itemId: item.id, tagCreatorId: input.userId, relations }, tx)
-  const listItem = await insertListItemIfAbsent(buildListItemValues(input, item.id, product.customName ?? null), tx)
+  const personalFields = { customName: product.customName ?? null, customUrl: product.customUrl ?? null }
+  const listItem = await insertListItemIfAbsent(buildListItemValues(input, item.id, personalFields), tx)
   if (!listItem) throw new Error('list_item_insert_failed')
   return { item: { ...item, image }, listItem, source }
 }
@@ -377,14 +407,14 @@ async function insertProductSource(
 function buildListItemValues(
   input: AddItemToListInput,
   itemId: string,
-  customName: string | null,
+  personalFields: ListItemPersonalFields,
 ): Parameters<typeof insertListItemIfAbsent>[0] {
   return {
     listId: input.listId,
     itemId,
     quantityDesired: input.request.quantityDesired ?? DEFAULT_QUANTITY_DESIRED,
     creatorNote: input.request.creatorNote ?? null,
-    customName,
+    ...personalFields,
     itemStatus: ItemStatuses.AVAILABLE,
   }
 }

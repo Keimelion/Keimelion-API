@@ -5,6 +5,7 @@ import { generateTestToken, makeAccessTokenEntry } from '../../shared/test/auth.
 import {
   listItemsUpdateResponseSchema,
   MAX_CUSTOM_NAME_LENGTH,
+  MAX_SOURCE_URL_LENGTH,
   messageResponseSchema,
 } from '@keimelion/sdk/schemas'
 
@@ -61,12 +62,14 @@ const MOCK_LIST_ITEM = {
   sortOrder: null,
   creatorNote: null,
   customName: null,
+  customUrl: null,
   createdAt: new Date('2024-01-01'),
   updatedAt: new Date('2024-01-01'),
 }
 
 const CUSTOM_NAME = 'Blue headphones for the office'
 const TOO_LONG_CUSTOM_NAME = 'a'.repeat(MAX_CUSTOM_NAME_LENGTH + 1)
+const CUSTOM_URL = 'https://tiny-shop.example/product/42?ref=newsletter'
 
 const ACCESS_TOKEN_ENTRY = makeAccessTokenEntry(AUTH_USER.id)
 
@@ -219,6 +222,63 @@ describe('PATCH /v1/list-items/:id', () => {
     expect(vi.mocked(db.update)).not.toHaveBeenCalled()
   })
 
+  it('returns 200 and sets the customUrl without looking up the item sources', async () => {
+    const token = await generateTestToken(AUTH_USER.id)
+    mockAuthChain()
+    mockListItemOwnershipChain()
+    const set = mockUpdateReturning({ ...MOCK_LIST_ITEM, customUrl: CUSTOM_URL })
+
+    const response = await apiRequest(`/v1/list-items/${LIST_ITEM_ID}`, {
+      method: 'PATCH',
+      token,
+      body: { customUrl: ` ${CUSTOM_URL} ` },
+    })
+
+    const body = listItemsUpdateResponseSchema.parse(await response.json())
+    expect(response.status).toBe(200)
+    expect(body.listItem.customUrl).toBe(CUSTOM_URL)
+    expect(set).toHaveBeenCalledWith({ customUrl: CUSTOM_URL })
+    expect(vi.mocked(db.query.itemSources.findFirst)).not.toHaveBeenCalled()
+  })
+
+  it.each([null, '   '])('returns 200 and clears the customUrl when %j is sent', async (customUrl) => {
+    const token = await generateTestToken(AUTH_USER.id)
+    mockAuthChain()
+    mockListItemOwnershipChain()
+    const set = mockUpdateReturning(MOCK_LIST_ITEM)
+
+    const response = await apiRequest(`/v1/list-items/${LIST_ITEM_ID}`, {
+      method: 'PATCH',
+      token,
+      body: { customUrl },
+    })
+
+    const body = listItemsUpdateResponseSchema.parse(await response.json())
+    expect(response.status).toBe(200)
+    expect(body.listItem.customUrl).toBeNull()
+    expect(set).toHaveBeenCalledWith({ customUrl: null })
+  })
+
+  it.each([
+    ['is not HTTPS', 'http://tiny-shop.example/product/42'],
+    ['is not a URL', 'not a url'],
+    ['exceeds the maximum length', `https://tiny-shop.example/${'a'.repeat(MAX_SOURCE_URL_LENGTH)}`],
+  ])('returns 422 when customUrl %s', async (_label, customUrl) => {
+    const token = await generateTestToken(AUTH_USER.id)
+    mockAuthChain()
+
+    const response = await apiRequest(`/v1/list-items/${LIST_ITEM_ID}`, {
+      method: 'PATCH',
+      token,
+      body: { customUrl },
+    })
+
+    const body = await response.json() as { metadata: { issues: { path: string; message: string }[] } }
+    expect(response.status).toBe(422)
+    expect(body.metadata.issues[0]?.path).toBe('customUrl')
+    expect(vi.mocked(db.update)).not.toHaveBeenCalled()
+  })
+
   it('returns 200 when user is an editor of the list', async () => {
     const token = await generateTestToken(AUTH_USER.id)
     mockAuthChain()
@@ -266,6 +326,24 @@ describe('PATCH /v1/list-items/:id', () => {
     })
 
     expect(response.status).toBe(403)
+  })
+
+  it('returns 403 without writing when a non-contributor sets the customUrl', async () => {
+    const token = await generateTestToken(AUTH_USER.id)
+    mockAuthChain()
+    vi.mocked(db.query.listItems.findFirst).mockResolvedValueOnce(MOCK_LIST_ITEM as never)
+    vi.mocked(db.query.lists.findFirst).mockResolvedValueOnce(
+      { ...MOCK_LIST, listUsers: [], listTags: [] } as never,
+    )
+
+    const response = await apiRequest(`/v1/list-items/${LIST_ITEM_ID}`, {
+      method: 'PATCH',
+      token,
+      body: { customUrl: CUSTOM_URL },
+    })
+
+    expect(response.status).toBe(403)
+    expect(vi.mocked(db.update)).not.toHaveBeenCalled()
   })
 
   it('returns 404 when list item does not exist', async () => {

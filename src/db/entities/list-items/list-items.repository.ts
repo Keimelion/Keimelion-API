@@ -15,10 +15,13 @@ interface InsertListItemInput {
   quantityDesired: number
   creatorNote: string | null
   customName: string | null
+  customUrl: string | null
   itemStatus: ItemStatus
 }
 
-type UpdateListItemFields = Partial<Pick<typeof listItems.$inferInsert, 'quantityDesired' | 'creatorNote' | 'customName' | 'sortOrder'>>
+type UpdateListItemFields = Partial<
+  Pick<typeof listItems.$inferInsert, 'quantityDesired' | 'creatorNote' | 'customName' | 'customUrl' | 'sortOrder'>
+>
 
 interface UpdateReservationStateInput {
   quantityReservedTotal: number
@@ -67,8 +70,12 @@ export async function findListItemByIdForUpdate(id: string, tx: DbOrTx): Promise
   return row
 }
 
-export async function updateListItem(id: string, input: UpdateListItemFields): Promise<ListItem | undefined> {
-  const [listItem] = await db.update(listItems).set(input).where(eq(listItems.id, id)).returning()
+export async function updateListItem(
+  id: string,
+  input: UpdateListItemFields,
+  tx: DbOrTx = db,
+): Promise<ListItem | undefined> {
+  const [listItem] = await tx.update(listItems).set(input).where(eq(listItems.id, id)).returning()
   return listItem
 }
 

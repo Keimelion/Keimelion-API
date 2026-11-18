@@ -30,6 +30,8 @@ import {
  */
 export const SLUG_REGEX = '^[a-z0-9]+(-[a-z0-9]+)*$'
 
+const HTTPS_URL_LIKE_PATTERN = 'https://%'
+
 export const nonEmptyVarchar = (name: string, length: number) => varchar(name, { length })
 
 export const slugVarchar = (name: string, length: number) => varchar(name, { length })
@@ -51,6 +53,12 @@ export const slugCheck = (column: AnyPgColumn, constraintName?: string): CheckBu
   check(
     constraintName ?? `${column.name}_slug_check`,
     sql`${column} ~ ${sql.raw(`'${SLUG_REGEX}'`)}`,
+  )
+
+export const httpsUrlCheck = (column: AnyPgColumn, constraintName?: string): CheckBuilder =>
+  check(
+    constraintName ?? `${column.name}_https_check`,
+    sql`${column} LIKE ${sql.raw(`'${HTTPS_URL_LIKE_PATTERN}'`)}`,
   )
 
 export interface NonNegativeCheckOptions {

@@ -133,6 +133,7 @@ interface ListItemRow {
   sortOrder: number | null
   creatorNote: string | null
   customName: string | null
+  customUrl: string | null
   createdAt: Date
   updatedAt: Date
   item: Omit<typeof ITEM_ROW, 'imageId'> & {
@@ -148,6 +149,7 @@ interface BuildListItemRowOptions {
   itemCategories?: CategoryLinkRow[]
   itemTags?: TagLinkRow[]
   customName?: string | null
+  customUrl?: string | null
 }
 
 function buildListItemRow(
@@ -166,6 +168,7 @@ function buildListItemRow(
     sortOrder,
     creatorNote: null,
     customName: options.customName ?? null,
+    customUrl: options.customUrl ?? null,
     createdAt: new Date('2024-01-01'),
     updatedAt: new Date('2024-01-01'),
     item: {
@@ -483,6 +486,26 @@ describe('GET /v1/admin/lists/:id/items', () => {
     expect(response.status).toBe(200)
     expect(body.items.map((listItem) => listItem.customName)).toEqual([customName, null])
     expect(body.items[0]?.item.name).toBe(ITEM_ROW.name)
+  })
+
+  it('returns the per-list customUrl without adding it to the item sources', async () => {
+    const customUrl = 'https://tiny-shop.example/product/42'
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindListById(LIST_ROW)
+    mockFindListItems([
+      buildListItemRow('00000000-0000-0000-0000-0000000000d1', null, [], { customUrl }),
+      LIST_ITEM_WITHOUT_SOURCES,
+    ])
+    mockCountChain(2)
+
+    const response = await apiRequest(`/v1/admin/lists/${LIST_ROW.id}/items`, { token })
+
+    const body = adminListsListItemsResponseSchema.parse(await response.json())
+    expect(response.status).toBe(200)
+    expect(body.items.map((listItem) => listItem.customUrl)).toEqual([customUrl, null])
+    expect(body.items[0]?.sources).toEqual([])
+    expect(body.items[0]?.item.sources).toEqual([])
   })
 
   it('honours pagination query (page=2, limit=1)', async () => {
