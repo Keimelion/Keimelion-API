@@ -24,8 +24,13 @@ export async function insertListUser(
   return row
 }
 
-export async function deleteListEditor(listId: string, userId: string): Promise<ListUser | undefined> {
-  const [row] = await db
+export async function deleteListEditor(
+  listId: string,
+  userId: string,
+  tx?: DbOrTx,
+): Promise<ListUser | undefined> {
+  const executor = tx ?? db
+  const [row] = await executor
     .delete(listUsers)
     .where(
       and(

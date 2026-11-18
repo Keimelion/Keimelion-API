@@ -155,7 +155,8 @@ export async function deleteExpiredPendingListInvites(
 }
 
 // Declined and revoked rows carry the invitee's email with no further purpose: purged once
-// their resolution (updatedAt) is older than the caller's cutoff. Accepted rows are kept.
+// their resolution (updatedAt) is older than the caller's cutoff. Accepted rows go with the
+// membership (see deleteAcceptedListInvitesForUser).
 export async function deleteResolvedListInvitesOlderThan(cutoff: Date): Promise<number> {
   const deleted = await db
     .delete(listInvites)
@@ -167,6 +168,25 @@ export async function deleteResolvedListInvitesOlderThan(cutoff: Date): Promise<
     )
     .returning({ id: listInvites.id })
   return deleted.length
+}
+
+// Once the membership is gone (removed or left), the accepted invite only retains the
+// invitee's email: deleted alongside the list_users row.
+export async function deleteAcceptedListInvitesForUser(
+  listId: string,
+  userId: string,
+  tx?: DbOrTx,
+): Promise<void> {
+  const executor = tx ?? db
+  await executor
+    .delete(listInvites)
+    .where(
+      and(
+        eq(listInvites.listId, listId),
+        eq(listInvites.acceptedByUserId, userId),
+        eq(listInvites.inviteStatus, InviteStatuses.ACCEPTED),
+      ),
+    )
 }
 
 function buildInviteWhere(filters: ListInviteFilters): SQL | undefined {

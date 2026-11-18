@@ -7,6 +7,8 @@ import { sendMail } from '../../shared/mail/mail.sender.js'
 import { apiRequest } from '../../shared/test/api-request.js'
 import { generateTestToken, makeAccessTokenEntry } from '../../shared/test/auth.js'
 import { logger } from '../../shared/utils/logger.js'
+import { listInvites } from '../../db/entities/list-invites/list-invites.schema.js'
+import { listUsers } from '../../db/entities/list-users/list-users.schema.js'
 import {
   collaboratorsAcceptInviteResponseSchema,
   collaboratorsCreateInviteResponseSchema,
@@ -1031,7 +1033,7 @@ describe('DELETE /v1/lists/:id/collaborators/:userId', () => {
     vi.clearAllMocks()
   })
 
-  it('returns 204, deletes the editor membership and never touches the invite row', async () => {
+  it('returns 204, deletes the editor membership and its accepted invite in one transaction', async () => {
     const token = await generateTestToken(OWNER_USER.id)
     mockOwnerAuth()
     mockListWithOwnerAndEditor()
@@ -1040,7 +1042,8 @@ describe('DELETE /v1/lists/:id/collaborators/:userId', () => {
     const response = await apiRequest(REMOVE_PATH, { method: 'DELETE', token })
 
     expect(response.status).toBe(204)
-    expect(vi.mocked(db.delete)).toHaveBeenCalledOnce()
+    expect(vi.mocked(db.transaction)).toHaveBeenCalledOnce()
+    expect(vi.mocked(db.delete).mock.calls.map(([table]) => table)).toEqual([listUsers, listInvites])
     expect(vi.mocked(db.update)).not.toHaveBeenCalled()
     expect(logger.info).toHaveBeenCalledWith(
       { ownerId: OWNER_USER.id, listId: LIST_ID, editorId: INVITEE_USER.id },
@@ -1062,6 +1065,7 @@ describe('DELETE /v1/lists/:id/collaborators/:userId', () => {
     const body = await response.json() as { code: string }
     expect(response.status).toBe(404)
     expect(body.code).toBe('COLLAB_MEMBER_NOT_FOUND')
+    expect(vi.mocked(db.delete).mock.calls.map(([table]) => table)).toEqual([listUsers])
   })
 
   it('returns 403 when the editor calls remove', async () => {
@@ -1107,7 +1111,8 @@ describe('DELETE /v1/lists/:id/collaborators/me', () => {
     const response = await apiRequest(LEAVE_PATH, { method: 'DELETE', token })
 
     expect(response.status).toBe(204)
-    expect(vi.mocked(db.delete)).toHaveBeenCalledOnce()
+    expect(vi.mocked(db.transaction)).toHaveBeenCalledOnce()
+    expect(vi.mocked(db.delete).mock.calls.map(([table]) => table)).toEqual([listUsers, listInvites])
     expect(vi.mocked(db.update)).not.toHaveBeenCalled()
     expect(logger.info).toHaveBeenCalledWith(
       { editorId: INVITEE_USER.id, listId: LIST_ID },
@@ -1139,7 +1144,7 @@ describe('DELETE /v1/lists/:id/collaborators/me', () => {
     expect(vi.mocked(db.delete)).not.toHaveBeenCalled()
   })
 
-  it('returns 403 when a concurrent remove already deleted the membership', async () => {
+  it('returns 404 COLLAB_MEMBER_NOT_FOUND when a concurrent remove already deleted the membership', async () => {
     const token = await generateTestToken(INVITEE_USER.id)
     mockInviteeAuth()
     mockListWithOwnerAndEditor()
@@ -1147,7 +1152,10 @@ describe('DELETE /v1/lists/:id/collaborators/me', () => {
 
     const response = await apiRequest(LEAVE_PATH, { method: 'DELETE', token })
 
-    expect(response.status).toBe(403)
+    const body = await response.json() as { code: string }
+    expect(response.status).toBe(404)
+    expect(body.code).toBe('COLLAB_MEMBER_NOT_FOUND')
+    expect(vi.mocked(db.delete).mock.calls.map(([table]) => table)).toEqual([listUsers])
   })
 
   it('returns 401 without auth', async () => {

@@ -7,7 +7,8 @@ import { ONE_DAY_MS } from '../../shared/utils/time.js'
 import { createCronJob } from '../create-cron-job.js'
 
 // GDPR data minimisation: a declined or revoked invite keeps the invitee's email for 30 days
-// after its resolution, then the row is deleted. Accepted rows are kept as membership history.
+// after its resolution, then the row is deleted. Accepted rows live as long as the membership
+// (deleted on remove / leave).
 const RESOLVED_INVITE_RETENTION_DAYS = 30
 
 async function runListInviteCleanup(): Promise<number> {

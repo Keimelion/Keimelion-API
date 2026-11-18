@@ -18,6 +18,7 @@ import {
 } from '../../db/entities/list-users/list-users.repository.js'
 import { findUserByIdWithAvatar } from '../../db/entities/users/users.repository.js'
 import {
+  deleteAcceptedListInvitesForUser,
   deleteExpiredPendingListInvites,
   findInviteByIdForList,
   findInviteByTokenHash,
@@ -193,13 +194,12 @@ export async function revokeListInvite(
   return { data: null, httpStatus: HttpStatus.NO_CONTENT }
 }
 
-// The historical invite row stays `accepted`: only the membership is deleted.
 export async function removeListCollaborator(
   ownerId: string,
   listId: string,
   userId: string,
 ): Promise<ServiceResult<null>> {
-  const removed = await deleteListEditor(listId, userId)
+  const removed = await deleteEditorMembership(listId, userId)
   if (!removed) return serviceError(ErrorCode.COLLAB_MEMBER_NOT_FOUND)
 
   logCollaboratorRemoved(ownerId, listId, userId)
@@ -209,8 +209,9 @@ export async function removeListCollaborator(
 export async function leaveList(list: ListRowWithOwner, userId: string): Promise<ServiceResult<null>> {
   if (isListOwner(list.listUsers, userId)) return serviceError(ErrorCode.COLLAB_OWNER_CANNOT_LEAVE)
 
-  const left = await deleteListEditor(list.id, userId)
-  if (!left) return serviceError(ErrorCode.FORBIDDEN)
+  // Only reachable when a concurrent remove deleted the membership after the access check.
+  const left = await deleteEditorMembership(list.id, userId)
+  if (!left) return serviceError(ErrorCode.COLLAB_MEMBER_NOT_FOUND)
 
   logCollaboratorLeft(userId, list.id)
   return { data: null, httpStatus: HttpStatus.NO_CONTENT }
@@ -240,6 +241,17 @@ function sendListInvitationEmail(delivery: ListInvitationDelivery): void {
       validityDays: COLLAB_INVITE_TTL_DAYS,
     }),
   }))
+}
+
+// The accepted invite row goes with the membership (GDPR minimisation): once the editor is
+// removed or leaves, it only retains the invitee's email.
+function deleteEditorMembership(listId: string, userId: string): Promise<boolean> {
+  return db.transaction(async (tx) => {
+    const removed = await deleteListEditor(listId, userId, tx)
+    if (!removed) return false
+    await deleteAcceptedListInvitesForUser(listId, userId, tx)
+    return true
+  })
 }
 
 async function findPendingInviteByToken(token: string): Promise<PendingInviteLookup> {
