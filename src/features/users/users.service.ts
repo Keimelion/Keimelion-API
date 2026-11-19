@@ -17,6 +17,7 @@ import { cleanupReplacedImage, processOptionalImage, runWithImageRollback } from
 import {
   findFeedbackByUser,
   findImagesByUploaderForExport,
+  findItemContributionsByUser,
   findItemsByCreator,
   findItemSourcesByCreator,
   findListInvitesForExport,
@@ -41,6 +42,7 @@ import { toImageDetail } from '../uploads/images.mapper.js'
 import { buildExportZipStream } from './export/csv-archive-writer.js'
 import {
   EXPORT_ENTITY_REGISTRY,
+  toExportItemContributionRow,
   toExportItemSourceRow,
   toExportListInviteRow,
   toExportListRow,
@@ -228,6 +230,7 @@ export async function exportUserData(userId: string, format: UsersExportQueryPar
   const [
     rawItems,
     rawItemSources,
+    rawItemContributions,
     rawListItems,
     rawLists,
     rawTags,
@@ -241,6 +244,7 @@ export async function exportUserData(userId: string, format: UsersExportQueryPar
   ] = await Promise.all([
     findItemsByCreator(userId),
     findItemSourcesByCreator(userId),
+    findItemContributionsByUser(userId),
     findListItemsForContributor(userId),
     findListsOwnedByForExport(userId),
     findTagsCreatedByUser(userId),
@@ -259,6 +263,7 @@ export async function exportUserData(userId: string, format: UsersExportQueryPar
       profile,
       items: rawItems.map(toItemDetail),
       itemSources: rawItemSources.map(toExportItemSourceRow),
+      itemContributions: rawItemContributions.map(toExportItemContributionRow),
       listItems: rawListItems.map((row) => toListItemDetail(row)),
       lists: rawLists.map(toExportListRow),
       tags: rawTags.map(toTagDetail),

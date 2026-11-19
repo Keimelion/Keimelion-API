@@ -4,6 +4,7 @@ import { feedback } from '../../../db/entities/feedback/feedback.schema.js'
 import { images } from '../../../db/entities/images/images.schema.js'
 import { items } from '../../../db/entities/items/items.schema.js'
 import { itemSources } from '../../../db/entities/item-sources/item-sources.schema.js'
+import { itemContributions } from '../../../db/entities/item-contributions/item-contributions.schema.js'
 import { listUsers } from '../../../db/entities/list-users/list-users.schema.js'
 import { listInvites } from '../../../db/entities/list-invites/list-invites.schema.js'
 import { listItems } from '../../../db/entities/list-items/list-items.schema.js'
@@ -19,6 +20,7 @@ import type { Image } from '../../../db/entities/images/images.schema.js'
 import { resolveListItemName } from '../../../shared/types/item.js'
 import type { ItemRowWithImage } from '../../../shared/types/item.js'
 import type { ItemSource } from '../../../db/entities/item-sources/item-sources.schema.js'
+import type { ItemContribution } from '../../../db/entities/item-contributions/item-contributions.schema.js'
 import type { ListUser } from '../../../db/entities/list-users/list-users.schema.js'
 import type { ListInvite } from '../../../db/entities/list-invites/list-invites.schema.js'
 import type { ListItem } from '../../../db/entities/list-items/list-items.schema.js'
@@ -37,6 +39,19 @@ export async function findItemsByCreator(userId: string): Promise<ItemRowWithIma
 export async function findItemSourcesByCreator(userId: string): Promise<ItemSource[]> {
   return db.query.itemSources.findMany({
     where: eq(itemSources.createdByUserId, userId),
+  })
+}
+
+export type ItemContributionExportSourceRow = Pick<
+  ItemContribution,
+  'id' | 'itemId' | 'action' | 'changes' | 'createdAt'
+>
+
+export async function findItemContributionsByUser(userId: string): Promise<ItemContributionExportSourceRow[]> {
+  return db.query.itemContributions.findMany({
+    where: eq(itemContributions.userId, userId),
+    columns: { id: true, itemId: true, action: true, changes: true, createdAt: true },
+    orderBy: desc(itemContributions.createdAt),
   })
 }
 

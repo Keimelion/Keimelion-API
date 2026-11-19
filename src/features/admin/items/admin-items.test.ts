@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { PgDialect } from 'drizzle-orm/pg-core'
+import type { SQL } from 'drizzle-orm'
 import { db } from '../../../db/client.js'
 import { apiMultipartRequest, apiRequest } from '../../../shared/test/api-request.js'
 import { generateTestToken, makeAccessTokenEntry } from '../../../shared/test/auth.js'
@@ -16,6 +18,7 @@ import {
 } from '@keimelion/sdk/schemas'
 import { images } from '../../../db/entities/images/images.schema.js'
 import { ITEMS_GTIN_UNIQUE_INDEX } from '../../../db/entities/items/items.schema.js'
+import { itemContributions } from '../../../db/entities/item-contributions/item-contributions.schema.js'
 import {
   ITEM_SOURCES_ITEM_SHOP_UNIQUE_INDEX,
   ITEM_SOURCES_SOURCE_URL_UNIQUE_INDEX,
@@ -152,6 +155,23 @@ function mockFindItemById(row: unknown): void {
   vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(row as never)
 }
 
+function mockLockedItem(row: unknown): void {
+  vi.mocked(db.select).mockReturnValueOnce(buildLockedItemChain(row) as never)
+}
+
+function buildLockedItemChain(row: unknown): object {
+  return {
+    from: vi.fn().mockReturnThis(),
+    where: vi.fn().mockReturnThis(),
+    for: vi.fn().mockResolvedValueOnce([row]),
+  }
+}
+
+function mockExistingItem(row: unknown): void {
+  mockFindItemById(row)
+  mockLockedItem(row)
+}
+
 function mockFindItemSourceById(row: unknown): void {
   vi.mocked(db.query.itemSources.findFirst).mockResolvedValueOnce(row as never)
 }
@@ -253,7 +273,7 @@ function mockPatchTagsTransaction(tagRows: (typeof TAG_ONE)[]): void {
         }),
       }),
       delete: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) }),
-      select: vi.fn(),
+      select: vi.fn().mockReturnValueOnce(buildLockedItemChain(ITEM_ROW)),
       query: { tags: { findMany: vi.fn().mockResolvedValue(tagRows) } },
     }
     return callback(tx as never)
@@ -973,6 +993,37 @@ describe('GET /v1/admin/items', () => {
 })
 
 describe('GET /v1/admin/items/:id', () => {
+  const CONTRIBUTOR = { id: '00000000-0000-0000-0000-000000000060', username: 'filler' }
+  const NEWEST_CONTRIBUTION = {
+    id: '00000000-0000-0000-0000-000000000061',
+    itemId: ITEM_ROW.id,
+    userId: ADMIN_USER.id,
+    action: 'admin_update' as const,
+    changes: { name: { from: 'Old name', to: 'Test Item' } },
+    createdAt: new Date('2024-03-01'),
+    user: { id: ADMIN_USER.id, username: ADMIN_USER.username },
+  }
+  const OLDER_CONTRIBUTION = {
+    id: '00000000-0000-0000-0000-000000000062',
+    itemId: ITEM_ROW.id,
+    userId: CONTRIBUTOR.id,
+    action: 'fill' as const,
+    changes: { description: { from: null, to: 'A test item' } },
+    createdAt: new Date('2024-02-01'),
+    user: CONTRIBUTOR,
+  }
+  const DELETED_USER_CONTRIBUTION = {
+    ...OLDER_CONTRIBUTION,
+    id: '00000000-0000-0000-0000-000000000063',
+    userId: null,
+    createdAt: new Date('2024-01-15'),
+    user: null,
+  }
+
+  function itemWithContributions(sources: SourceRow[], contributions: object[] = []): object {
+    return { ...itemWith(sources), contributions }
+  }
+
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
@@ -981,7 +1032,7 @@ describe('GET /v1/admin/items/:id', () => {
   it('returns 200 with item, sources and reservationCount', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
-    mockFindItemById(itemWith([SOURCE_ROW]))
+    mockFindItemById(itemWithContributions([SOURCE_ROW]))
     mockReservationCountsByItemIds(new Map([[ITEM_ROW.id, 3]]))
 
     const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}`, { token })
@@ -991,6 +1042,7 @@ describe('GET /v1/admin/items/:id', () => {
         name: string
         sources: unknown[]
         reservationCount: number
+        contributions: unknown[]
       }
     }
     adminItemsGetResponseSchema.parse(body)
@@ -999,12 +1051,81 @@ describe('GET /v1/admin/items/:id', () => {
     expect(body.item.sources).toHaveLength(1)
     expect(body.item.reservationCount).toBe(3)
     expect(body.item).not.toHaveProperty('reservations')
+    expect(body.item.contributions).toEqual([])
+  })
+
+  it('embeds the contributions newest first with the contributor id and username', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindItemById(
+      itemWithContributions([], [NEWEST_CONTRIBUTION, OLDER_CONTRIBUTION, DELETED_USER_CONTRIBUTION]),
+    )
+    mockReservationCountsByItemIds()
+
+    const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}`, { token })
+
+    const body = adminItemsGetResponseSchema.parse(await response.json())
+    expect(response.status).toBe(200)
+    expect(body.item.createdByUserId).toBeNull()
+    expect(body.item.contributions).toEqual([
+      {
+        id: NEWEST_CONTRIBUTION.id,
+        action: 'admin_update',
+        changes: NEWEST_CONTRIBUTION.changes,
+        user: { id: ADMIN_USER.id, username: ADMIN_USER.username },
+        createdAt: NEWEST_CONTRIBUTION.createdAt,
+      },
+      {
+        id: OLDER_CONTRIBUTION.id,
+        action: 'fill',
+        changes: OLDER_CONTRIBUTION.changes,
+        user: CONTRIBUTOR,
+        createdAt: OLDER_CONTRIBUTION.createdAt,
+      },
+      {
+        id: DELETED_USER_CONTRIBUTION.id,
+        action: 'fill',
+        changes: DELETED_USER_CONTRIBUTION.changes,
+        user: null,
+        createdAt: DELETED_USER_CONTRIBUTION.createdAt,
+      },
+    ])
+  })
+
+  it('loads the contributions newest first in the item query with only the user id and username', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindItemById(itemWithContributions([]))
+    mockReservationCountsByItemIds()
+
+    await apiRequest(`/v1/admin/items/${ITEM_ROW.id}`, { token })
+
+    const query = vi.mocked(db.query.items.findFirst).mock.calls[0]?.[0] as {
+      with: { contributions: { orderBy: SQL[]; with: { user: { columns: Record<string, boolean> } } } }
+    }
+    const orderBy = query.with.contributions.orderBy.map((clause) => new PgDialect().sqlToQuery(clause).sql)
+    expect(orderBy).toEqual(['"item_contributions"."created_at" desc', '"item_contributions"."id" desc'])
+    expect(query.with.contributions.with.user.columns).toEqual({ id: true, username: true })
+  })
+
+  it('does not embed the contributions in the paginated admin items list', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    vi.mocked(db.query.items.findMany).mockResolvedValueOnce([itemWith([])] as never)
+    mockCountChain(1)
+    mockReservationCountsByItemIds()
+
+    const response = await apiRequest('/v1/admin/items', { token })
+
+    const body = await response.json() as { items: Record<string, unknown>[] }
+    expect(response.status).toBe(200)
+    expect(body.items[0]).not.toHaveProperty('contributions')
   })
 
   it('does not expose deletedAt on item', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
-    mockFindItemById(itemWith([]))
+    mockFindItemById(itemWithContributions([]))
     mockReservationCountsByItemIds()
 
     const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}`, { token })
@@ -1046,6 +1167,15 @@ describe('GET /v1/admin/items/:id', () => {
 })
 
 describe('PATCH /v1/admin/items/:id', () => {
+  const PATCH_EAN_13 = '4006381333931'
+  const PATCH_PADDED_GTIN = '04006381333931'
+
+  function mockInsertContribution(): ReturnType<typeof vi.fn> {
+    const values = vi.fn().mockResolvedValue(undefined)
+    vi.mocked(db.insert).mockReturnValueOnce({ values } as never)
+    return values
+  }
+
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
@@ -1054,7 +1184,7 @@ describe('PATCH /v1/admin/items/:id', () => {
   it('returns 200 with updated item (with sources) when patching name', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
-    mockFindItemById(ITEM_ROW)
+    mockExistingItem(ITEM_ROW)
     mockUpdateItem({ ...ITEM_ROW, name: 'Updated Name' })
     mockFindItemById({ ...itemWith([SOURCE_ROW]), name: 'Updated Name' })
 
@@ -1069,6 +1199,112 @@ describe('PATCH /v1/admin/items/:id', () => {
     expect(response.status).toBe(200)
     expect(body.item.name).toBe('Updated Name')
     expect(body.item.sources).toHaveLength(1)
+  })
+
+  it('logs one admin_update contribution with the admin id and the from/to of the changed fields', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockExistingItem(ITEM_ROW)
+    mockUpdateItem({ ...ITEM_ROW, name: 'Updated Name', gtin: PATCH_PADDED_GTIN })
+    const contributionValues = mockInsertContribution()
+    mockFindItemById({ ...itemWith([]), name: 'Updated Name', gtin: PATCH_PADDED_GTIN })
+
+    const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}`, {
+      method: 'PATCH',
+      token,
+      body: { name: 'Updated Name', description: ITEM_ROW.description, gtin: PATCH_EAN_13 },
+    })
+
+    expect(response.status).toBe(200)
+    expect(vi.mocked(db.insert)).toHaveBeenCalledWith(itemContributions)
+    expect(contributionValues).toHaveBeenCalledTimes(1)
+    expect(contributionValues).toHaveBeenCalledWith({
+      itemId: ITEM_ROW.id,
+      userId: ADMIN_USER.id,
+      action: 'admin_update',
+      changes: {
+        name: { from: 'Test Item', to: 'Updated Name' },
+        gtin: { from: null, to: PATCH_PADDED_GTIN },
+      },
+    })
+  })
+
+  it('takes the from values of the admin_update from the row locked in the transaction', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindItemById({ ...ITEM_ROW, description: null })
+    mockLockedItem({ ...ITEM_ROW, description: 'Filled concurrently' })
+    mockUpdateItem({ ...ITEM_ROW, description: 'Moderated' })
+    const contributionValues = mockInsertContribution()
+    mockFindItemById({ ...itemWith([]), description: 'Moderated' })
+
+    const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}`, {
+      method: 'PATCH',
+      token,
+      body: { description: 'Moderated' },
+    })
+
+    expect(response.status).toBe(200)
+    expect(contributionValues).toHaveBeenCalledWith(expect.objectContaining({
+      changes: { description: { from: 'Filled concurrently', to: 'Moderated' } },
+    }))
+  })
+
+  it('logs nothing when the PATCH sets every field to its current value', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockExistingItem(ITEM_ROW)
+    mockUpdateItem(ITEM_ROW)
+    mockFindItemById(itemWith([]))
+
+    const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}`, {
+      method: 'PATCH',
+      token,
+      body: { name: ITEM_ROW.name, description: ITEM_ROW.description, gtin: null },
+    })
+
+    expect(response.status).toBe(200)
+    expect(vi.mocked(db.insert)).not.toHaveBeenCalledWith(itemContributions)
+  })
+
+  it('logs nothing on a categories-only PATCH', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockExistingItem(ITEM_ROW)
+    vi.mocked(db.query.categories.findMany).mockResolvedValueOnce([CATEGORY_ONE] as never)
+    vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(itemWithCategoryLinks([CATEGORY_ONE]))
+
+    const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}`, {
+      method: 'PATCH',
+      token,
+      body: { categories: [CATEGORY_ONE.id] },
+    })
+
+    expect(response.status).toBe(200)
+    expect(vi.mocked(db.update)).not.toHaveBeenCalled()
+    expect(vi.mocked(db.insert)).not.toHaveBeenCalledWith(itemContributions)
+  })
+
+  it('logs nothing and returns 409 when the PATCH write fails on the GTIN unique index', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockExistingItem(ITEM_ROW)
+    vi.mocked(db.update).mockReturnValueOnce({
+      set: vi.fn().mockReturnValueOnce({
+        where: vi.fn().mockReturnValueOnce({
+          returning: vi.fn().mockRejectedValueOnce(pgError(UNIQUE_VIOLATION, ITEMS_GTIN_UNIQUE_INDEX)),
+        }),
+      }),
+    } as never)
+
+    const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}`, {
+      method: 'PATCH',
+      token,
+      body: { gtin: PATCH_EAN_13 },
+    })
+
+    expect(response.status).toBe(409)
+    expect(vi.mocked(db.insert)).not.toHaveBeenCalledWith(itemContributions)
   })
 
   it('returns 422 when body is empty (no fields)', async () => {
@@ -1163,7 +1399,7 @@ describe('PATCH /v1/admin/items/:id', () => {
   it('replaces categories when categories are provided', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
-    mockFindItemById(ITEM_ROW)
+    mockExistingItem(ITEM_ROW)
     vi.mocked(db.query.categories.findMany).mockResolvedValueOnce([CATEGORY_ONE, CATEGORY_TWO] as never)
     vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(
       itemWithCategoryLinks([CATEGORY_ONE, CATEGORY_TWO]),
@@ -1185,7 +1421,7 @@ describe('PATCH /v1/admin/items/:id', () => {
   it('clears all categories when categories: [] is sent', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
-    mockFindItemById(ITEM_ROW)
+    mockExistingItem(ITEM_ROW)
     vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(itemWithCategoryLinks([]))
 
     const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}`, {
@@ -1219,7 +1455,7 @@ describe('PATCH /v1/admin/items/:id', () => {
   it('accepts a categories-only patch (no scalar fields)', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
-    mockFindItemById(ITEM_ROW)
+    mockExistingItem(ITEM_ROW)
     vi.mocked(db.query.categories.findMany).mockResolvedValueOnce([CATEGORY_ONE] as never)
     vi.mocked(db.query.items.findFirst).mockResolvedValueOnce(
       itemWithCategoryLinks([CATEGORY_ONE]),
@@ -2065,7 +2301,7 @@ describe('admin items — image upload', () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
     const updatedRow = { ...ITEM_ROW, imageId: NEW_IMAGE_ROW.id }
-    mockFindItemById({ ...ITEM_ROW, imageId: PREVIOUS_IMAGE_ID })
+    mockExistingItem({ ...ITEM_ROW, imageId: PREVIOUS_IMAGE_ID })
     mockUpdateItem(updatedRow)
     mockFindItemById({ ...itemWith([]), imageId: NEW_IMAGE_ROW.id, image: NEW_IMAGE_ROW })
 
@@ -2076,12 +2312,18 @@ describe('admin items — image upload', () => {
     expect(body.item.imageId).toBe(NEW_IMAGE_ROW.id)
     expect(vi.mocked(db.delete)).toHaveBeenCalledTimes(1)
     expect(vi.mocked(db.delete)).toHaveBeenCalledWith(images)
+    const contributionValues = vi.mocked(db.insert).mock.results[0]?.value as { values: ReturnType<typeof vi.fn> }
+    expect(vi.mocked(db.insert)).toHaveBeenCalledWith(itemContributions)
+    expect(contributionValues.values).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'admin_update',
+      changes: { imageId: { from: PREVIOUS_IMAGE_ID, to: NEW_IMAGE_ROW.id } },
+    }))
   })
 
   it('clears the image with clearImage=true and deletes the previous images row', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
-    mockFindItemById({ ...ITEM_ROW, imageId: PREVIOUS_IMAGE_ID })
+    mockExistingItem({ ...ITEM_ROW, imageId: PREVIOUS_IMAGE_ID })
     mockUpdateItem(ITEM_ROW)
     mockFindItemById(itemWith([]))
 
@@ -2776,7 +3018,7 @@ describe('admin items — gtin and source URL uniqueness', () => {
   it('corrects the gtin on PATCH /v1/admin/items/:id', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
-    mockFindItemById(ITEM_ROW)
+    mockExistingItem(ITEM_ROW)
     const set = vi.fn().mockReturnValueOnce({
       where: vi.fn().mockReturnValueOnce({
         returning: vi.fn().mockResolvedValueOnce([{ ...ITEM_ROW, gtin: PADDED_GTIN }]),
@@ -2800,7 +3042,7 @@ describe('admin items — gtin and source URL uniqueness', () => {
   it('clears the gtin with null on PATCH /v1/admin/items/:id', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
-    mockFindItemById({ ...ITEM_ROW, gtin: PADDED_GTIN })
+    mockExistingItem({ ...ITEM_ROW, gtin: PADDED_GTIN })
     const set = vi.fn().mockReturnValueOnce({
       where: vi.fn().mockReturnValueOnce({ returning: vi.fn().mockResolvedValueOnce([ITEM_ROW]) }),
     })
@@ -2820,7 +3062,7 @@ describe('admin items — gtin and source URL uniqueness', () => {
   it('returns 409 CONFLICT when the corrected gtin is held by another item', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()
-    mockFindItemById(ITEM_ROW)
+    mockExistingItem(ITEM_ROW)
     vi.mocked(db.update).mockReturnValueOnce({
       set: vi.fn().mockReturnValueOnce({
         where: vi.fn().mockReturnValueOnce({

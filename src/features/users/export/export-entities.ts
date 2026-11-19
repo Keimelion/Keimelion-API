@@ -2,6 +2,7 @@ import { findUserByIdWithAvatar } from '../../../db/entities/users/users.reposit
 import {
   findFeedbackByUser,
   findImagesByUploaderForExport,
+  findItemContributionsByUser,
   findItemsByCreator,
   findItemSourcesByCreator,
   findListInvitesForExport,
@@ -13,7 +14,7 @@ import {
   findReservationsForExport,
   findTagsCreatedByUser,
 } from './rgpd-export.repository.js'
-import type { ReportExportSourceRow } from './rgpd-export.repository.js'
+import type { ItemContributionExportSourceRow, ReportExportSourceRow } from './rgpd-export.repository.js'
 import { toUserDetail } from '../../../shared/types/user.js'
 import { toFeedbackDetail } from '../../../shared/types/feedback.js'
 import { toItemDetail, toItemSourceDetailWithoutShop, toListItemDetail } from '../../../shared/types/item.js'
@@ -27,8 +28,10 @@ import type { ListTag } from '../../../db/entities/list-tags/list-tags.schema.js
 import type { ListDetailWithoutCollaborators } from '../../../shared/types/list.js'
 import type { ItemSource } from '../../../db/entities/item-sources/item-sources.schema.js'
 import type { ItemSourceDetail } from '../../../shared/types/item.js'
+import type { ItemContributionChangesParsed } from '@keimelion/sdk/schemas'
 import type {
   InviteStatus,
+  ItemContributionAction,
   ListUserRole,
   ReportReason,
   ReportStatus,
@@ -99,6 +102,24 @@ export function toExportReportRow(row: ReportExportSourceRow): ExportReportRow {
     reason: row.reason,
     description: row.description,
     status: row.reportStatus,
+    createdAt: row.createdAt,
+  }
+}
+
+export interface ExportItemContributionRow {
+  id: string
+  itemId: string
+  action: ItemContributionAction
+  changes: ItemContributionChangesParsed
+  createdAt: Date
+}
+
+export function toExportItemContributionRow(row: ItemContributionExportSourceRow): ExportItemContributionRow {
+  return {
+    id: row.id,
+    itemId: row.itemId,
+    action: row.action,
+    changes: row.changes,
     createdAt: row.createdAt,
   }
 }
@@ -207,6 +228,15 @@ const itemSourcesEntityDescriptor: ExportEntityDescriptor = {
   fetchRows: async (userId: string) => {
     const sources = await findItemSourcesByCreator(userId)
     return sources.map(toExportItemSourceRow)
+  },
+}
+
+const itemContributionsEntityDescriptor: ExportEntityDescriptor = {
+  filename: 'item-contributions.csv',
+  columns: ['id', 'itemId', 'action', 'changes', 'createdAt'],
+  fetchRows: async (userId: string) => {
+    const rows = await findItemContributionsByUser(userId)
+    return rows.map(toExportItemContributionRow)
   },
 }
 
@@ -366,6 +396,7 @@ export const EXPORT_ENTITY_REGISTRY: ExportEntityDescriptor[] = [
   profileEntityDescriptor,
   itemsEntityDescriptor,
   itemSourcesEntityDescriptor,
+  itemContributionsEntityDescriptor,
   listItemsEntityDescriptor,
   listsEntityDescriptor,
   tagsEntityDescriptor,

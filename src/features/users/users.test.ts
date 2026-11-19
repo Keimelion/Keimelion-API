@@ -5,7 +5,8 @@ import { apiMultipartRequest, apiRequest } from '../../shared/test/api-request.j
 import { generateTestToken, makeAccessTokenEntry } from '../../shared/test/auth.js'
 import { EXPORT_ENTITY_REGISTRY } from './export/export-entities.js'
 import type { ExportEntityDescriptor } from './export/export-entities.js'
-import { PgDialect } from 'drizzle-orm/pg-core'
+import { getTableConfig, PgDialect } from 'drizzle-orm/pg-core'
+import { itemContributions } from '../../db/entities/item-contributions/item-contributions.schema.js'
 import type { SQL } from 'drizzle-orm'
 import {
   messageResponseSchema,
@@ -2129,5 +2130,88 @@ describe('GET /v1/users/me/export — reports', () => {
       status: 'upheld',
       createdAt: REPORT_ROW.createdAt,
     }])
+  })
+})
+
+describe('GET /v1/users/me/export — item contributions', () => {
+  const ITEM_ID = '00000000-0000-0000-0000-00000000f101'
+  const CONTRIBUTION_ROW = {
+    id: '00000000-0000-0000-0000-00000000f001',
+    itemId: ITEM_ID,
+    action: 'fill' as const,
+    changes: { description: { from: null, to: 'Filled by the user' } },
+    createdAt: new Date('2024-08-01'),
+  }
+  const EXPECTED_EXPORT_KEYS = ['id', 'itemId', 'action', 'changes', 'createdAt']
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(db.query.accessTokens.findFirst).mockResolvedValue(ACCESS_TOKEN_ENTRY)
+  })
+
+  it('includes an itemContributions key with the contributions of the user, without user_id', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    vi.mocked(db.query.itemContributions.findMany).mockResolvedValueOnce([CONTRIBUTION_ROW] as never)
+
+    const response = await apiRequest('/v1/users/me/export?format=json', { token })
+
+    expect(response.status).toBe(200)
+    const body = await response.json() as { itemContributions: Record<string, unknown>[] }
+    expect(body.itemContributions).toEqual([
+      {
+        id: CONTRIBUTION_ROW.id,
+        itemId: ITEM_ID,
+        action: 'fill',
+        changes: CONTRIBUTION_ROW.changes,
+        createdAt: CONTRIBUTION_ROW.createdAt.toISOString(),
+      },
+    ])
+  })
+
+  it('scopes the item contributions export to the caller and selects only the allow-listed columns', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)
+
+    await apiRequest('/v1/users/me/export?format=json', { token })
+
+    const exportQuery = vi.mocked(db.query.itemContributions.findMany).mock.calls[0]?.[0]
+    const whereClause = new PgDialect().sqlToQuery(exportQuery?.where as SQL)
+    expect(whereClause.sql).toBe('"item_contributions"."user_id" = $1')
+    expect(whereClause.params).toEqual([SAFE_USER.id])
+    expect(Object.keys(exportQuery?.columns ?? {}).sort()).toEqual([...EXPECTED_EXPORT_KEYS].sort())
+  })
+
+  it('registers item-contributions.csv with the exact allow-list required by RGPD', () => {
+    const descriptor = EXPORT_ENTITY_REGISTRY.find((entry) => entry.filename === 'item-contributions.csv')
+    expect(descriptor?.columns).toEqual(EXPECTED_EXPORT_KEYS)
+  })
+
+  it('maps item-contributions.csv rows through the allow-list mapper', async () => {
+    const descriptor = EXPORT_ENTITY_REGISTRY.find((entry) => entry.filename === 'item-contributions.csv')
+    vi.mocked(db.query.itemContributions.findMany).mockResolvedValueOnce([
+      { ...CONTRIBUTION_ROW, userId: SAFE_USER.id },
+    ] as never)
+
+    const rows = await (descriptor as { fetchRows: (userId: string) => Promise<object[]> }).fetchRows(SAFE_USER.id)
+
+    expect(rows).toEqual([CONTRIBUTION_ROW])
+  })
+})
+
+describe('item_contributions table lifecycle guarantees', () => {
+  const { foreignKeys } = getTableConfig(itemContributions)
+  const foreignKeyByColumn = new Map(
+    foreignKeys.map((foreignKey) => [foreignKey.reference().columns[0]?.name, foreignKey.onDelete]),
+  )
+
+  it('keeps the contributions with user_id null when the contributor is hard-deleted', () => {
+    expect(foreignKeyByColumn.get('user_id')).toBe('set null')
+  })
+
+  it('deletes the contributions with their item', () => {
+    expect(foreignKeyByColumn.get('item_id')).toBe('cascade')
   })
 })

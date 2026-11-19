@@ -1,6 +1,6 @@
 import type { DbTransaction } from '../../db/client.js'
 import { db } from '../../db/client.js'
-import { ErrorCode, HttpStatus, ItemStatuses } from '@keimelion/sdk/enums'
+import { ErrorCode, HttpStatus, ItemContributionActions, ItemStatuses } from '@keimelion/sdk/enums'
 import { DEFAULT_SOURCE_CURRENCY } from '@keimelion/sdk/schemas'
 import type {
   CustomUrlParsed,
@@ -13,9 +13,11 @@ import { serviceError } from '../../shared/utils/response.js'
 import { findPgConstraintName, isPgUniqueViolation } from '../../shared/db/pg-errors.js'
 import { resolveItemRelations, writeItemRelations } from '../../shared/db/item-relations.js'
 import { resolveSourceShop } from '../../shared/db/source-shops.js'
+import { recordItemContribution } from '../../shared/db/item-contributions.js'
 import {
   fillMissingItemFields,
   findItemByGtinWithImage,
+  findItemByIdForUpdate,
   findItemByIdWithImage,
   insertItem,
 } from '../../db/entities/items/items.repository.js'
@@ -37,9 +39,11 @@ import { toItemDetail, toItemSourceDetail, toListItemDetail } from '../../shared
 import { buildSourceUrlFields } from '../affiliate/affiliate.service.js'
 import { processOptionalImage, rollbackImage, runWithImageRollback } from '../uploads/images.service.js'
 import type { Image } from '../../db/entities/images/images.schema.js'
+import type { Item } from '../../db/entities/items/items.schema.js'
 import type { ListItem } from '../../db/entities/list-items/list-items.schema.js'
 import type { Shop } from '../../db/entities/shops/shops.schema.js'
 import type { MissingItemFields } from '../../db/entities/items/items.repository.js'
+import type { TrackedItemFields } from '../../shared/db/item-contributions.js'
 import type { ItemRelations } from '../../shared/db/item-relations.js'
 import type { ItemRowWithImage, ItemSourceWithShop, ItemSourceWithShopAndItem } from '../../shared/types/item.js'
 import type { SubmittedSourceUrlFields } from '../affiliate/affiliate.service.js'
@@ -69,6 +73,12 @@ interface SourceOffer {
 interface ItemCompletion {
   description: string | null
   gtin: string | null
+}
+
+interface ItemFill {
+  item: ItemRowWithImage
+  completion: ItemCompletion & { imageId: string | null }
+  userId: string
 }
 
 interface KnownItemLink {
@@ -203,7 +213,8 @@ async function writeKnownItemLink(
   const listItem = await insertListItemIfAbsent(buildListItemValues(input, link.item.id, personalFields), tx)
   if (!listItem) return { duplicate: await findListItemByListAndItem(input.listId, link.item.id, tx) }
 
-  const item = await completeItem(link.item, { ...link.completion, imageId: image?.id ?? null }, tx)
+  const completion = { ...link.completion, imageId: image?.id ?? null }
+  const item = await completeItem({ item: link.item, completion, userId: input.userId }, tx)
   const source = await writeSourceOffer(input.userId, item.id, link, tx)
   const linkedListItem = await keepUnattachedUrlAsCustomUrl(listItem, link, source, tx)
   return { written: { listItem: linkedListItem, source }, item }
@@ -215,24 +226,21 @@ async function discardUnusedImage(image: Image | null, outcome: KnownItemOutcome
   await rollbackImage(image.id, COMPLETE_ITEM_CONTEXT)
 }
 
-async function completeItem(
-  item: ItemRowWithImage,
-  completion: ItemCompletion & { imageId: string | null },
-  tx: DbTransaction,
-): Promise<ItemRowWithImage> {
-  const missing = pickMissingFields(item, completion)
-  const { gtin, ...withoutGtin } = missing
-  if (Object.keys(missing).length === 0) return item
+async function completeItem(fill: ItemFill, tx: DbTransaction): Promise<ItemRowWithImage> {
+  const { item, completion } = fill
+  if (Object.keys(pickMissingFields(item, completion)).length === 0) return item
 
-  if (Object.keys(withoutGtin).length > 0) await fillMissingItemFields(item.id, withoutGtin, tx)
-  if (gtin !== undefined) await fillMissingGtin(item.id, gtin, tx)
+  const locked = await findItemByIdForUpdate(item.id, tx)
+  if (!locked) return item
+  const filled = await fillLockedItem(locked, completion, tx)
+  await recordItemContribution(
+    { itemId: item.id, userId: fill.userId, action: ItemContributionActions.FILL, previous: locked, patch: filled },
+    tx,
+  )
   return (await findItemByIdWithImage(item.id, tx)) ?? item
 }
 
-function pickMissingFields(
-  item: ItemRowWithImage,
-  completion: ItemCompletion & { imageId: string | null },
-): MissingItemFields {
+function pickMissingFields(item: TrackedItemFields, completion: ItemFill['completion']): MissingItemFields {
   return {
     ...(item.description === null && completion.description !== null ? { description: completion.description } : {}),
     ...(item.gtin === null && completion.gtin !== null ? { gtin: completion.gtin } : {}),
@@ -240,11 +248,19 @@ function pickMissingFields(
   }
 }
 
-async function fillMissingGtin(itemId: string, gtin: string, tx: DbTransaction): Promise<void> {
+async function fillLockedItem(locked: Item, completion: ItemFill['completion'], tx: DbTransaction): Promise<MissingItemFields> {
+  const { gtin, ...withoutGtin } = pickMissingFields(locked, completion)
+  if (Object.keys(withoutGtin).length > 0) await fillMissingItemFields(locked.id, withoutGtin, tx)
+  if (gtin === undefined || !(await fillMissingGtin(locked.id, gtin, tx))) return withoutGtin
+  return { ...withoutGtin, gtin }
+}
+
+async function fillMissingGtin(itemId: string, gtin: string, tx: DbTransaction): Promise<boolean> {
   try {
     await tx.transaction((savepoint) => fillMissingItemFields(itemId, { gtin }, savepoint))
+    return true
   } catch (error) {
-    if (isPgUniqueViolation(error) && findPgConstraintName(error) === ITEMS_GTIN_UNIQUE_INDEX) return
+    if (isPgUniqueViolation(error) && findPgConstraintName(error) === ITEMS_GTIN_UNIQUE_INDEX) return false
     throw error
   }
 }
