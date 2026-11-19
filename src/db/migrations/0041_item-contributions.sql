@@ -6,6 +6,7 @@ CREATE TABLE "item_contributions" (
 	"action" "item_contribution_action" NOT NULL,
 	"changes" jsonb NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "item_contributions_changes_not_empty_check" CHECK ("item_contributions"."changes" <> '{}'::jsonb)
 );
 --> statement-breakpoint
