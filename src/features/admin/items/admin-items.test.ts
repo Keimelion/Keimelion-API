@@ -222,7 +222,7 @@ function itemWith(sources: SourceRow[]): typeof ITEM_ROW & {
 
 function itemWithCategoryLinks(categories: (typeof CATEGORY_ONE)[]): typeof ITEM_ROW & {
   sources: SourceRow[]
-  itemCategories: { itemId: string; categoryId: string; assignedAt: Date; category: typeof CATEGORY_ONE }[]
+  itemCategories: { itemId: string; categoryId: string; createdAt: Date; updatedAt: Date; category: typeof CATEGORY_ONE }[]
   itemTags: never[]
 } {
   return {
@@ -231,7 +231,8 @@ function itemWithCategoryLinks(categories: (typeof CATEGORY_ONE)[]): typeof ITEM
     itemCategories: categories.map((category) => ({
       itemId: ITEM_ROW.id,
       categoryId: category.id,
-      assignedAt: new Date('2024-01-01'),
+      createdAt: new Date('2024-01-01'),
+      updatedAt: new Date('2024-01-01'),
       category,
     })),
     itemTags: [],
@@ -241,7 +242,7 @@ function itemWithCategoryLinks(categories: (typeof CATEGORY_ONE)[]): typeof ITEM
 function itemWithTagLinks(tagRows: (typeof TAG_ONE)[]): typeof ITEM_ROW & {
   sources: SourceRow[]
   itemCategories: never[]
-  itemTags: { itemId: string; tagId: string; assignedAt: Date; tag: typeof TAG_ONE }[]
+  itemTags: { itemId: string; tagId: string; createdAt: Date; updatedAt: Date; tag: typeof TAG_ONE }[]
 } {
   return {
     ...ITEM_ROW,
@@ -250,7 +251,8 @@ function itemWithTagLinks(tagRows: (typeof TAG_ONE)[]): typeof ITEM_ROW & {
     itemTags: tagRows.map((tag) => ({
       itemId: ITEM_ROW.id,
       tagId: tag.id,
-      assignedAt: new Date('2024-01-01'),
+      createdAt: new Date('2024-01-01'),
+      updatedAt: new Date('2024-01-01'),
       tag,
     })),
   }
@@ -646,8 +648,8 @@ describe('POST /v1/admin/items', () => {
         ...ITEM_ROW,
         sources: [SOURCE_ROW],
         itemCategories: [
-          { itemId: ITEM_ROW.id, categoryId: CATEGORY_ONE.id, assignedAt: new Date(), category: CATEGORY_ONE },
-          { itemId: ITEM_ROW.id, categoryId: CATEGORY_TWO.id, assignedAt: new Date(), category: CATEGORY_TWO },
+          { itemId: ITEM_ROW.id, categoryId: CATEGORY_ONE.id, createdAt: new Date(), updatedAt: new Date(), category: CATEGORY_ONE },
+          { itemId: ITEM_ROW.id, categoryId: CATEGORY_TWO.id, createdAt: new Date(), updatedAt: new Date(), category: CATEGORY_TWO },
         ],
         itemTags: [],
       } as never,

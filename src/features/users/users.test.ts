@@ -927,7 +927,7 @@ describe('GET /v1/users/me/export', () => {
       (descriptor) => descriptor.filename === 'list-tags.csv',
     )
     expect(listTagsDescriptor).toBeDefined()
-    expect(listTagsDescriptor?.columns).toEqual(['listId', 'tagId', 'assignedAt'])
+    expect(listTagsDescriptor?.columns).toEqual(['listId', 'tagId', 'createdAt', 'updatedAt'])
   })
 
   it('fetches owner-scoped list_tags for RGPD (transitive user link via lists)', async () => {
@@ -938,7 +938,8 @@ describe('GET /v1/users/me/export', () => {
     const ownedListTag = {
       listId: ownedListId,
       tagId: '00000000-0000-0000-0000-00000000c002',
-      assignedAt: new Date('2024-02-01'),
+      createdAt: new Date('2024-02-01'),
+      updatedAt: new Date('2024-02-01'),
     }
 
     vi.mocked(db.query.listTags.findMany).mockResolvedValueOnce([ownedListTag] as never)
@@ -947,7 +948,8 @@ describe('GET /v1/users/me/export', () => {
     const rows = await (listTagsDescriptor as { fetchRows: (userId: string) => Promise<object[]> }).fetchRows(SAFE_USER.id)
     expect(rows).toHaveLength(1)
     expect(rows[0]).toMatchObject({ listId: ownedListId, tagId: ownedListTag.tagId })
-    expect(rows[0]).toHaveProperty('assignedAt')
+    expect(rows[0]).toHaveProperty('createdAt')
+    expect(rows[0]).toHaveProperty('updatedAt')
   })
 
   it('includes defaultCurrency in the JSON export profile section', async () => {
@@ -985,7 +987,8 @@ describe('GET /v1/users/me/export', () => {
       {
         listId: '00000000-0000-0000-0000-00000000c010',
         tagId: '00000000-0000-0000-0000-00000000c011',
-        assignedAt: new Date('2024-02-01'),
+        createdAt: new Date('2024-02-01'),
+        updatedAt: new Date('2024-02-01'),
       },
     ] as never)
 
@@ -993,7 +996,7 @@ describe('GET /v1/users/me/export', () => {
 
     expect(response.status).toBe(200)
     const body = await response.json() as {
-      listTags: { listId: string; tagId: string; assignedAt: string }[]
+      listTags: { listId: string; tagId: string; createdAt: string; updatedAt: string }[]
     }
     expect(body).toHaveProperty('listTags')
     expect(body.listTags).toHaveLength(1)

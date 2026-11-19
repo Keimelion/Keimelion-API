@@ -39,6 +39,7 @@ export const categoryTranslations = pgTable(
       .references(() => categories.id, { onDelete: 'cascade' }),
     locale: localeEnum('locale').notNull(),
     name: nonEmptyVarchar('name', MAX_CATEGORY_NAME_LENGTH).notNull(),
+    ...timestamps(),
   },
   (table) => [
     primaryKey({ columns: [table.categoryId, table.locale] }),

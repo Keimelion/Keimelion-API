@@ -31,6 +31,7 @@ export const occasionTypeTranslations = pgTable(
       .references(() => occasionTypes.id, { onDelete: 'cascade' }),
     locale: localeEnum('locale').notNull(),
     label: nonEmptyVarchar('label', 100).notNull(),
+    ...timestamps(),
   },
   (table) => [
     primaryKey({ columns: [table.occasionTypeId, table.locale] }),

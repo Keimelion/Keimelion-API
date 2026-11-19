@@ -1,5 +1,5 @@
-import { index, pgTable, primaryKey, timestamp, uuid } from 'drizzle-orm/pg-core'
-import { sql } from 'drizzle-orm'
+import { index, pgTable, primaryKey, uuid } from 'drizzle-orm/pg-core'
+import { timestamps } from '../../../shared/db/columns.js'
 import { lists } from '../lists/lists.schema.js'
 import { tags } from '../tags/tags.schema.js'
 import type { Tag } from '../tags/tags.schema.js'
@@ -13,9 +13,7 @@ export const listTags = pgTable(
     tagId: uuid('tag_id')
       .notNull()
       .references(() => tags.id, { onDelete: 'cascade' }),
-    assignedAt: timestamp('assigned_at', { withTimezone: true })
-      .notNull()
-      .default(sql`now()`),
+    ...timestamps(),
   },
   (table) => [
     primaryKey({ columns: [table.listId, table.tagId] }),

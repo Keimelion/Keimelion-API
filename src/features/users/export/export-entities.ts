@@ -41,11 +41,12 @@ import type {
 export interface ExportListTagRow {
   listId: string
   tagId: string
-  assignedAt: Date
+  createdAt: Date
+  updatedAt: Date
 }
 
 export function toExportListTagRow(row: ListTag): ExportListTagRow {
-  return { listId: row.listId, tagId: row.tagId, assignedAt: row.assignedAt }
+  return { listId: row.listId, tagId: row.tagId, createdAt: row.createdAt, updatedAt: row.updatedAt }
 }
 
 export interface ExportListUserRow {
@@ -298,7 +299,7 @@ const tagsEntityDescriptor: ExportEntityDescriptor = {
 
 const listTagsEntityDescriptor: ExportEntityDescriptor = {
   filename: 'list-tags.csv',
-  columns: ['listId', 'tagId', 'assignedAt'],
+  columns: ['listId', 'tagId', 'createdAt', 'updatedAt'],
   fetchRows: async (userId: string) => {
     const rows = await findListTagsForOwner(userId)
     return rows.map(toExportListTagRow)
