@@ -337,7 +337,7 @@ describe('items mapper hydrates tags', () => {
       sources: [],
       itemCategories: [],
       itemTags: [
-        { itemId: ITEM_ROW.id, tagId: TAG_GAMING_ROW.id, assignedAt: new Date(), tag: TAG_GAMING_ROW },
+        { itemId: ITEM_ROW.id, tagId: TAG_GAMING_ROW.id, createdAt: new Date(), updatedAt: new Date(), tag: TAG_GAMING_ROW },
       ],
     } as never)
 
@@ -358,7 +358,7 @@ describe('items mapper hydrates tags', () => {
         sources: [],
         itemCategories: [],
         itemTags: [
-          { itemId: ITEM_ROW.id, tagId: TAG_READING_ROW.id, assignedAt: new Date(), tag: TAG_READING_ROW },
+          { itemId: ITEM_ROW.id, tagId: TAG_READING_ROW.id, createdAt: new Date(), updatedAt: new Date(), tag: TAG_READING_ROW },
         ],
       },
     ] as never)

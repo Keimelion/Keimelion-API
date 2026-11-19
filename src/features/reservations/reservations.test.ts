@@ -78,6 +78,7 @@ const SELF_RESERVATION: Reservation = {
   anonymousTokenHash: null,
   quantityBooked: 1,
   createdAt: new Date('2024-02-01'),
+  updatedAt: new Date('2024-02-01'),
 }
 
 const ANONYMOUS_RESERVATION: Reservation = {

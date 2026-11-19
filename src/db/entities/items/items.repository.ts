@@ -20,7 +20,7 @@ export interface InsertItemInput {
 type UpdateItemFields = Partial<Pick<typeof items.$inferInsert, 'name' | 'description' | 'gtin' | 'imageId'>>
 export type MissingItemFields = Partial<Record<'description' | 'gtin' | 'imageId', string>>
 
-const ITEM_WITH_SOURCES_WITH = {
+export const ITEM_WITH_SOURCES_WITH = {
   image: true,
   sources: { with: { shop: true } },
   itemCategories: { with: { category: { with: { translations: true } } } },
@@ -40,6 +40,20 @@ export function findItemById(id: string): Promise<Item | undefined> {
 export function findItemByIdWithImage(id: string, tx?: DbTransaction): Promise<ItemRowWithImage | undefined> {
   const client = tx ?? db
   return client.query.items.findFirst({ where: eq(items.id, id), with: { image: true } })
+}
+
+// 'update' is required when the caller may then change a key column (gtin has a unique index): taking
+// the weaker 'no key update' first and escalating on UPDATE deadlocks against a concurrent list_items
+// insert, which holds a KEY SHARE lock on the item through its foreign key.
+export type ItemLockStrength = 'update' | 'no key update'
+
+export async function findItemByIdForUpdate(
+  id: string,
+  strength: ItemLockStrength,
+  tx: DbTransaction,
+): Promise<Item | undefined> {
+  const [item] = await tx.select().from(items).where(eq(items.id, id)).for(strength)
+  return item
 }
 
 export function findItemByGtinWithImage(gtin: string): Promise<ItemRowWithImage | undefined> {

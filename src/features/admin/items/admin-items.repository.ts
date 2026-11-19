@@ -1,10 +1,13 @@
-import { count, type SQL } from 'drizzle-orm'
+import { count, desc, eq, type SQL } from 'drizzle-orm'
 import type { AnyColumn } from 'drizzle-orm'
 import type { ADMIN_ITEMS_SORT_FIELDS } from '@keimelion/sdk/schemas'
 import { db } from '../../../db/client.js'
 import { items } from '../../../db/entities/items/items.schema.js'
+import { itemContributions } from '../../../db/entities/item-contributions/item-contributions.schema.js'
+import { ITEM_WITH_SOURCES_WITH } from '../../../db/entities/items/items.repository.js'
 import { defineEntity } from '../../../shared/db/entity-descriptor.js'
 import type { ItemRowWithSources } from '../../../shared/types/item.js'
+import type { ItemRowWithSourcesAndContributions } from '../../../shared/types/item-contribution.js'
 import { getOffset } from '../../../shared/utils/pagination.js'
 import type { PaginationQueryParsed, SortInput } from '@keimelion/sdk/schemas'
 import type { FilterInput } from '../../../shared/db/filter-parser.js'
@@ -52,6 +55,21 @@ export function findAllItemsWithSources(
       sources: { with: { shop: true } },
       itemCategories: { with: { category: { with: { translations: true } } } },
       itemTags: { with: { tag: true } },
+    },
+  })
+}
+
+export function findItemByIdWithSourcesAndContributions(
+  id: string,
+): Promise<ItemRowWithSourcesAndContributions | undefined> {
+  return db.query.items.findFirst({
+    where: eq(items.id, id),
+    with: {
+      ...ITEM_WITH_SOURCES_WITH,
+      contributions: {
+        orderBy: [desc(itemContributions.createdAt), desc(itemContributions.id)],
+        with: { user: { columns: { id: true, username: true } } },
+      },
     },
   })
 }

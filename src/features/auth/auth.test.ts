@@ -62,6 +62,7 @@ const VALID_REFRESH_TOKEN_ROW = {
   tokenHash: TEST_REFRESH_TOKEN_HASH,
   expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
   createdAt: new Date('2024-01-01'),
+  updatedAt: new Date('2024-01-01'),
   revokedAt: null,
 }
 

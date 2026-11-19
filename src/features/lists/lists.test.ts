@@ -7,6 +7,7 @@ import { env } from '../../config/env.js'
 import { images } from '../../db/entities/images/images.schema.js'
 import { ITEM_SOURCES_SOURCE_URL_UNIQUE_INDEX } from '../../db/entities/item-sources/item-sources.schema.js'
 import { ITEMS_GTIN_UNIQUE_INDEX } from '../../db/entities/items/items.schema.js'
+import { itemContributions } from '../../db/entities/item-contributions/item-contributions.schema.js'
 import { apiMultipartRequest, apiRequest } from '../../shared/test/api-request.js'
 import { generateTestToken, makeAccessTokenEntry } from '../../shared/test/auth.js'
 import {
@@ -1071,6 +1072,19 @@ describe('POST /v1/lists/:id/items', () => {
     return set
   }
 
+  function mockLockedItem(row: object = MOCK_ITEM): void {
+    const chain = {
+      from: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      for: vi.fn().mockResolvedValueOnce([row]),
+    }
+    vi.mocked(db.select).mockReturnValueOnce(chain as never)
+  }
+
+  function expectNoContributionLogged(): void {
+    expect(vi.mocked(db.insert)).not.toHaveBeenCalledWith(itemContributions)
+  }
+
   function mockKnownShops(rows: unknown[]): void {
     vi.mocked(db.query.shops.findMany).mockResolvedValueOnce(rows as never)
   }
@@ -1435,6 +1449,8 @@ describe('POST /v1/lists/:id/items', () => {
       mockKnownShops([SHOP_ROW])
       vi.mocked(db.query.itemSources.findFirst).mockResolvedValueOnce(urlHolder(ITEM_ID) as never)
       const values = mockInsertOnce({ ...MOCK_LIST_ITEM, customName: 'Noise cancelling headset' })
+      mockLockedItem()
+      const contributionValues = mockInsertOnce()
       const itemSet = mockUpdateOnce()
       const gtinSet = mockUpdateOnce()
       const sourceSet = mockUpdateOnce({ ...SOURCE_ROW, price: '1.00' })
@@ -1460,7 +1476,17 @@ describe('POST /v1/lists/:id/items', () => {
       expect(body.listItem.item.gtin).toBe(PADDED_GTIN)
       expect(body.listItem.source?.id).toBe(SOURCE_ID)
       expect(body.listItem.source?.price).toBe('1.00')
-      expect(vi.mocked(db.insert)).toHaveBeenCalledTimes(1)
+      expect(vi.mocked(db.insert)).toHaveBeenCalledTimes(2)
+      expect(vi.mocked(db.insert)).toHaveBeenNthCalledWith(2, itemContributions)
+      expect(contributionValues).toHaveBeenCalledWith({
+        itemId: ITEM_ID,
+        userId: AUTH_USER.id,
+        action: 'fill',
+        changes: {
+          description: { from: null, to: 'Completed' },
+          gtin: { from: null, to: PADDED_GTIN },
+        },
+      })
       expect(itemSet).toHaveBeenCalledWith(expect.objectContaining({ description: expect.anything() as unknown }))
       expect(gtinSet).toHaveBeenCalledWith(expect.objectContaining({ gtin: expect.anything() as unknown }))
       expect(sourceSet).toHaveBeenCalledWith({ price: '1.00' })
@@ -1486,6 +1512,29 @@ describe('POST /v1/lists/:id/items', () => {
       expect(response.status).toBe(201)
       expect(body.listItem.item.description).toBe('Original')
       expect(vi.mocked(db.update)).not.toHaveBeenCalled()
+      expectNoContributionLogged()
+    })
+
+    it('logs nothing when a concurrent fill already completed the locked item', async () => {
+      mockAuthChain()
+      mockListAndOwner()
+      mockKnownShops([SHOP_ROW])
+      vi.mocked(db.query.itemSources.findFirst).mockResolvedValueOnce(urlHolder(ITEM_ID) as never)
+      mockInsertOnce(MOCK_LIST_ITEM)
+      mockLockedItem({ ...MOCK_ITEM, description: 'Concurrent' })
+      vi.mocked(db.query.items.findFirst).mockResolvedValueOnce({
+        ...MOCK_ITEM,
+        description: 'Concurrent',
+        image: null,
+      } as never)
+
+      const response = await postItem({ name: MOCK_ITEM.name, description: 'Mine', sourceUrl: SUBMITTED_URL })
+
+      const body = listsAddItemResponseSchema.parse(await response.json())
+      expect(response.status).toBe(201)
+      expect(body.listItem.item.description).toBe('Concurrent')
+      expect(vi.mocked(db.update)).not.toHaveBeenCalled()
+      expectNoContributionLogged()
     })
 
     it('keeps the GTIN empty when another item already holds it', async () => {
@@ -1494,6 +1543,7 @@ describe('POST /v1/lists/:id/items', () => {
       mockKnownShops([SHOP_ROW])
       vi.mocked(db.query.itemSources.findFirst).mockResolvedValueOnce(urlHolder(ITEM_ID) as never)
       mockInsertOnce(MOCK_LIST_ITEM)
+      mockLockedItem()
       vi.mocked(db.update).mockImplementationOnce(() => {
         throw uniqueViolation(ITEMS_GTIN_UNIQUE_INDEX)
       })
@@ -1503,6 +1553,29 @@ describe('POST /v1/lists/:id/items', () => {
       const body = listsAddItemResponseSchema.parse(await response.json())
       expect(response.status).toBe(201)
       expect(body.listItem.item.gtin).toBeNull()
+      expect(vi.mocked(db.update)).toHaveBeenCalledTimes(1)
+      expectNoContributionLogged()
+    })
+
+    it('logs only the filled description when the GTIN conflict is swallowed', async () => {
+      mockAuthChain()
+      mockListAndOwner()
+      mockKnownShops([SHOP_ROW])
+      vi.mocked(db.query.itemSources.findFirst).mockResolvedValueOnce(urlHolder(ITEM_ID) as never)
+      mockInsertOnce(MOCK_LIST_ITEM)
+      mockLockedItem()
+      const contributionValues = mockInsertOnce()
+      mockUpdateOnce()
+      vi.mocked(db.update).mockImplementationOnce(() => {
+        throw uniqueViolation(ITEMS_GTIN_UNIQUE_INDEX)
+      })
+
+      const response = await postItem({ name: MOCK_ITEM.name, description: 'Filled', gtin: EAN_13, sourceUrl: SUBMITTED_URL })
+
+      expect(response.status).toBe(201)
+      expect(contributionValues).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'fill', changes: { description: { from: null, to: 'Filled' } } }),
+      )
     })
 
     it('keeps the source price when the submitted currency differs', async () => {
@@ -1791,6 +1864,7 @@ describe('POST /v1/lists/:id/items', () => {
       mockKnownShops([SHOP_ROW])
       vi.mocked(db.query.itemSources.findFirst).mockResolvedValueOnce(urlHolder(ITEM_ID) as never)
       mockInsertOnce(MOCK_LIST_ITEM)
+      mockLockedItem()
       const itemSet = mockUpdateOnce()
       vi.mocked(db.query.items.findFirst).mockResolvedValueOnce({
         ...MOCK_ITEM,
@@ -1814,6 +1888,8 @@ describe('POST /v1/lists/:id/items', () => {
         .mockResolvedValueOnce(MOCK_ITEM)
         .mockResolvedValueOnce({ ...MOCK_ITEM, imageId: IMAGE_ROW.id, image: IMAGE_ROW } as never)
       mockInsertOnce(MOCK_LIST_ITEM)
+      mockLockedItem()
+      const contributionValues = mockInsertOnce()
       mockUpdateOnce()
 
       const response = await postMultipart({ itemId: ITEM_ID }, IMAGE_BUFFER)
@@ -1821,6 +1897,12 @@ describe('POST /v1/lists/:id/items', () => {
       const body = listsAddItemResponseSchema.parse(await response.json())
       expect(response.status).toBe(201)
       expect(body.listItem.item.image?.id).toBe(IMAGE_ROW.id)
+      expect(contributionValues).toHaveBeenCalledWith({
+        itemId: ITEM_ID,
+        userId: AUTH_USER.id,
+        action: 'fill',
+        changes: { imageId: { from: null, to: IMAGE_ROW.id } },
+      })
     })
 
     it('does not process the uploaded image when the known product already has one', async () => {
@@ -1908,10 +1990,11 @@ const TAG_READING_ROW = {
 function listTagLink(tag: typeof TAG_GAMING_ROW): {
   listId: string
   tagId: string
-  assignedAt: Date
+  createdAt: Date
+  updatedAt: Date
   tag: typeof TAG_GAMING_ROW
 } {
-  return { listId: LIST_ID, tagId: tag.id, assignedAt: new Date('2024-02-01'), tag }
+  return { listId: LIST_ID, tagId: tag.id, createdAt: new Date('2024-02-01'), updatedAt: new Date('2024-02-01'), tag }
 }
 
 

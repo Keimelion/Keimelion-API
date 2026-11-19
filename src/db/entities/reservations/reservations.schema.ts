@@ -1,6 +1,6 @@
-import { check, index, pgTable, timestamp, unique, uniqueIndex, uuid, varchar } from 'drizzle-orm/pg-core'
+import { check, index, pgTable, unique, uniqueIndex, uuid, varchar } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
-import { uuidPrimaryKey } from '../../../shared/db/columns.js'
+import { timestamps, uuidPrimaryKey } from '../../../shared/db/columns.js'
 import { positiveCheck, positiveSmallInt } from '../../../shared/db/checks.js'
 import { SHA256_HEX_LENGTH } from '../../../shared/utils/hash.js'
 import { listItems } from '../list-items/list-items.schema.js'
@@ -22,9 +22,7 @@ export const reservations = pgTable(
     reserverEmail: varchar('reserver_email', { length: RESERVER_EMAIL_MAX_LENGTH }),
     anonymousTokenHash: varchar('anonymous_token_hash', { length: SHA256_HEX_LENGTH }),
     quantityBooked: positiveSmallInt('quantity_booked').notNull(),
-    createdAt: timestamp('created_at', { withTimezone: true })
-      .notNull()
-      .default(sql`now()`),
+    ...timestamps(),
   },
   (table) => [
     unique('reservations_list_item_id_user_id_unique').on(table.listItemId, table.userId),

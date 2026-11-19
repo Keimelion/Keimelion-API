@@ -1109,9 +1109,10 @@ const TAG_GAMING_ROW = {
 function listTagLink(tag: typeof TAG_GAMING_ROW): {
   listId: string
   tagId: string
-  assignedAt: Date
+  createdAt: Date
+  updatedAt: Date
   tag: typeof TAG_GAMING_ROW
 } {
-  return { listId: LIST_ROW.id, tagId: tag.id, assignedAt: new Date('2024-02-01'), tag }
+  return { listId: LIST_ROW.id, tagId: tag.id, createdAt: new Date('2024-02-01'), updatedAt: new Date('2024-02-01'), tag }
 }
 

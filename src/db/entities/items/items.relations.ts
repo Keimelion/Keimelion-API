@@ -6,6 +6,7 @@ import { itemSources } from '../item-sources/item-sources.schema.js'
 import { listItems } from '../list-items/list-items.schema.js'
 import { itemCategories } from '../item-categories/item-categories.schema.js'
 import { itemTags } from '../item-tags/item-tags.schema.js'
+import { itemContributions } from '../item-contributions/item-contributions.schema.js'
 
 export const itemsRelations = relations(items, ({ one, many }) => ({
   createdByUser: one(users, {
@@ -20,4 +21,5 @@ export const itemsRelations = relations(items, ({ one, many }) => ({
   listItems: many(listItems),
   itemCategories: many(itemCategories),
   itemTags: many(itemTags),
+  contributions: many(itemContributions),
 }))

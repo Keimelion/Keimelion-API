@@ -1,5 +1,6 @@
 import { char, numeric, pgTable, text, timestamp } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
+import { timestamps } from '../../../shared/db/columns.js'
 import { nonNegativeCheck, nonNegativeSmallInt } from '../../../shared/db/checks.js'
 
 /**
@@ -22,6 +23,7 @@ export const currencies = pgTable(
     usdRateAsOf: timestamp('usd_rate_as_of', { withTimezone: true })
       .notNull()
       .default(sql`now()`),
+    ...timestamps(),
   },
   (table) => [nonNegativeCheck(table.decimals)],
 )

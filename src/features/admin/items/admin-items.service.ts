@@ -1,7 +1,7 @@
 import type { DbTransaction } from '../../../db/client.js'
 import { db } from '../../../db/client.js'
 import { buildPaginatedResponse } from '../../../shared/utils/pagination.js'
-import { ErrorCode, HttpStatus } from '@keimelion/sdk/enums'
+import { ErrorCode, HttpStatus, ItemContributionActions } from '@keimelion/sdk/enums'
 import type { Locale } from '@keimelion/sdk/enums'
 import type {
   AdminItemsCreateRequestParsed,
@@ -14,6 +14,7 @@ import { pickDefined } from '../../../shared/utils/partial-update.js'
 import { runWrite, buildChanges } from '../../../shared/utils/admin-write.js'
 import {
   findItemById,
+  findItemByIdForUpdate,
   findItemByIdWithSources,
   insertItem,
   updateItem,
@@ -23,11 +24,16 @@ import {
 import { insertItemSource } from '../../../db/entities/item-sources/item-sources.repository.js'
 import { ITEM_SOURCES_ITEM_SHOP_UNIQUE_INDEX } from '../../../db/entities/item-sources/item-sources.schema.js'
 import { resolveItemRelations, writeItemRelations } from '../../../shared/db/item-relations.js'
+import { recordItemContribution } from '../../../shared/db/item-contributions.js'
 import { resolveSourceShops } from '../../../shared/db/source-shops.js'
 import { buildSourceUrlFields } from '../../affiliate/affiliate.service.js'
-import { findAllItemsWithSources, countItems } from './admin-items.repository.js'
+import {
+  findAllItemsWithSources,
+  findItemByIdWithSourcesAndContributions,
+  countItems,
+} from './admin-items.repository.js'
 import { toItemWithSources } from '../../../shared/types/item.js'
-import { toAdminItem } from './admin-items.mapper.js'
+import { toAdminItem, toAdminItemWithContributions } from './admin-items.mapper.js'
 import { countReservationsByItemIds } from '../../../db/entities/reservations/reservations.repository.js'
 import { AdminAction } from '../admin.enums.js'
 import {
@@ -35,10 +41,11 @@ import {
   processOptionalImage,
   runWithImageRollback,
 } from '../../uploads/images.service.js'
-import type { items } from '../../../db/entities/items/items.schema.js'
+import type { Item, items } from '../../../db/entities/items/items.schema.js'
+import type { ItemRelations } from '../../../shared/db/item-relations.js'
 import type { InsertItemSourceInput } from '../../../db/entities/item-sources/item-sources.repository.js'
 import type { ItemWithSources } from '../../../shared/types/item.js'
-import type { AdminItem } from './admin-items.mapper.js'
+import type { AdminItem, AdminItemWithContributions } from './admin-items.mapper.js'
 import type { ServiceResult } from '../../../shared/types/service.js'
 import type { ListItemsInput } from './endpoints/list.js'
 
@@ -54,6 +61,21 @@ export interface UpdateItemInput extends Omit<AdminItemsUpdateRequestParsed, 'cl
 type CreateSourceInput = AdminItemsCreateRequestParsed['sources'][number]
 type SourceWrite = Omit<InsertItemSourceInput, 'itemId' | 'createdByUserId'>
 type ItemPatch = Partial<Pick<typeof items.$inferInsert, 'name' | 'description' | 'gtin' | 'imageId'>>
+
+interface ItemUpdateWrite {
+  adminId: string
+  itemId: string
+  patch: ItemPatch
+  relations: ItemRelations
+}
+
+interface WrittenItemUpdate {
+  previous: Item
+  updated: Item
+}
+
+// The item can be hard-deleted between the pre-check and the transaction: that is a 404, not a write failure.
+type ItemUpdateOutcome = { written: WrittenItemUpdate } | { notFound: true }
 
 const ADMIN_ITEM_CREATE_CONTEXT = 'admin.item.create'
 const ADMIN_ITEM_UPDATE_CONTEXT = 'admin.item.update'
@@ -126,14 +148,14 @@ export async function listItems(
 export async function getItemById(
   id: string,
   locale: Locale,
-): Promise<ServiceResult<{ item: AdminItem }>> {
-  const row = await findItemByIdWithSources(id)
+): Promise<ServiceResult<{ item: AdminItemWithContributions }>> {
+  const row = await findItemByIdWithSourcesAndContributions(id)
   if (!row) return serviceError(ErrorCode.NOT_FOUND)
 
   const countByItemId = await countReservationsByItemIds([id])
 
   return {
-    data: { item: toAdminItem(row, locale, countByItemId.get(id) ?? 0) },
+    data: { item: toAdminItemWithContributions(row, locale, countByItemId.get(id) ?? 0) },
     httpStatus: HttpStatus.OK,
   }
 }
@@ -169,23 +191,19 @@ export async function updateItemById(
   const newImageId = imageOutcome.image?.id ?? null
 
   const patch: ItemPatch = hasImageChange ? { ...fieldPatch, imageId: newImageId } : fieldPatch
+  const update: ItemUpdateWrite = { adminId, itemId: id, patch, relations }
   const outcome = await runWrite(() => runWithImageRollback(newImageId, ADMIN_ITEM_UPDATE_CONTEXT, () =>
-    db.transaction(async (tx) => {
-      const updated =
-        Object.keys(patch).length > 0
-          ? await updateItem(id, patch, tx)
-          : existingRow
-      await writeItemRelations({ itemId: id, tagCreatorId: null, relations }, tx)
-      return updated
-    }),
+    db.transaction((tx) => writeItemUpdate(update, tx)),
   ))
   if ('errorCode' in outcome) return serviceError(outcome.errorCode)
-  await cleanupReplacedImage(existingRow.imageId, outcome.row.imageId, ADMIN_ITEM_UPDATE_CONTEXT)
+  if ('notFound' in outcome.row) return serviceError(ErrorCode.NOT_FOUND)
+  const { previous, updated } = outcome.row.written
+  await cleanupReplacedImage(previous.imageId, updated.imageId, ADMIN_ITEM_UPDATE_CONTEXT)
 
-  const hydrated = await findItemByIdWithSources(outcome.row.id)
+  const hydrated = await findItemByIdWithSources(updated.id)
   if (!hydrated) return serviceError(ErrorCode.INTERNAL_ERROR)
 
-  const changes = buildChanges(existingRow, patch)
+  const changes = buildChanges(previous, patch)
   logger.info({ adminId, action: AdminAction.UPDATE_ITEM, itemId: id, changes })
   return { data: { item: toItemWithSources(hydrated, locale) }, httpStatus: HttpStatus.OK }
 }
@@ -211,6 +229,22 @@ export async function deleteItemById(
 
   logger.warn({ adminId, action: AdminAction.DELETE_ITEM, itemId: id })
   return { data: { message: 'Item deleted successfully' }, httpStatus: HttpStatus.OK }
+}
+
+async function writeItemUpdate(update: ItemUpdateWrite, tx: DbTransaction): Promise<ItemUpdateOutcome> {
+  const { adminId, itemId, patch, relations } = update
+  // FOR UPDATE upfront: the patch may change gtin (a key column), see ItemLockStrength.
+  const previous = await findItemByIdForUpdate(itemId, 'update', tx)
+  if (!previous) return { notFound: true }
+
+  const updated = Object.keys(patch).length > 0 ? await updateItem(itemId, patch, tx) : previous
+  if (!updated) return { notFound: true }
+  await recordItemContribution(
+    { itemId, userId: adminId, action: ItemContributionActions.ADMIN_UPDATE, previous, patch },
+    tx,
+  )
+  await writeItemRelations({ itemId, tagCreatorId: null, relations }, tx)
+  return { written: { previous, updated } }
 }
 
 // Sources without an explicit shopId get the shop matching their URL domain; each URL is normalized with
