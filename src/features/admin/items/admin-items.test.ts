@@ -1252,6 +1252,48 @@ describe('PATCH /v1/admin/items/:id', () => {
     }))
   })
 
+  it('locks the item FOR UPDATE before patching it, since gtin is a key column', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindItemById(ITEM_ROW)
+    const lockChain = buildLockedItemChain(ITEM_ROW) as { for: ReturnType<typeof vi.fn> }
+    vi.mocked(db.select).mockReturnValueOnce(lockChain as never)
+    mockUpdateItem({ ...ITEM_ROW, gtin: PATCH_PADDED_GTIN })
+    mockInsertContribution()
+    mockFindItemById({ ...itemWith([]), gtin: PATCH_PADDED_GTIN })
+
+    const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}`, {
+      method: 'PATCH',
+      token,
+      body: { gtin: PATCH_EAN_13 },
+    })
+
+    expect(response.status).toBe(200)
+    expect(lockChain.for).toHaveBeenCalledWith('update')
+  })
+
+  it('returns 404 when the item is deleted between the pre-check and the locked read', async () => {
+    const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
+    mockAdminAuth()
+    mockFindItemById(ITEM_ROW)
+    vi.mocked(db.select).mockReturnValueOnce({
+      from: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      for: vi.fn().mockResolvedValueOnce([]),
+    } as never)
+
+    const response = await apiRequest(`/v1/admin/items/${ITEM_ROW.id}`, {
+      method: 'PATCH',
+      token,
+      body: { name: 'Updated Name' },
+    })
+
+    const body = await response.json() as { code: string }
+    expect(response.status).toBe(404)
+    expect(body.code).toBe('NOT_FOUND')
+    expect(vi.mocked(db.insert)).not.toHaveBeenCalledWith(itemContributions)
+  })
+
   it('logs nothing when the PATCH sets every field to its current value', async () => {
     const token = await generateTestToken(ADMIN_USER.id, { role: 'admin' })
     mockAdminAuth()

@@ -1,16 +1,18 @@
 import type { DbTransaction } from '../../db/client.js'
 import type { ItemContributionAction } from '@keimelion/sdk/enums'
+import { itemContributionChangesSchema } from '@keimelion/sdk/schemas'
 import type { ItemContributionChangesParsed } from '@keimelion/sdk/schemas'
 import { insertItemContribution } from '../../db/entities/item-contributions/item-contributions.repository.js'
 import type { Item } from '../../db/entities/items/items.schema.js'
 
-type TrackedItemField = keyof ItemContributionChangesParsed & keyof Item
+// Allow-list derived from the SDK contract: only these fields ever reach the jsonb, whatever the patch holds.
+const TRACKED_ITEM_FIELDS = itemContributionChangesSchema.keyof().options
+
+type TrackedItemField = (typeof TRACKED_ITEM_FIELDS)[number] & keyof Item
 
 export type TrackedItemFields = Pick<Item, TrackedItemField>
 
 type TrackedItemFieldsPatch = { [Field in TrackedItemField]?: Item[Field] | undefined }
-
-type TrackedItemFieldChange = [TrackedItemField, string | null]
 
 export interface ItemContributionWrite {
   itemId: string
@@ -27,10 +29,11 @@ export async function recordItemContribution(write: ItemContributionWrite, tx: D
 }
 
 function buildItemChanges(previous: TrackedItemFields, patch: TrackedItemFieldsPatch): ItemContributionChangesParsed {
-  const entries = Object.entries(patch) as [TrackedItemField, string | null | undefined][]
   return Object.fromEntries(
-    entries
-      .filter((entry): entry is TrackedItemFieldChange => entry[1] !== undefined && entry[1] !== previous[entry[0]])
-      .map(([field, value]) => [field, { from: previous[field], to: value }]),
+    TRACKED_ITEM_FIELDS.flatMap((field) => {
+      const value = patch[field]
+      if (value === undefined || value === previous[field]) return []
+      return [[field, { from: previous[field], to: value }]]
+    }),
   )
 }

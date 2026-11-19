@@ -42,8 +42,17 @@ export function findItemByIdWithImage(id: string, tx?: DbTransaction): Promise<I
   return client.query.items.findFirst({ where: eq(items.id, id), with: { image: true } })
 }
 
-export async function findItemByIdForUpdate(id: string, tx: DbTransaction): Promise<Item | undefined> {
-  const [item] = await tx.select().from(items).where(eq(items.id, id)).for('no key update')
+// 'update' is required when the caller may then change a key column (gtin has a unique index): taking
+// the weaker 'no key update' first and escalating on UPDATE deadlocks against a concurrent list_items
+// insert, which holds a KEY SHARE lock on the item through its foreign key.
+export type ItemLockStrength = 'update' | 'no key update'
+
+export async function findItemByIdForUpdate(
+  id: string,
+  strength: ItemLockStrength,
+  tx: DbTransaction,
+): Promise<Item | undefined> {
+  const [item] = await tx.select().from(items).where(eq(items.id, id)).for(strength)
   return item
 }
 

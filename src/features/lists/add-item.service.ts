@@ -230,7 +230,7 @@ async function completeItem(fill: ItemFill, tx: DbTransaction): Promise<ItemRowW
   const { item, completion } = fill
   if (Object.keys(pickMissingFields(item, completion)).length === 0) return item
 
-  const locked = await findItemByIdForUpdate(item.id, tx)
+  const locked = await findItemByIdForUpdate(item.id, 'no key update', tx)
   if (!locked) return item
   const filled = await fillLockedItem(locked, completion, tx)
   await recordItemContribution(

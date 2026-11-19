@@ -2185,6 +2185,8 @@ describe('GET /v1/users/me/export — item contributions', () => {
     expect(whereClause.sql).toBe('"item_contributions"."user_id" = $1')
     expect(whereClause.params).toEqual([SAFE_USER.id])
     expect(Object.keys(exportQuery?.columns ?? {}).sort()).toEqual([...EXPECTED_EXPORT_KEYS].sort())
+    const orderBy = (exportQuery?.orderBy as SQL[]).map((clause) => new PgDialect().sqlToQuery(clause).sql)
+    expect(orderBy).toEqual(['"item_contributions"."created_at" desc', '"item_contributions"."id" desc'])
   })
 
   it('registers item-contributions.csv with the exact allow-list required by RGPD', () => {

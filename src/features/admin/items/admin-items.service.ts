@@ -74,6 +74,9 @@ interface WrittenItemUpdate {
   updated: Item
 }
 
+// The item can be hard-deleted between the pre-check and the transaction: that is a 404, not a write failure.
+type ItemUpdateOutcome = { written: WrittenItemUpdate } | { notFound: true }
+
 const ADMIN_ITEM_CREATE_CONTEXT = 'admin.item.create'
 const ADMIN_ITEM_UPDATE_CONTEXT = 'admin.item.update'
 const ADMIN_ITEM_DELETE_CONTEXT = 'admin.item.delete'
@@ -193,7 +196,8 @@ export async function updateItemById(
     db.transaction((tx) => writeItemUpdate(update, tx)),
   ))
   if ('errorCode' in outcome) return serviceError(outcome.errorCode)
-  const { previous, updated } = outcome.row
+  if ('notFound' in outcome.row) return serviceError(ErrorCode.NOT_FOUND)
+  const { previous, updated } = outcome.row.written
   await cleanupReplacedImage(previous.imageId, updated.imageId, ADMIN_ITEM_UPDATE_CONTEXT)
 
   const hydrated = await findItemByIdWithSources(updated.id)
@@ -227,19 +231,20 @@ export async function deleteItemById(
   return { data: { message: 'Item deleted successfully' }, httpStatus: HttpStatus.OK }
 }
 
-async function writeItemUpdate(update: ItemUpdateWrite, tx: DbTransaction): Promise<WrittenItemUpdate | undefined> {
+async function writeItemUpdate(update: ItemUpdateWrite, tx: DbTransaction): Promise<ItemUpdateOutcome> {
   const { adminId, itemId, patch, relations } = update
-  const previous = await findItemByIdForUpdate(itemId, tx)
-  if (!previous) return undefined
+  // FOR UPDATE upfront: the patch may change gtin (a key column), see ItemLockStrength.
+  const previous = await findItemByIdForUpdate(itemId, 'update', tx)
+  if (!previous) return { notFound: true }
 
   const updated = Object.keys(patch).length > 0 ? await updateItem(itemId, patch, tx) : previous
-  if (!updated) return undefined
+  if (!updated) return { notFound: true }
   await recordItemContribution(
     { itemId, userId: adminId, action: ItemContributionActions.ADMIN_UPDATE, previous, patch },
     tx,
   )
   await writeItemRelations({ itemId, tagCreatorId: null, relations }, tx)
-  return { previous, updated }
+  return { written: { previous, updated } }
 }
 
 // Sources without an explicit shopId get the shop matching their URL domain; each URL is normalized with

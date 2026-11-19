@@ -51,7 +51,7 @@ export async function findItemContributionsByUser(userId: string): Promise<ItemC
   return db.query.itemContributions.findMany({
     where: eq(itemContributions.userId, userId),
     columns: { id: true, itemId: true, action: true, changes: true, createdAt: true },
-    orderBy: desc(itemContributions.createdAt),
+    orderBy: [desc(itemContributions.createdAt), desc(itemContributions.id)],
   })
 }
 
