@@ -10,7 +10,7 @@ import { serviceError } from '../../shared/utils/response.js'
 import { readErrorName } from '../../shared/utils/error.js'
 import { hashPassword, verifyPassword, hashSha256Hex } from '../../shared/utils/hash.js'
 import { logger } from '../../shared/utils/logger.js'
-import { ONE_HOUR_MS } from '../../shared/utils/time.js'
+import { ONE_HOUR_MS, ONE_SECOND_MS } from '../../shared/utils/time.js'
 import { buildEmailVerificationEmail } from './emails/email-verification.email.js'
 import { buildPasswordResetEmail } from './emails/password-reset.email.js'
 import { signJwt } from './jwt.service.js'
@@ -39,6 +39,7 @@ import { deleteAllUserTokens } from '../../db/entities/access-tokens/access-toke
 import { findRefreshTokenByHash } from '../../db/entities/refresh-tokens/refresh-tokens.repository.js'
 import { findUserById } from '../../db/entities/users/users.repository.js'
 import { isEmailVerificationOverdue } from '../../db/entities/users/users.email-verification.js'
+import { RESEND_VERIFICATION_COOLDOWN_SECONDS } from '@keimelion/sdk/schemas'
 import type {
   ForgotPasswordRequestParsed,
   ForgotPasswordResponseParsed,
@@ -62,7 +63,9 @@ const REFRESH_TOKEN_BYTE_LENGTH = 32
 const PASSWORD_RESET_GENERIC_MESSAGE = 'If this email is registered, a reset link has been sent'
 const VERIFICATION_RESEND_GENERIC_MESSAGE =
   'If this email belongs to an account awaiting verification, a new verification link has been sent'
-const VERIFICATION_RESEND_COOLDOWN_MS = 60 * 1000
+const VERIFICATION_RESEND_COOLDOWN_MS = RESEND_VERIFICATION_COOLDOWN_SECONDS * ONE_SECOND_MS
+const EMAIL_VERIFIED_MESSAGE = 'Email verified successfully'
+const EMAIL_ALREADY_VERIFIED_MESSAGE = 'Email already verified'
 const VERIFICATION_EMAIL_FAILED_EVENT = 'auth_verification_email_failed'
 const VERIFICATION_RESEND_FAILED_EVENT = 'auth_verification_resend_failed'
 const PASSWORD_RESET_EMAIL_FAILED_EVENT = 'auth_password_reset_email_failed'
@@ -128,13 +131,20 @@ async function maybeAttachAvatar(
 export async function verifyEmail(input: VerifyEmailRequestParsed): Promise<ServiceResult<VerifyEmailResponseParsed>> {
   const user = await findUserByEmailVerifyToken(input.token)
 
-  if (!user?.emailVerifyTokenExpiresAt || user.emailVerifyTokenExpiresAt < new Date()) {
+  if (!user || !isEmailVerifyLinkUsable(user, new Date())) {
     return serviceError(ErrorCode.BAD_REQUEST)
   }
 
-  await markEmailAsVerified(user.id)
+  const isNewlyVerified = user.emailVerifiedAt === null && await markEmailAsVerified(user.id)
 
-  return { data: { message: 'Email verified successfully' }, httpStatus: HttpStatus.OK }
+  return {
+    data: {
+      message: isNewlyVerified ? EMAIL_VERIFIED_MESSAGE : EMAIL_ALREADY_VERIFIED_MESSAGE,
+      userId: user.id,
+      alreadyVerified: !isNewlyVerified,
+    },
+    httpStatus: HttpStatus.OK,
+  }
 }
 
 export async function resendVerificationEmail(
@@ -271,6 +281,12 @@ export async function resetPassword(input: ResetPasswordRequestParsed): Promise<
 
 async function isEmailAlreadyTaken(email: string): Promise<boolean> {
   return (await findUserByEmail(email)) !== undefined
+}
+
+// The token survives the verification until it expires; a deleted account never answers.
+function isEmailVerifyLinkUsable(user: User, now: Date): boolean {
+  if (user.deletedAt || !user.emailVerifyTokenExpiresAt) return false
+  return user.emailVerifyTokenExpiresAt >= now
 }
 
 async function isPasswordInvalid(password: string, hash: string | null): Promise<boolean> {
