@@ -701,6 +701,29 @@ describe('GET /v1/users/me/export', () => {
     expect(body.profile).not.toHaveProperty('passwordHash')
   })
 
+  it('never exports the email verification token hash kept after verification', async () => {
+    const keptTokenHash = 'f'.repeat(64)
+    const verifiedUserWithKeptToken = {
+      ...SAFE_USER,
+      emailVerifyToken: keptTokenHash,
+      emailVerifyTokenExpiresAt: new Date(Date.now() + 60 * 60 * 1000),
+    }
+    const token = await generateTestToken(SAFE_USER.id)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(verifiedUserWithKeptToken)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(verifiedUserWithKeptToken)
+    const profileDescriptor = EXPORT_ENTITY_REGISTRY.find((descriptor) => descriptor.filename === 'profile.csv')
+
+    const response = await apiRequest('/v1/users/me/export?format=json', { token })
+
+    const rawBody = await response.text()
+    expect(response.status).toBe(200)
+    expect(rawBody).toContain(SAFE_USER.email)
+    expect(rawBody).not.toContain(keptTokenHash)
+    expect(rawBody).not.toContain('emailVerifyToken')
+    expect(profileDescriptor?.columns).not.toContain('emailVerifyToken')
+    expect(profileDescriptor?.columns).not.toContain('emailVerifyTokenExpiresAt')
+  })
+
   it('includes items and list-items in CSV ZIP archive', async () => {
     const token = await generateTestToken(SAFE_USER.id)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER)

@@ -99,18 +99,22 @@ export async function renewEmailVerifyToken(
   return renewedRows.length > 0
 }
 
-export async function markEmailAsVerified(userId: string): Promise<void> {
+// The token is kept until it expires so a used link keeps answering (idempotent verify-email): any
+// write that clears emailVerifiedAt must clear emailVerifyToken too, or the kept link re-verifies.
+// Guarded on an unverified account: a concurrent use of the same link changes nothing.
+// Resolves whether this call verified the email.
+export async function markEmailAsVerified(userId: string): Promise<boolean> {
   const now = new Date()
-  await db
+  const verifiedRows = await db
     .update(users)
     .set({
       emailVerifiedAt: now,
       lastActiveAt: now,
       userStatus: buildStatusOnAction({ verifiesEmail: true }),
-      emailVerifyToken: null,
-      emailVerifyTokenExpiresAt: null,
     })
-    .where(eq(users.id, userId))
+    .where(and(eq(users.id, userId), isNull(users.emailVerifiedAt)))
+    .returning({ id: users.id })
+  return verifiedRows.length > 0
 }
 
 export async function updateUserProfile(

@@ -6,6 +6,7 @@ import { db } from '../../db/client.js'
 import { env } from '../../config/env.js'
 import { ErrorCode } from '@keimelion/sdk/enums'
 import {
+  RESEND_VERIFICATION_COOLDOWN_SECONDS,
   apiErrorBodySchema,
   forgotPasswordResponseSchema,
   loginResponseSchema,
@@ -443,106 +444,137 @@ describe('POST /v1/auth/register', () => {
 })
 
 describe('POST /v1/auth/verify-email', () => {
+  const VERIFY_TOKEN = '00000000-0000-4000-8000-000000000099'
+  const KEPT_TOKEN_FIELDS = {
+    emailVerifyToken: hashSha256Hex(VERIFY_TOKEN),
+    emailVerifyTokenExpiresAt: new Date(Date.now() + ONE_HOUR_MS),
+  }
+  const UNVERIFIED_USER = { ...VALID_USER, ...KEPT_TOKEN_FIELDS, emailVerifiedAt: null, userStatus: 'unverified' as const }
+  const VERIFIED_USER = { ...VALID_USER, ...KEPT_TOKEN_FIELDS }
+
   beforeEach(() => {
     vi.clearAllMocks()
   })
 
-  it('returns 200 when token is valid', async () => {
-    const validToken = '00000000-0000-0000-0000-000000000099'
-    const userWithToken = {
-      ...VALID_USER,
-      emailVerifiedAt: null,
-      emailVerifyToken: validToken,
-      emailVerifyTokenExpiresAt: new Date(Date.now() + 60 * 60 * 1000),
-    }
-    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(userWithToken)
-    vi.mocked(db.update).mockReturnValueOnce({
-      set: vi.fn().mockReturnValueOnce({
-        where: vi.fn().mockReturnValueOnce({
-          returning: vi.fn().mockResolvedValueOnce([VALID_USER]),
-        }),
-      }),
-    } as never)
+  function mockEmailVerification(verifiedRows: unknown[]): { setSpy: ReturnType<typeof vi.fn>; whereSpy: ReturnType<typeof vi.fn> } {
+    const whereSpy = vi.fn().mockReturnValueOnce({ returning: vi.fn().mockResolvedValueOnce(verifiedRows) })
+    const setSpy = vi.fn().mockReturnValueOnce({ where: whereSpy })
+    vi.mocked(db.update).mockReturnValueOnce({ set: setSpy } as never)
+    return { setSpy, whereSpy }
+  }
 
-    const response = await apiRequest('/v1/auth/verify-email', {
-      method: 'POST',
-      body: { token: validToken },
-    })
+  function postVerifyEmail(token: string = VERIFY_TOKEN): Promise<Response> {
+    return apiRequest('/v1/auth/verify-email', { method: 'POST', body: { token } })
+  }
+
+  async function expectRejectedLink(response: Response): Promise<void> {
+    const errorBody = apiErrorBodySchema.parse(await response.json())
+    expect(response.status).toBe(400)
+    expect(errorBody.code).toBe(ErrorCode.BAD_REQUEST)
+    expect(db.update).not.toHaveBeenCalled()
+  }
+
+  it('verifies the email on the first use of a valid link and returns the account id', async () => {
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(UNVERIFIED_USER)
+    mockEmailVerification([{ id: VALID_USER.id }])
+
+    const response = await postVerifyEmail()
 
     const body = verifyEmailResponseSchema.parse(await response.json())
     expect(response.status).toBe(200)
-    expect(body.message).toBe('Email verified successfully')
+    expect(body).toEqual({ message: 'Email verified successfully', userId: VALID_USER.id, alreadyVerified: false })
   })
 
-  it('counts the verification as an activity and derives the status from the row at write time', async () => {
-    const validToken = '00000000-0000-0000-0000-000000000099'
-    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce({
-      ...VALID_USER,
-      emailVerifiedAt: null,
-      userStatus: 'unverified' as const,
-      lastActiveAt: new Date('2020-01-01'),
-      emailVerifyToken: validToken,
-      emailVerifyTokenExpiresAt: new Date(Date.now() + 60 * 60 * 1000),
-    })
-    const setSpy = vi.fn().mockReturnValueOnce({ where: vi.fn().mockResolvedValueOnce(undefined) })
-    vi.mocked(db.update).mockReturnValueOnce({ set: setSpy } as never)
+  it('counts the verification as an activity, keeps the token and derives the status from the row at write time', async () => {
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce({ ...UNVERIFIED_USER, lastActiveAt: new Date('2020-01-01') })
+    const { setSpy, whereSpy } = mockEmailVerification([{ id: VALID_USER.id }])
 
-    await apiRequest('/v1/auth/verify-email', { method: 'POST', body: { token: validToken } })
+    await postVerifyEmail()
 
-    const stored = setSpy.mock.calls[0]?.[0] as { emailVerifiedAt: Date; lastActiveAt: Date; userStatus: SQL; emailVerifyToken: null }
+    const stored = setSpy.mock.calls[0]?.[0] as { emailVerifiedAt: Date; lastActiveAt: Date; userStatus: SQL }
     const status = new PgDialect().sqlToQuery(stored.userStatus)
+    const where = new PgDialect().sqlToQuery(whereSpy.mock.calls[0]?.[0] as SQL)
     expect(stored.emailVerifiedAt).toBeInstanceOf(Date)
     expect(stored.lastActiveAt).toBe(stored.emailVerifiedAt)
-    expect(stored.emailVerifyToken).toBeNull()
+    expect(stored).not.toHaveProperty('emailVerifyToken')
+    expect(stored).not.toHaveProperty('emailVerifyTokenExpiresAt')
     expect(status.sql).toContain('"users"."deleted_at" IS NOT NULL')
     expect(status.params).toEqual(['pending_deletion', 'banned', 'invited', 'active'])
+    expect(where.sql).toBe('("users"."id" = $1 and "users"."email_verified_at" is null)')
+    expect(where.params).toEqual([VALID_USER.id])
+  })
+
+  it('answers 200 alreadyVerified on a repeat use of an unexpired link, writing nothing', async () => {
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(VERIFIED_USER)
+
+    const response = await postVerifyEmail()
+
+    const body = verifyEmailResponseSchema.parse(await response.json())
+    expect(response.status).toBe(200)
+    expect(body).toEqual({ message: 'Email already verified', userId: VALID_USER.id, alreadyVerified: true })
+    expect(db.update).not.toHaveBeenCalled()
+  })
+
+  it('answers alreadyVerified when a concurrent use of the same link verified the email first', async () => {
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(UNVERIFIED_USER)
+    mockEmailVerification([])
+
+    const response = await postVerifyEmail()
+
+    const body = verifyEmailResponseSchema.parse(await response.json())
+    expect(response.status).toBe(200)
+    expect(body).toEqual({ message: 'Email already verified', userId: VALID_USER.id, alreadyVerified: true })
   })
 
   it('looks the account up by the sha256 hash of the submitted token, never the raw token', async () => {
-    const rawToken = '00000000-0000-4000-8000-000000000099'
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(undefined)
 
-    await apiRequest('/v1/auth/verify-email', { method: 'POST', body: { token: rawToken } })
+    await postVerifyEmail()
 
     const lookup = renderUsersLookup()
     expect(lookup.sql).toContain('"users"."email_verify_token" = $1')
-    expect(lookup.params).toEqual([hashSha256Hex(rawToken)])
+    expect(lookup.params).toEqual([hashSha256Hex(VERIFY_TOKEN)])
   })
 
-  it('returns 400 when token is invalid', async () => {
+  it('returns 400 when the token is unknown or was replaced by a newer resend', async () => {
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(undefined)
 
-    const response = await apiRequest('/v1/auth/verify-email', {
-      method: 'POST',
-      body: { token: '00000000-0000-0000-0000-000000000000' },
-    })
-
-    expect(response.status).toBe(400)
+    await expectRejectedLink(await postVerifyEmail('00000000-0000-0000-0000-000000000000'))
   })
 
-  it('returns 400 when token is expired', async () => {
-    const expiredToken = '00000000-0000-0000-0000-000000000099'
-    const userWithExpiredToken = {
-      ...VALID_USER,
-      emailVerifiedAt: null,
-      emailVerifyToken: expiredToken,
-      emailVerifyTokenExpiresAt: new Date(Date.now() - 60 * 60 * 1000),
-    }
-    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(userWithExpiredToken)
-
-    const response = await apiRequest('/v1/auth/verify-email', {
-      method: 'POST',
-      body: { token: expiredToken },
+  it.each([
+    ['an unverified', UNVERIFIED_USER],
+    ['an already verified', VERIFIED_USER],
+  ])('returns 400 when the token of %s account is expired', async (_case, user) => {
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce({
+      ...user,
+      emailVerifyTokenExpiresAt: new Date(Date.now() - ONE_HOUR_MS),
     })
 
-    expect(response.status).toBe(400)
+    await expectRejectedLink(await postVerifyEmail())
+  })
+
+  it('returns 400 when the token has no expiry', async () => {
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce({ ...UNVERIFIED_USER, emailVerifyTokenExpiresAt: null })
+
+    await expectRejectedLink(await postVerifyEmail())
+  })
+
+  it('returns 400 for a deleted account, never exposing its id', async () => {
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce({
+      ...VERIFIED_USER,
+      deletedAt: new Date('2024-02-01'),
+      userStatus: 'pending_deletion' as const,
+    })
+
+    const response = await postVerifyEmail()
+
+    expect(JSON.stringify(await response.clone().json())).not.toContain(VALID_USER.id)
+    await expectRejectedLink(response)
   })
 
   it('returns 422 when token is not a valid uuid', async () => {
-    const response = await apiRequest('/v1/auth/verify-email', {
-      method: 'POST',
-      body: { token: 'not-a-uuid' },
-    })
+    const response = await postVerifyEmail('not-a-uuid')
 
     expect(response.status).toBe(422)
   })
@@ -552,7 +584,7 @@ describe('POST /v1/auth/resend-verification', () => {
   const GENERIC_BODY = {
     message: 'If this email belongs to an account awaiting verification, a new verification link has been sent',
   }
-  const RESEND_COOLDOWN_MS = 60 * 1000
+  const RESEND_COOLDOWN_MS = RESEND_VERIFICATION_COOLDOWN_SECONDS * 1000
 
   beforeEach(() => {
     vi.clearAllMocks()
