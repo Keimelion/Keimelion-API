@@ -25,6 +25,8 @@ function sendsRealEmails(settings: MailDeliverySettings): boolean {
 const AMAZON_ASSOCIATE_TAG_REGEX = /^[\w-]*$/
 
 const LOCAL_HOSTNAMES = ['localhost', '127.0.0.1', '[::1]']
+// Keeps createdAt + grace period far inside the Date range, so the deadline is always serialisable
+const MAX_EMAIL_VERIFICATION_GRACE_DAYS = 365
 
 function isLocalUrl(url: string): boolean {
   return LOCAL_HOSTNAMES.includes(new URL(url).hostname)
@@ -58,6 +60,7 @@ const baseEnvSchema = z.object({
   JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters'),
   JWT_EXPIRES_IN: z.string().default('7d'),
   EMAIL_VERIFY_TOKEN_TTL_HOURS: z.coerce.number().int().positive().default(24),
+  EMAIL_VERIFICATION_GRACE_DAYS: z.coerce.number().int().min(1).max(MAX_EMAIL_VERIFICATION_GRACE_DAYS).default(7),
   BCRYPT_ROUNDS: z.coerce.number().int().positive().default(12),
   APP_URL: z.url().default('http://localhost:3000'),
   LANDING_URL: z.url().default('http://localhost:4321'),

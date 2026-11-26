@@ -3,6 +3,7 @@ import { db } from '../../db/client.js'
 import { env } from '../../config/env.js'
 import { apiMultipartRequest, apiRequest } from '../../shared/test/api-request.js'
 import { generateTestToken, makeAccessTokenEntry } from '../../shared/test/auth.js'
+import { ONE_DAY_MS } from '../../shared/utils/time.js'
 import { EXPORT_ENTITY_REGISTRY } from './export/export-entities.js'
 import type { ExportEntityDescriptor } from './export/export-entities.js'
 import { getTableConfig, PgDialect } from 'drizzle-orm/pg-core'
@@ -64,6 +65,21 @@ describe('GET /v1/users/me', () => {
     expect(body.user.email).toBe('user@example.com')
   })
 
+  it('exposes the email verification deadline: createdAt + grace period while unverified, null once verified', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    const createdAt = new Date()
+    const unverifiedUser = { ...SAFE_USER, emailVerifiedAt: null, userStatus: 'unverified' as const, createdAt }
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(unverifiedUser).mockResolvedValueOnce(unverifiedUser)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER).mockResolvedValueOnce(SAFE_USER)
+
+    const unverified = usersGetProfileResponseSchema.parse(await (await apiRequest('/v1/users/me', { token })).json())
+    const verified = usersGetProfileResponseSchema.parse(await (await apiRequest('/v1/users/me', { token })).json())
+
+    const gracePeriodMs = env.EMAIL_VERIFICATION_GRACE_DAYS * ONE_DAY_MS
+    expect(unverified.user.emailVerificationDeadlineAt).toEqual(new Date(createdAt.getTime() + gracePeriodMs))
+    expect(verified.user.emailVerificationDeadlineAt).toBeNull()
+  })
+
   it('returns 401 when no authorization header is provided', async () => {
     const response = await apiRequest('/v1/users/me')
     expect(response.status).toBe(401)
@@ -102,6 +118,43 @@ describe('GET /v1/users/me', () => {
     const response = await apiRequest('/v1/users/me', { token })
 
     expect(response.status).toBe(401)
+  })
+
+  it('returns 403 EMAIL_NOT_VERIFIED from the verification deadline on, even with a live access token', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    const gracePeriodMs = env.EMAIL_VERIFICATION_GRACE_DAYS * ONE_DAY_MS
+    const overdueUser = { ...SAFE_USER, emailVerifiedAt: null, createdAt: new Date(Date.now() - gracePeriodMs) }
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(overdueUser)
+
+    const response = await apiRequest('/v1/users/me', { token })
+
+    const body = await response.json() as { code: string }
+    expect(response.status).toBe(403)
+    expect(body.code).toBe('EMAIL_NOT_VERIFIED')
+  })
+
+  it('still serves an unverified account before its verification deadline', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    const gracePeriodMs = env.EMAIL_VERIFICATION_GRACE_DAYS * ONE_DAY_MS
+    const createdAt = new Date(Date.now() - gracePeriodMs + ONE_DAY_MS)
+    const unverifiedUser = { ...SAFE_USER, emailVerifiedAt: null, userStatus: 'unverified' as const, createdAt }
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(unverifiedUser).mockResolvedValueOnce(unverifiedUser)
+
+    const response = await apiRequest('/v1/users/me', { token })
+
+    expect(response.status).toBe(200)
+  })
+
+  it('reports ACCOUNT_BANNED before EMAIL_NOT_VERIFIED for an overdue banned account', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    const overdueBannedUser = { ...SAFE_USER, emailVerifiedAt: null, bannedAt: new Date('2024-01-01') }
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(overdueBannedUser)
+
+    const response = await apiRequest('/v1/users/me', { token })
+
+    const body = await response.json() as { code: string }
+    expect(response.status).toBe(403)
+    expect(body.code).toBe('ACCOUNT_BANNED')
   })
 
   it('returns 403 when user is banned', async () => {
@@ -963,6 +1016,14 @@ describe('GET /v1/users/me/export', () => {
     expect(response.status).toBe(200)
     const body = await response.json() as { profile: { defaultCurrency: string } }
     expect(body.profile.defaultCurrency).toBe('EUR')
+  })
+
+  it('registers profile.csv with emailVerificationDeadlineAt in the allow-list, like the JSON profile', () => {
+    const profileDescriptor = EXPORT_ENTITY_REGISTRY.find(
+      (descriptor) => descriptor.filename === 'profile.csv',
+    )
+
+    expect(profileDescriptor?.columns).toContain('emailVerificationDeadlineAt')
   })
 
   it('registers profile.csv with defaultCurrency in the allow-list', () => {

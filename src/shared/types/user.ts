@@ -1,5 +1,6 @@
 import type { User } from '../../db/entities/users/users.schema.js'
 import type { Image } from '../../db/entities/images/images.schema.js'
+import { computeEmailVerificationDeadline } from '../../db/entities/users/users.email-verification.js'
 import type { SupportedCurrency } from '@keimelion/sdk/enums'
 import type { UserDetailParsed } from '@keimelion/sdk/schemas'
 import { toImageDetail } from '../../features/uploads/images.mapper.js'
@@ -31,6 +32,7 @@ export function toUserDetail(user: UserRowWithAvatar): UserDetailParsed {
     isMarketingOptedIn: user.isMarketingOptedIn,
     defaultCurrency: user.defaultCurrencyCode as SupportedCurrency,
     emailVerifiedAt: user.emailVerifiedAt ?? null,
+    emailVerificationDeadlineAt: computeEmailVerificationDeadline(user),
     lastActiveAt: user.lastActiveAt ?? null,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,

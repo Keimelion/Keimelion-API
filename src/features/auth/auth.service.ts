@@ -1,5 +1,7 @@
 import { randomUUID, randomBytes } from 'crypto'
 import { env } from '../../config/env.js'
+import { db } from '../../db/client.js'
+import type { DbTransaction } from '../../db/client.js'
 import { ErrorCode, HttpStatus } from '@keimelion/sdk/enums'
 import type { Locale } from '@keimelion/sdk/enums'
 import { NodeEnvs } from '../../shared/enums/node-env.js'
@@ -29,13 +31,14 @@ import { toUserDetail } from '../../shared/types/user.js'
 import type { User } from '../../db/entities/users/users.schema.js'
 import type { Image } from '../../db/entities/images/images.schema.js'
 import {
-  storeTokenAndUpdateActivity,
+  storeSessionAndUpdateActivity,
   revokeTokenAndUpdateActivity,
   rotateRefreshTokenAndIssueAccessToken,
 } from './auth.repository.js'
 import { deleteAllUserTokens } from '../../db/entities/access-tokens/access-tokens.repository.js'
-import { insertRefreshToken, findRefreshTokenByHash } from '../../db/entities/refresh-tokens/refresh-tokens.repository.js'
+import { findRefreshTokenByHash } from '../../db/entities/refresh-tokens/refresh-tokens.repository.js'
 import { findUserById } from '../../db/entities/users/users.repository.js'
+import { isEmailVerificationOverdue } from '../../db/entities/users/users.email-verification.js'
 import type {
   ForgotPasswordRequestParsed,
   ForgotPasswordResponseParsed,
@@ -75,22 +78,27 @@ export async function registerUser(
   }
 
   const emailVerifyToken = randomUUID()
-  const createdUser = await insertUser(input, emailVerifyToken, null)
+  // Account and session commit together: a failed session never leaves an account the client
+  // cannot sign in to, nor a 409 on its retry.
+  const registration = await db.transaction(async (tx) => {
+    const createdUser = await insertUser(input, emailVerifyToken, null, tx)
+    if (!createdUser) return null
+    return openSession(createdUser, tx)
+  })
 
-  if (!createdUser) {
+  if (!registration) {
     return serviceError(ErrorCode.USER_CREATION_FAILED)
   }
 
   sendVerificationEmail(input.email, emailVerifyToken, emailLocale)
-  const rawRefreshToken = await issueRefreshToken(createdUser.id)
 
-  const finalUser = await maybeAttachAvatar(createdUser, avatarBuffer)
+  const finalUser = await maybeAttachAvatar(registration.user, avatarBuffer)
   if ('errorCode' in finalUser) return serviceError(finalUser.errorCode)
 
   return {
     data: {
+      ...registration.tokens,
       user: toUserDetail({ ...finalUser.row, avatarImage: finalUser.avatarImage }),
-      refreshToken: rawRefreshToken,
     },
     httpStatus: HttpStatus.CREATED,
   }
@@ -157,20 +165,13 @@ export async function loginUser(input: LoginRequestParsed): Promise<ServiceResul
     return serviceError(ErrorCode.UNAUTHORIZED)
   }
 
-  if (!user.emailVerifiedAt) {
-    return serviceError(ErrorCode.EMAIL_NOT_VERIFIED)
+  const sessionDenial = resolveSessionDenial(user)
+  if (sessionDenial) {
+    return serviceError(sessionDenial)
   }
 
-  if (user.bannedAt) {
-    return serviceError(ErrorCode.ACCOUNT_BANNED)
-  }
-
-  const { token, tokenId, expiresAt } = await signJwt(user.id, user.role)
-  await storeTokenAndUpdateActivity(tokenId, user.id, expiresAt)
-
-  const rawRefreshToken = await issueRefreshToken(user.id)
-
-  return { data: { accessToken: token, refreshToken: rawRefreshToken, user: toUserDetail(user) }, httpStatus: HttpStatus.OK }
+  const session = await openSession(user)
+  return { data: { ...session.tokens, user: toUserDetail(session.user) }, httpStatus: HttpStatus.OK }
 }
 
 export async function refreshAccessToken(rawToken: string): Promise<ServiceResult<RefreshResponseParsed>> {
@@ -187,9 +188,9 @@ export async function refreshAccessToken(rawToken: string): Promise<ServiceResul
     return serviceError(ErrorCode.INVALID_REFRESH_TOKEN)
   }
 
-  const refreshDenial = resolveRefreshDenial(user)
-  if (refreshDenial) {
-    return serviceError(refreshDenial)
+  const sessionDenial = resolveSessionDenial(user)
+  if (sessionDenial) {
+    return serviceError(sessionDenial)
   }
 
   const { token, tokenId, expiresAt } = await signJwt(user.id, user.role)
@@ -302,9 +303,10 @@ async function issueVerificationResend(email: string, rawToken: string, locale: 
 }
 
 // Same precedence as the account status: a banned account is reported as banned even unverified.
-function resolveRefreshDenial(user: User): ErrorCode | null {
+// An unverified account opens sessions until its email verification deadline.
+function resolveSessionDenial(user: User): ErrorCode | null {
   if (user.bannedAt) return ErrorCode.ACCOUNT_BANNED
-  if (!user.emailVerifiedAt) return ErrorCode.EMAIL_NOT_VERIFIED
+  if (isEmailVerificationOverdue(user, new Date())) return ErrorCode.EMAIL_NOT_VERIFIED
   return null
 }
 
@@ -330,10 +332,26 @@ async function issuePasswordReset(user: User, rawToken: string, locale: Locale):
   }
 }
 
-async function issueRefreshToken(userId: string): Promise<string> {
-  const rawToken = generateRawRefreshToken()
-  await insertRefreshToken(hashSha256Hex(rawToken), userId, computeRefreshTokenExpiresAt())
-  return rawToken
+interface OpenedSession<TUser extends User> {
+  tokens: RefreshResponseParsed
+  user: TUser
+}
+
+// The returned user carries the activity just recorded (lastActiveAt, userStatus).
+async function openSession<TUser extends User>(user: TUser, tx?: DbTransaction): Promise<OpenedSession<TUser>> {
+  const { token, tokenId, expiresAt } = await signJwt(user.id, user.role)
+  const refreshToken = generateRawRefreshToken()
+  const updatedUser = await storeSessionAndUpdateActivity(
+    user.id,
+    {
+      accessTokenId: tokenId,
+      accessTokenExpiresAt: expiresAt,
+      refreshTokenHash: hashSha256Hex(refreshToken),
+      refreshTokenExpiresAt: computeRefreshTokenExpiresAt(),
+    },
+    tx,
+  )
+  return { tokens: { accessToken: token, refreshToken }, user: { ...user, ...updatedUser } }
 }
 
 function generateRawRefreshToken(): string {

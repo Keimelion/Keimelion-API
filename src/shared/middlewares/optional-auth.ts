@@ -2,6 +2,7 @@ import type { Context, MiddlewareHandler } from 'hono'
 import { verifyJwt } from '../../features/auth/jwt.service.js'
 import type { JwtPayload } from '../../features/auth/jwt.service.js'
 import { findUserById, updateLastActiveAt } from '../../db/entities/users/users.repository.js'
+import { isEmailVerificationOverdue } from '../../db/entities/users/users.email-verification.js'
 import { isTokenActive } from '../../db/entities/access-tokens/access-tokens.repository.js'
 import { HonoContextKey } from '../enums/context-key.js'
 import type { AppVariables } from '../types/app.js'
@@ -42,6 +43,7 @@ async function resolveOptionalUser(authHeader: string | undefined): Promise<User
 
   const user = await findUserById(payload.userId)
   if (!user || user.deletedAt || user.bannedAt) return null
+  if (isEmailVerificationOverdue(user, new Date())) return null
 
   const active = await isTokenActive(payload.tokenId)
   if (!active) return null

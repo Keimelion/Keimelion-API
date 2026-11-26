@@ -185,6 +185,7 @@ const profileEntityDescriptor: ExportEntityDescriptor = {
     'isMarketingOptedIn',
     'defaultCurrency',
     'emailVerifiedAt',
+    'emailVerificationDeadlineAt',
     'lastActiveAt',
     'createdAt',
     'updatedAt',

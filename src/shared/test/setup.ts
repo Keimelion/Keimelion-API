@@ -13,6 +13,7 @@ vi.mock('../../config/env.js', () => ({
     JWT_SECRET: 'test-secret-key-that-is-at-least-32-chars-long',
     JWT_EXPIRES_IN: '7d',
     EMAIL_VERIFY_TOKEN_TTL_HOURS: 24,
+    EMAIL_VERIFICATION_GRACE_DAYS: 7,
     BCRYPT_ROUNDS: 4,
     APP_URL: 'http://localhost:3000',
     LANDING_URL: 'https://keimelion.test',
@@ -75,7 +76,7 @@ const applyDbMockDefaults = (db: Record<string, unknown>): void => {
   vi.mocked(db.update as ReturnType<typeof vi.fn>).mockImplementation(() => ({
     set: vi.fn(() => ({
       where: vi.fn(() => ({
-        returning: vi.fn(),
+        returning: vi.fn(() => Promise.resolve([])),
       })),
     })),
   }))

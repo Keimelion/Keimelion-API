@@ -4,6 +4,7 @@ import { sendError } from '../utils/response.js'
 import { verifyJwt } from '../../features/auth/jwt.service.js'
 import type { JwtPayload } from '../../features/auth/jwt.service.js'
 import { findUserById, updateLastActiveAt } from '../../db/entities/users/users.repository.js'
+import { isEmailVerificationOverdue } from '../../db/entities/users/users.email-verification.js'
 import { isTokenActive } from '../../db/entities/access-tokens/access-tokens.repository.js'
 import { HonoContextKey } from '../enums/context-key.js'
 import type { AppVariables } from '../types/app.js'
@@ -38,6 +39,11 @@ export const authMiddleware: MiddlewareHandler<{ Variables: AppVariables }> = as
 
   if (user.bannedAt) {
     return sendError(ErrorCode.ACCOUNT_BANNED)
+  }
+
+  // An access token outlives the verification deadline: it stops working at the deadline too
+  if (isEmailVerificationOverdue(user, new Date())) {
+    return sendError(ErrorCode.EMAIL_NOT_VERIFIED)
   }
 
   const active = await isTokenActive(payload.tokenId)

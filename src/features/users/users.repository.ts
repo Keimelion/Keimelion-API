@@ -1,5 +1,6 @@
 import { and, count, eq, inArray, isNull, lt, or, sql } from 'drizzle-orm'
 import { db } from '../../db/client.js'
+import type { DbTransaction } from '../../db/client.js'
 import { users } from '../../db/entities/users/users.schema.js'
 import { reservations } from '../../db/entities/reservations/reservations.schema.js'
 import { listItems } from '../../db/entities/list-items/list-items.schema.js'
@@ -40,11 +41,12 @@ export async function insertUser(
   input: RegisterRequestParsed,
   emailVerifyToken: string,
   avatarImageId: string | null = null,
+  tx?: DbTransaction,
 ): Promise<User | undefined> {
   const passwordHash = await hashPassword(input.password)
   const now = new Date()
 
-  const [user] = await db
+  const [user] = await (tx ?? db)
     .insert(users)
     .values({
       email: input.email,

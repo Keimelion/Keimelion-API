@@ -522,9 +522,9 @@ describe('POST /v1/collaborators/invites/accept', () => {
     expect(body.invite.user?.id).toBe(INVITEE_USER.id)
   })
 
-  it('returns 403 EMAIL_NOT_VERIFIED when caller has not verified their email', async () => {
+  it('returns 403 EMAIL_NOT_VERIFIED when caller has not verified their email, even inside the grace period', async () => {
     const token = await generateTestToken(UNVERIFIED_USER.id)
-    mockInviteeAuth(UNVERIFIED_USER)
+    mockInviteeAuth({ ...UNVERIFIED_USER, createdAt: new Date() })
 
     const response = await apiRequest('/v1/collaborators/invites/accept', {
       method: 'POST',
