@@ -101,3 +101,33 @@ describe('env mail settings', () => {
     expect(console.error).toHaveBeenCalledWith(expect.stringContaining('MAIL_TEST_TO'))
   })
 })
+
+describe('env EMAIL_VERIFICATION_GRACE_DAYS', () => {
+  beforeEach(() => {
+    vi.resetModules()
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    vi.spyOn(process, 'exit').mockImplementation(() => {
+      throw new Error(EXIT_ERROR)
+    })
+  })
+
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    vi.restoreAllMocks()
+  })
+
+  it.each(['1', '365'])('boots with a grace period of %s days', async (graceDays) => {
+    await expect(
+      loadEnv({ NODE_ENV: NodeEnvs.TEST, EMAIL_VERIFICATION_GRACE_DAYS: graceDays }),
+    ).resolves.toBeUndefined()
+  })
+
+  // 0 would issue a register session that is already overdue; past 365 the deadline nears the Date limit
+  it.each(['0', '366', '1e9'])('refuses to boot with a grace period of %s days', async (graceDays) => {
+    await expect(
+      loadEnv({ NODE_ENV: NodeEnvs.TEST, EMAIL_VERIFICATION_GRACE_DAYS: graceDays }),
+    ).rejects.toThrow(EXIT_ERROR)
+
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining('EMAIL_VERIFICATION_GRACE_DAYS'))
+  })
+})

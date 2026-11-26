@@ -120,6 +120,43 @@ describe('GET /v1/users/me', () => {
     expect(response.status).toBe(401)
   })
 
+  it('returns 403 EMAIL_NOT_VERIFIED from the verification deadline on, even with a live access token', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    const gracePeriodMs = env.EMAIL_VERIFICATION_GRACE_DAYS * ONE_DAY_MS
+    const overdueUser = { ...SAFE_USER, emailVerifiedAt: null, createdAt: new Date(Date.now() - gracePeriodMs) }
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(overdueUser)
+
+    const response = await apiRequest('/v1/users/me', { token })
+
+    const body = await response.json() as { code: string }
+    expect(response.status).toBe(403)
+    expect(body.code).toBe('EMAIL_NOT_VERIFIED')
+  })
+
+  it('still serves an unverified account before its verification deadline', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    const gracePeriodMs = env.EMAIL_VERIFICATION_GRACE_DAYS * ONE_DAY_MS
+    const createdAt = new Date(Date.now() - gracePeriodMs + ONE_DAY_MS)
+    const unverifiedUser = { ...SAFE_USER, emailVerifiedAt: null, userStatus: 'unverified' as const, createdAt }
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(unverifiedUser).mockResolvedValueOnce(unverifiedUser)
+
+    const response = await apiRequest('/v1/users/me', { token })
+
+    expect(response.status).toBe(200)
+  })
+
+  it('reports ACCOUNT_BANNED before EMAIL_NOT_VERIFIED for an overdue banned account', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    const overdueBannedUser = { ...SAFE_USER, emailVerifiedAt: null, bannedAt: new Date('2024-01-01') }
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(overdueBannedUser)
+
+    const response = await apiRequest('/v1/users/me', { token })
+
+    const body = await response.json() as { code: string }
+    expect(response.status).toBe(403)
+    expect(body.code).toBe('ACCOUNT_BANNED')
+  })
+
   it('returns 403 when user is banned', async () => {
     const token = await generateTestToken(SAFE_USER.id)
     const bannedUser = { ...SAFE_USER, bannedAt: new Date('2024-01-01') }
@@ -979,6 +1016,14 @@ describe('GET /v1/users/me/export', () => {
     expect(response.status).toBe(200)
     const body = await response.json() as { profile: { defaultCurrency: string } }
     expect(body.profile.defaultCurrency).toBe('EUR')
+  })
+
+  it('registers profile.csv with emailVerificationDeadlineAt in the allow-list, like the JSON profile', () => {
+    const profileDescriptor = EXPORT_ENTITY_REGISTRY.find(
+      (descriptor) => descriptor.filename === 'profile.csv',
+    )
+
+    expect(profileDescriptor?.columns).toContain('emailVerificationDeadlineAt')
   })
 
   it('registers profile.csv with defaultCurrency in the allow-list', () => {

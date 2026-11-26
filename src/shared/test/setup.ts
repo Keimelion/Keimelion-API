@@ -76,7 +76,7 @@ const applyDbMockDefaults = (db: Record<string, unknown>): void => {
   vi.mocked(db.update as ReturnType<typeof vi.fn>).mockImplementation(() => ({
     set: vi.fn(() => ({
       where: vi.fn(() => ({
-        returning: vi.fn(),
+        returning: vi.fn(() => Promise.resolve([])),
       })),
     })),
   }))

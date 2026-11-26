@@ -200,6 +200,17 @@ describe('POST /v1/auth/register', () => {
     })
   }
 
+  it('creates the account and its session in one transaction, and sends no email when it rolls back', async () => {
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(undefined)
+    vi.mocked(db.transaction).mockRejectedValueOnce(new Error('connection lost'))
+
+    const response = await postRegister()
+
+    expect(response.status).toBe(500)
+    expect(db.transaction).toHaveBeenCalledOnce()
+    expect(sendMail).not.toHaveBeenCalled()
+  })
+
   it('activates the account at registration and stores the unverified status', async () => {
     const valuesSpy = mockRegistrationInserts()
 
@@ -725,9 +736,13 @@ describe('POST /v1/auth/login', () => {
   it('bumps lastActiveAt on login and reactivates an inactive account in the same update', async () => {
     const bcrypt = await import('bcryptjs')
     const hash = await bcrypt.default.hash('securepassword123', 4)
-    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce({ ...VALID_USER, passwordHash: hash, userStatus: 'inactive' as const })
+    const loggedUser = { ...VALID_USER, passwordHash: hash, userStatus: 'inactive' as const, lastActiveAt: null }
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(loggedUser)
     mockInsertNoReturning()
-    const setSpy = vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) })
+    const recordedActivityAt = new Date('2026-11-26T12:00:00Z')
+    const updatedRow = { ...loggedUser, lastActiveAt: recordedActivityAt, userStatus: 'active' as const }
+    const returning = vi.fn().mockResolvedValue([updatedRow])
+    const setSpy = vi.fn().mockReturnValue({ where: vi.fn().mockReturnValue({ returning }) })
     vi.mocked(db.update).mockReturnValue({ set: setSpy } as never)
 
     const response = await apiRequest('/v1/auth/login', {
@@ -737,7 +752,9 @@ describe('POST /v1/auth/login', () => {
 
     const stored = setSpy.mock.calls.map((call) => call[0] as { lastActiveAt?: Date; userStatus?: SQL })
     const activityWrite = stored.find((fields) => fields.lastActiveAt !== undefined)
+    const body = loginResponseSchema.parse(await response.json())
     expect(response.status).toBe(200)
+    expect(body.user.lastActiveAt).toEqual(recordedActivityAt)
     expect(activityWrite?.lastActiveAt).toBeInstanceOf(Date)
     expect(activityWrite?.userStatus && new PgDialect().sqlToQuery(activityWrite.userStatus)).toMatchObject({
       sql: 'CASE WHEN "users"."user_status" = $1 THEN $2::user_status ELSE "users"."user_status" END',
@@ -1561,11 +1578,12 @@ describe('email verification grace period boundary', () => {
     expect(statuses).toEqual([403, 403, 200, 200])
   })
 
-  it('restores the strict behaviour with a grace period of 0 days', async () => {
-    env.EMAIL_VERIFICATION_GRACE_DAYS = 0
+  it('follows a shorter configured grace period', async () => {
+    env.EMAIL_VERIFICATION_GRACE_DAYS = 1
+    const createdTwoDaysAgo = new Date(now.getTime() - 2 * ONE_DAY_MS)
 
-    const login = await postLoginAs(buildUnverifiedFields(now))
-    const refresh = await postRefreshAs(buildUnverifiedFields(now))
+    const login = await postLoginAs(buildUnverifiedFields(createdTwoDaysAgo))
+    const refresh = await postRefreshAs(buildUnverifiedFields(createdTwoDaysAgo))
 
     const bodies = [apiErrorBodySchema.parse(await login.json()), apiErrorBodySchema.parse(await refresh.json())]
     expect(bodies.map((body) => body.code)).toEqual([ErrorCode.EMAIL_NOT_VERIFIED, ErrorCode.EMAIL_NOT_VERIFIED])

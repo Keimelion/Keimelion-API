@@ -26,9 +26,9 @@ describe('computeEmailVerificationDeadline', () => {
   })
 
   it('follows the configured grace period', () => {
-    env.EMAIL_VERIFICATION_GRACE_DAYS = 0
+    env.EMAIL_VERIFICATION_GRACE_DAYS = 1
 
-    expect(computeEmailVerificationDeadline(UNVERIFIED)).toEqual(CREATED_AT)
+    expect(computeEmailVerificationDeadline(UNVERIFIED)).toEqual(new Date('2026-11-02T10:00:00Z'))
   })
 })
 
@@ -50,11 +50,5 @@ describe('isEmailVerificationOverdue', () => {
     const longAfter = new Date(computeExpectedDeadline().getTime() + 365 * ONE_DAY_MS)
 
     expect(isEmailVerificationOverdue(VERIFIED, longAfter)).toBe(false)
-  })
-
-  it('is true from the account creation with a grace period of 0 days', () => {
-    env.EMAIL_VERIFICATION_GRACE_DAYS = 0
-
-    expect(isEmailVerificationOverdue(UNVERIFIED, CREATED_AT)).toBe(true)
   })
 })
