@@ -1,5 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type { SQL } from 'drizzle-orm'
+import { decodeJwt } from 'jose'
 import { PgDialect } from 'drizzle-orm/pg-core'
 import { db } from '../../db/client.js'
 import { env } from '../../config/env.js'
@@ -22,6 +23,8 @@ import { apiMultipartRequest, apiRequest } from '../../shared/test/api-request.j
 import { generateTestToken, makeAccessTokenEntry } from '../../shared/test/auth.js'
 import { hashSha256Hex } from '../../shared/utils/hash.js'
 import { logger } from '../../shared/utils/logger.js'
+import { accessTokens } from '../../db/entities/access-tokens/access-tokens.schema.js'
+import type { User } from '../../db/entities/users/users.schema.js'
 
 vi.mock('../../shared/mail/mail.sender.js', () => ({ sendMail: vi.fn() }))
 
@@ -70,6 +73,8 @@ const WEB_APP_URL = 'https://app.keimelion.test'
 const BACKOFFICE_URL = 'https://backoffice.keimelion.test'
 const ONE_HOUR_MS = 60 * 60 * 1000
 const ONE_MINUTE_MS = 60 * 1000
+const ONE_DAY_MS = 24 * ONE_HOUR_MS
+const LOGIN_PASSWORD = 'securepassword123'
 const MAIL_SENT = { isSuccess: true, messageId: 'message-1' } as const
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 
@@ -140,6 +145,30 @@ function expectExpiresInVerifyTtl(expiresAt: Date, before: number): void {
   const verifyTtlMs = env.EMAIL_VERIFY_TOKEN_TTL_HOURS * ONE_HOUR_MS
   expect(expiresAt.getTime() - before).toBeGreaterThanOrEqual(verifyTtlMs)
   expect(expiresAt.getTime() - before).toBeLessThan(verifyTtlMs + ONE_MINUTE_MS)
+}
+
+function computeGracePeriodMs(): number {
+  return env.EMAIL_VERIFICATION_GRACE_DAYS * ONE_DAY_MS
+}
+
+function buildUnverifiedFields(createdAt: Date): Partial<User> {
+  return { emailVerifiedAt: null, userStatus: 'unverified', createdAt }
+}
+
+async function postLoginAs(overrides: Partial<User>): Promise<Response> {
+  const bcrypt = await import('bcryptjs')
+  const passwordHash = await bcrypt.default.hash(LOGIN_PASSWORD, 4)
+  vi.mocked(db.query.users.findFirst).mockResolvedValueOnce({ ...VALID_USER, ...overrides, passwordHash })
+  return apiRequest('/v1/auth/login', {
+    method: 'POST',
+    body: { email: VALID_USER.email, password: LOGIN_PASSWORD },
+  })
+}
+
+function postRefreshAs(overrides: Partial<User>): Promise<Response> {
+  vi.mocked(db.query.refreshTokens.findFirst).mockResolvedValueOnce(VALID_REFRESH_TOKEN_ROW)
+  vi.mocked(db.query.users.findFirst).mockResolvedValueOnce({ ...VALID_USER, ...overrides })
+  return apiRequest('/v1/auth/refresh', { method: 'POST', body: { refreshToken: 'some-token' } })
 }
 
 function renderUsersLookup(): ReturnType<PgDialect['sqlToQuery']> {
@@ -262,10 +291,11 @@ describe('POST /v1/auth/register', () => {
     expect(sendMail).not.toHaveBeenCalled()
   })
 
-  it('returns 201 with user and refreshToken when registration is successful', async () => {
+  it('returns 201 with user, accessToken and refreshToken when registration is successful', async () => {
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(undefined)
     mockInsertReturning(VALID_USER)
-    mockInsertNoReturning()
+    const accessTokenValuesSpy = vi.fn().mockResolvedValueOnce(undefined)
+    vi.mocked(db.insert).mockReturnValueOnce({ values: accessTokenValuesSpy } as never)
 
     const response = await apiRequest('/v1/auth/register', {
       method: 'POST',
@@ -277,10 +307,25 @@ describe('POST /v1/auth/register', () => {
     })
 
     const body = registerResponseSchema.parse(await response.json())
+    const storedAccessToken = accessTokenValuesSpy.mock.calls[0]?.[0] as { tokenId: string; userId: string }
     expect(response.status).toBe(201)
     expect(body.user.email).toBe('user@example.com')
-    expect(typeof body.refreshToken).toBe('string')
-    expect(body.refreshToken.length).toBeGreaterThan(0)
+    expect(vi.mocked(db.insert).mock.calls[1]?.[0]).toBe(accessTokens)
+    expect(storedAccessToken).toMatchObject({ tokenId: decodeJwt(body.accessToken).jti, userId: VALID_USER.id })
+    expect(body.refreshToken).toMatch(/^[a-f0-9]{64}$/)
+  })
+
+  it('exposes the email verification deadline of the new unverified account', async () => {
+    const createdAt = new Date()
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(undefined)
+    mockInsertReturning({ ...VALID_USER, ...buildUnverifiedFields(createdAt) })
+
+    const response = await postRegister()
+
+    const body = registerResponseSchema.parse(await response.json())
+    expect(response.status).toBe(201)
+    expect(body.user.emailVerifiedAt).toBeNull()
+    expect(body.user.emailVerificationDeadlineAt).toEqual(new Date(createdAt.getTime() + computeGracePeriodMs()))
   })
 
   it('persists defaultCurrencyCode when defaultCurrency is provided', async () => {
@@ -773,18 +818,43 @@ describe('POST /v1/auth/login', () => {
     expect(response.status).toBe(401)
   })
 
-  it('returns 403 when email is not verified', async () => {
-    const bcrypt = await import('bcryptjs')
-    const hash = await bcrypt.default.hash('securepassword123', 4)
-    const unverifiedUser = { ...VALID_USER, passwordHash: hash, emailVerifiedAt: null }
-    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(unverifiedUser)
+  it('returns 403 EMAIL_NOT_VERIFIED for an unverified account past the grace period', async () => {
+    const response = await postLoginAs(buildUnverifiedFields(new Date('2024-01-01')))
 
-    const response = await apiRequest('/v1/auth/login', {
-      method: 'POST',
-      body: { email: 'user@example.com', password: 'securepassword123' },
-    })
-
+    const body = apiErrorBodySchema.parse(await response.json())
     expect(response.status).toBe(403)
+    expect(body.code).toBe(ErrorCode.EMAIL_NOT_VERIFIED)
+    expect(db.insert).not.toHaveBeenCalled()
+  })
+
+  it('returns 200 with both tokens for an unverified account inside the grace period', async () => {
+    const createdAt = new Date(Date.now() - ONE_DAY_MS)
+
+    const response = await postLoginAs(buildUnverifiedFields(createdAt))
+
+    const body = loginResponseSchema.parse(await response.json())
+    expect(response.status).toBe(200)
+    expect(body.accessToken.length).toBeGreaterThan(0)
+    expect(body.refreshToken).toMatch(/^[a-f0-9]{64}$/)
+    expect(body.user.emailVerificationDeadlineAt).toEqual(new Date(createdAt.getTime() + computeGracePeriodMs()))
+  })
+
+  it('exposes a null email verification deadline once the email is verified', async () => {
+    const response = await postLoginAs({})
+
+    const body = loginResponseSchema.parse(await response.json())
+    expect(response.status).toBe(200)
+    expect(body.user.emailVerificationDeadlineAt).toBeNull()
+  })
+
+  it('reports a banned unverified account as banned, inside or past the grace period', async () => {
+    const bannedAt = new Date('2024-01-01')
+    const insideGrace = await postLoginAs({ ...buildUnverifiedFields(new Date()), bannedAt })
+    const pastGrace = await postLoginAs({ ...buildUnverifiedFields(new Date('2024-01-01')), bannedAt })
+
+    const bodies = [apiErrorBodySchema.parse(await insideGrace.json()), apiErrorBodySchema.parse(await pastGrace.json())]
+    expect([insideGrace.status, pastGrace.status]).toEqual([403, 403])
+    expect(bodies.map((body) => body.code)).toEqual([ErrorCode.ACCOUNT_BANNED, ErrorCode.ACCOUNT_BANNED])
   })
 
   it('returns 403 when account is banned', async () => {
@@ -1383,7 +1453,7 @@ describe('POST /v1/auth/refresh', () => {
     expect(response.status).toBe(403)
   })
 
-  it('returns 403 EMAIL_NOT_VERIFIED for an unverified account, without rotating nor revoking the token', async () => {
+  it('returns 403 EMAIL_NOT_VERIFIED for an unverified account past the grace period, without rotating nor revoking the token', async () => {
     vi.mocked(db.query.refreshTokens.findFirst).mockResolvedValueOnce(VALID_REFRESH_TOKEN_ROW)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce({ ...VALID_USER, emailVerifiedAt: null, userStatus: 'unverified' as const })
 
@@ -1419,6 +1489,23 @@ describe('POST /v1/auth/refresh', () => {
     expect(db.transaction).toHaveBeenCalledOnce()
   })
 
+  it('returns 200 and rotates the token for an unverified account inside the grace period', async () => {
+    const response = await postRefreshAs(buildUnverifiedFields(new Date(Date.now() - ONE_DAY_MS)))
+
+    const body = refreshResponseSchema.parse(await response.json())
+    expect(response.status).toBe(200)
+    expect(body.refreshToken).toMatch(/^[a-f0-9]{64}$/)
+    expect(db.transaction).toHaveBeenCalledOnce()
+  })
+
+  it('reports a banned unverified account inside the grace period as banned', async () => {
+    const response = await postRefreshAs({ ...buildUnverifiedFields(new Date()), bannedAt: new Date('2024-01-01') })
+
+    const body = apiErrorBodySchema.parse(await response.json())
+    expect(response.status).toBe(403)
+    expect(body.code).toBe(ErrorCode.ACCOUNT_BANNED)
+  })
+
   it('reports a banned unverified account as banned', async () => {
     vi.mocked(db.query.refreshTokens.findFirst).mockResolvedValueOnce(VALID_REFRESH_TOKEN_ROW)
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce({
@@ -1444,6 +1531,44 @@ describe('POST /v1/auth/refresh', () => {
     })
 
     expect(response.status).toBe(422)
+  })
+})
+
+describe('email verification grace period boundary', () => {
+  const now = new Date()
+  const originalGraceDays = env.EMAIL_VERIFICATION_GRACE_DAYS
+
+  beforeEach(() => {
+    vi.useFakeTimers({ now, toFake: ['Date'] })
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+    env.EMAIL_VERIFICATION_GRACE_DAYS = originalGraceDays
+  })
+
+  it('blocks login and refresh exactly at the deadline, and allows them 1 ms before', async () => {
+    const createdAtOnDeadline = new Date(now.getTime() - computeGracePeriodMs())
+    const createdAtBeforeDeadline = new Date(createdAtOnDeadline.getTime() + 1)
+
+    const statuses = [
+      (await postLoginAs(buildUnverifiedFields(createdAtOnDeadline))).status,
+      (await postRefreshAs(buildUnverifiedFields(createdAtOnDeadline))).status,
+      (await postLoginAs(buildUnverifiedFields(createdAtBeforeDeadline))).status,
+      (await postRefreshAs(buildUnverifiedFields(createdAtBeforeDeadline))).status,
+    ]
+
+    expect(statuses).toEqual([403, 403, 200, 200])
+  })
+
+  it('restores the strict behaviour with a grace period of 0 days', async () => {
+    env.EMAIL_VERIFICATION_GRACE_DAYS = 0
+
+    const login = await postLoginAs(buildUnverifiedFields(now))
+    const refresh = await postRefreshAs(buildUnverifiedFields(now))
+
+    const bodies = [apiErrorBodySchema.parse(await login.json()), apiErrorBodySchema.parse(await refresh.json())]
+    expect(bodies.map((body) => body.code)).toEqual([ErrorCode.EMAIL_NOT_VERIFIED, ErrorCode.EMAIL_NOT_VERIFIED])
   })
 })
 

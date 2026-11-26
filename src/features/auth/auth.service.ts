@@ -36,6 +36,7 @@ import {
 import { deleteAllUserTokens } from '../../db/entities/access-tokens/access-tokens.repository.js'
 import { insertRefreshToken, findRefreshTokenByHash } from '../../db/entities/refresh-tokens/refresh-tokens.repository.js'
 import { findUserById } from '../../db/entities/users/users.repository.js'
+import { isEmailVerificationOverdue } from '../../db/entities/users/users.email-verification.js'
 import type {
   ForgotPasswordRequestParsed,
   ForgotPasswordResponseParsed,
@@ -82,15 +83,15 @@ export async function registerUser(
   }
 
   sendVerificationEmail(input.email, emailVerifyToken, emailLocale)
-  const rawRefreshToken = await issueRefreshToken(createdUser.id)
 
   const finalUser = await maybeAttachAvatar(createdUser, avatarBuffer)
   if ('errorCode' in finalUser) return serviceError(finalUser.errorCode)
 
+  const sessionTokens = await issueSessionTokens(finalUser.row)
   return {
     data: {
+      ...sessionTokens,
       user: toUserDetail({ ...finalUser.row, avatarImage: finalUser.avatarImage }),
-      refreshToken: rawRefreshToken,
     },
     httpStatus: HttpStatus.CREATED,
   }
@@ -157,20 +158,13 @@ export async function loginUser(input: LoginRequestParsed): Promise<ServiceResul
     return serviceError(ErrorCode.UNAUTHORIZED)
   }
 
-  if (!user.emailVerifiedAt) {
-    return serviceError(ErrorCode.EMAIL_NOT_VERIFIED)
+  const sessionDenial = resolveSessionDenial(user)
+  if (sessionDenial) {
+    return serviceError(sessionDenial)
   }
 
-  if (user.bannedAt) {
-    return serviceError(ErrorCode.ACCOUNT_BANNED)
-  }
-
-  const { token, tokenId, expiresAt } = await signJwt(user.id, user.role)
-  await storeTokenAndUpdateActivity(tokenId, user.id, expiresAt)
-
-  const rawRefreshToken = await issueRefreshToken(user.id)
-
-  return { data: { accessToken: token, refreshToken: rawRefreshToken, user: toUserDetail(user) }, httpStatus: HttpStatus.OK }
+  const sessionTokens = await issueSessionTokens(user)
+  return { data: { ...sessionTokens, user: toUserDetail(user) }, httpStatus: HttpStatus.OK }
 }
 
 export async function refreshAccessToken(rawToken: string): Promise<ServiceResult<RefreshResponseParsed>> {
@@ -187,9 +181,9 @@ export async function refreshAccessToken(rawToken: string): Promise<ServiceResul
     return serviceError(ErrorCode.INVALID_REFRESH_TOKEN)
   }
 
-  const refreshDenial = resolveRefreshDenial(user)
-  if (refreshDenial) {
-    return serviceError(refreshDenial)
+  const sessionDenial = resolveSessionDenial(user)
+  if (sessionDenial) {
+    return serviceError(sessionDenial)
   }
 
   const { token, tokenId, expiresAt } = await signJwt(user.id, user.role)
@@ -302,9 +296,10 @@ async function issueVerificationResend(email: string, rawToken: string, locale: 
 }
 
 // Same precedence as the account status: a banned account is reported as banned even unverified.
-function resolveRefreshDenial(user: User): ErrorCode | null {
+// An unverified account opens sessions until its email verification deadline.
+function resolveSessionDenial(user: User): ErrorCode | null {
   if (user.bannedAt) return ErrorCode.ACCOUNT_BANNED
-  if (!user.emailVerifiedAt) return ErrorCode.EMAIL_NOT_VERIFIED
+  if (isEmailVerificationOverdue(user, new Date())) return ErrorCode.EMAIL_NOT_VERIFIED
   return null
 }
 
@@ -328,6 +323,13 @@ async function issuePasswordReset(user: User, rawToken: string, locale: Locale):
   } catch (error) {
     logger.error({ event: PASSWORD_RESET_FAILED_EVENT, errorName: readErrorName(error) })
   }
+}
+
+async function issueSessionTokens(user: User): Promise<RefreshResponseParsed> {
+  const { token, tokenId, expiresAt } = await signJwt(user.id, user.role)
+  await storeTokenAndUpdateActivity(tokenId, user.id, expiresAt)
+  const refreshToken = await issueRefreshToken(user.id)
+  return { accessToken: token, refreshToken }
 }
 
 async function issueRefreshToken(userId: string): Promise<string> {

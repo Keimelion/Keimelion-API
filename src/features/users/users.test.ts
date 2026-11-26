@@ -3,6 +3,7 @@ import { db } from '../../db/client.js'
 import { env } from '../../config/env.js'
 import { apiMultipartRequest, apiRequest } from '../../shared/test/api-request.js'
 import { generateTestToken, makeAccessTokenEntry } from '../../shared/test/auth.js'
+import { ONE_DAY_MS } from '../../shared/utils/time.js'
 import { EXPORT_ENTITY_REGISTRY } from './export/export-entities.js'
 import type { ExportEntityDescriptor } from './export/export-entities.js'
 import { getTableConfig, PgDialect } from 'drizzle-orm/pg-core'
@@ -62,6 +63,21 @@ describe('GET /v1/users/me', () => {
     usersGetProfileResponseSchema.parse(body)
     expect(response.status).toBe(200)
     expect(body.user.email).toBe('user@example.com')
+  })
+
+  it('exposes the email verification deadline: createdAt + grace period while unverified, null once verified', async () => {
+    const token = await generateTestToken(SAFE_USER.id)
+    const createdAt = new Date()
+    const unverifiedUser = { ...SAFE_USER, emailVerifiedAt: null, userStatus: 'unverified' as const, createdAt }
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(unverifiedUser).mockResolvedValueOnce(unverifiedUser)
+    vi.mocked(db.query.users.findFirst).mockResolvedValueOnce(SAFE_USER).mockResolvedValueOnce(SAFE_USER)
+
+    const unverified = usersGetProfileResponseSchema.parse(await (await apiRequest('/v1/users/me', { token })).json())
+    const verified = usersGetProfileResponseSchema.parse(await (await apiRequest('/v1/users/me', { token })).json())
+
+    const gracePeriodMs = env.EMAIL_VERIFICATION_GRACE_DAYS * ONE_DAY_MS
+    expect(unverified.user.emailVerificationDeadlineAt).toEqual(new Date(createdAt.getTime() + gracePeriodMs))
+    expect(verified.user.emailVerificationDeadlineAt).toBeNull()
   })
 
   it('returns 401 when no authorization header is provided', async () => {

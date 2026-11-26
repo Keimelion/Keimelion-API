@@ -58,6 +58,7 @@ const baseEnvSchema = z.object({
   JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters'),
   JWT_EXPIRES_IN: z.string().default('7d'),
   EMAIL_VERIFY_TOKEN_TTL_HOURS: z.coerce.number().int().positive().default(24),
+  EMAIL_VERIFICATION_GRACE_DAYS: z.coerce.number().int().min(0).default(7),
   BCRYPT_ROUNDS: z.coerce.number().int().positive().default(12),
   APP_URL: z.url().default('http://localhost:3000'),
   LANDING_URL: z.url().default('http://localhost:4321'),
